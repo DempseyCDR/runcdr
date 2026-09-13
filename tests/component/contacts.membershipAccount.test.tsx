@@ -111,9 +111,7 @@ describe("MembershipAccount — maintaining the household (feature 068)", () => 
     const calls = stub(200, { items: [{ id: "c-tim", displayName: "Tim Ball" }] });
     renderBlock(asPayer); // payer is a Culbert; the member is a Ball
     await userEvent.type(screen.getByLabelText(/add a member to this membership/i), "Tim Ball");
-    await waitFor(() =>
-      expect(calls.some((c) => c.url.includes("q=Tim%20Ball"))).toBe(true),
-    );
+    await waitFor(() => expect(calls.some((c) => c.url.includes("q=Tim%20Ball"))).toBe(true));
     await userEvent.click(await screen.findByRole("button", { name: /add Tim Ball/i }));
     await waitFor(() => {
       const post = calls.find((c) => c.init?.method === "POST");
@@ -195,5 +193,23 @@ describe("MembershipAccount — maintaining the household (feature 068)", () => 
       asMember: null,
     });
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+// Feature 075: the Level select is a draft seeded at mount. A re-fetch into the SAME instance (e.g. a
+// merge from the email block made this contact the payer) must show the account's real level — otherwise
+// "Save level" would silently write the stale default back.
+describe("MembershipAccount — level follows a re-fetched record (feature 075)", () => {
+  it("shows the payer's level when the contact becomes a payer without a remount", () => {
+    const { rerender } = renderBlock(asMember);
+    rerender(
+      <MembershipAccount
+        contactId="c-x"
+        membership={asPayer}
+        canWrite={true}
+        onChanged={() => {}}
+      />,
+    );
+    expect(screen.getByRole("combobox", { name: /level/i })).toHaveValue("supporter");
   });
 });

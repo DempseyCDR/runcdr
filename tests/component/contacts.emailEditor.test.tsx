@@ -235,3 +235,130 @@ describe("EmailEditor — collision offers link as shared (feature 067)", () => 
     );
   });
 });
+
+// Feature 075: every successful write calls onChanged(), which re-fetches the record and passes fresh
+// `emails` to the SAME instance (the parent's key is the unchanged record id). `rerender` models exactly
+// that — no remount — so the list must follow the prop, not a copy seeded at mount.
+describe("EmailEditor — reflects the server after a change, without a remount (feature 075)", () => {
+  const renderLive = (emails: EmailRow[], onChanged: () => void) =>
+    render(
+      <EmailEditor
+        contactId="c1"
+        emails={emails}
+        canDeleteUnrestricted={true}
+        onChanged={onChanged}
+      />,
+    );
+
+  it("an added email appears as soon as the record is re-fetched", async () => {
+    stub();
+    let refetch = () => {};
+    const { rerender } = renderLive([email()], () => refetch());
+    refetch = () =>
+      rerender(
+        <EmailEditor
+          contactId="c1"
+          emails={[email(), email({ id: "e2", email: "new@x.com" })]}
+          canDeleteUnrestricted={true}
+          onChanged={() => {}}
+        />,
+      );
+    await userEvent.type(screen.getByPlaceholderText(/add email address/i), "new@x.com");
+    await userEvent.click(screen.getByRole("button", { name: /^add email$/i }));
+    await waitFor(() =>
+      expect(row("new@x.com").getByDisplayValue("new@x.com")).toBeInTheDocument(),
+    );
+  });
+
+  it("a deleted email disappears as soon as the record is re-fetched", async () => {
+    stub();
+    let refetch = () => {};
+    const { rerender } = renderLive([email()], () => refetch());
+    refetch = () =>
+      rerender(
+        <EmailEditor
+          contactId="c1"
+          emails={[]}
+          canDeleteUnrestricted={true}
+          onChanged={() => {}}
+        />,
+      );
+    await userEvent.click(row().getByRole("button", { name: /delete email/i }));
+    await waitFor(() => expect(screen.queryByRole("listitem")).toBeNull());
+  });
+
+  it("keeps an unsaved edit on another row when a new email arrives", async () => {
+    stub();
+    let refetch = () => {};
+    const { rerender } = renderLive([email()], () => refetch());
+    refetch = () =>
+      rerender(
+        <EmailEditor
+          contactId="c1"
+          emails={[email(), email({ id: "e2", email: "new@x.com" })]}
+          canDeleteUnrestricted={true}
+          onChanged={() => {}}
+        />,
+      );
+    const r = screen.getByRole("listitem", { name: /Email a@x.com/ }); // capture once
+    const addr = within(r).getByDisplayValue("a@x.com");
+    await userEvent.clear(addr);
+    await userEvent.type(addr, "typing@x.com");
+    await userEvent.type(screen.getByPlaceholderText(/add email address/i), "new@x.com");
+    await userEvent.click(screen.getByRole("button", { name: /^add email$/i }));
+    await waitFor(() =>
+      expect(row("new@x.com").getByDisplayValue("new@x.com")).toBeInTheDocument(),
+    );
+    expect(within(r).getByDisplayValue("typing@x.com")).toBeInTheDocument();
+  });
+
+  it("a saved row shows the server's value, not the draft that was sent", async () => {
+    stub();
+    let refetch = () => {};
+    const { rerender } = renderLive([email()], () => refetch());
+    refetch = () =>
+      rerender(
+        <EmailEditor
+          contactId="c1"
+          emails={[email({ email: "b@x.com" })]}
+          canDeleteUnrestricted={true}
+          onChanged={() => {}}
+        />,
+      );
+    const r = screen.getByRole("listitem", { name: /Email a@x.com/ });
+    const addr = within(r).getByDisplayValue("a@x.com");
+    await userEvent.clear(addr);
+    await userEvent.type(addr, " B@X.com ");
+    await userEvent.click(within(r).getByRole("button", { name: /save email/i }));
+    await waitFor(() => expect(within(r).getByDisplayValue("b@x.com")).toBeInTheDocument());
+  });
+
+  it("linking as shared shows the retired row inactive and clears the collision prompt", async () => {
+    const collision = { contactId: "c2", displayName: "Jane Other", emailId: "e-other" };
+    const calls = stub({ collision });
+    let refetch = () => {};
+    const { rerender } = renderLive([email()], () => refetch());
+    refetch = () =>
+      rerender(
+        <EmailEditor
+          contactId="c1"
+          emails={[email({ status: "inactive" })]}
+          canDeleteUnrestricted={true}
+          onChanged={() => {}}
+        />,
+      );
+    const r = screen.getByRole("listitem", { name: /Email a@x.com/ });
+    const addr = within(r).getByDisplayValue("a@x.com");
+    await userEvent.clear(addr);
+    await userEvent.type(addr, "shared@jones.com");
+    await userEvent.click(within(r).getByRole("button", { name: /save email/i }));
+    await waitFor(() =>
+      expect(within(r).getByText(/already active on Jane Other/i)).toBeInTheDocument(),
+    );
+    await userEvent.click(within(r).getByRole("button", { name: /link as shared/i }));
+    await waitFor(() => expect(calls.some((c) => c.init?.method === "PUT")).toBe(true));
+    await waitFor(() => expect(within(r).getByDisplayValue("a@x.com")).toBeInTheDocument());
+    expect(within(r).getByRole("checkbox", { name: /Active/ })).not.toBeChecked();
+    expect(within(r).queryByText(/already active on Jane Other/i)).toBeNull();
+  });
+});

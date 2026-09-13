@@ -55,8 +55,10 @@ export default function EmailEditor({
   canDeleteUnrestricted: boolean;
   onChanged: () => void | Promise<void>;
 }) {
-  // Draft state per row, seeded from props; a key change (record re-open) remounts via the parent.
-  const [drafts, setDrafts] = useState<EmailRow[]>(emails);
+  // Rows come from props on every render; state holds only the unsaved edits, keyed by row id. A write's
+  // onChanged() re-fetches the record into this same instance (the parent's key is the record id), so a
+  // copy seeded at mount would never see the added, deleted or retired row (feature 075).
+  const [edits, setEdits] = useState<Record<string, Partial<EmailRow>>>({});
   const [collision, setCollision] = useState<Record<string, Collision | null>>({});
   const [loginConfirm, setLoginConfirm] = useState<Record<string, boolean>>({});
   const [rowError, setRowError] = useState<Record<string, string | null>>({});
@@ -64,8 +66,22 @@ export default function EmailEditor({
   // Feature 067 (FR-005): the ADD path detects a collision server-side too; it used to be discarded.
   const [addCollision, setAddCollision] = useState<Collision | null>(null);
 
+  const drafts = emails.map((e) => ({ ...e, ...edits[e.id] }));
+
   function patchDraft(id: string, patch: Partial<EmailRow>) {
-    setDrafts((ds) => ds.map((d) => (d.id === id ? { ...d, ...patch } : d)));
+    setEdits((s) => ({ ...s, [id]: { ...s[id], ...patch } }));
+  }
+
+  /** After a successful write: re-fetch, then let the server's values replace this row's draft. */
+  async function settle(id?: string) {
+    await onChanged();
+    if (!id) return;
+    setEdits((s) => {
+      const next = { ...s };
+      delete next[id];
+      return next;
+    });
+    setCollision((s) => ({ ...s, [id]: null }));
   }
 
   // Consent topics: do-not-contact is exclusive (M-R15.1); never reach zero (M-R15.2).
@@ -111,7 +127,7 @@ export default function EmailEditor({
         status: d.status,
       }),
     });
-    if (res.ok) return void onChanged();
+    if (res.ok) return settle(d.id);
     const body = await res.json().catch(() => null);
     if (body?.error?.code === "EMAIL_ACTIVE_ELSEWHERE") {
       const detail = body.error.other ?? null; // { contactId, displayName }
@@ -123,7 +139,7 @@ export default function EmailEditor({
 
   async function deleteRow(id: string) {
     const res = await apiFetch(`/api/contacts/${contactId}/emails/${id}`, { method: "DELETE" });
-    if (res.ok) void onChanged();
+    if (res.ok) await settle(id);
   }
 
   /**
@@ -138,17 +154,21 @@ export default function EmailEditor({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ emailId: other.emailId, ...(retireEmailId ? { retireEmailId } : {}) }),
     });
-    if (res.ok) void onChanged();
+    if (!res.ok) return;
+    if (!retireEmailId) setAddCollision(null);
+    await settle(retireEmailId);
   }
 
   // Collision → review as duplicate: merge in the direction Mel chooses (M-R15.3 / F2).
-  async function reviewMerge(canonicalId: string, mergedId: string) {
+  async function reviewMerge(canonicalId: string, mergedId: string, rowId?: string) {
     const res = await apiFetch("/api/dedup/merge", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ canonicalId, mergedId }),
     });
-    if (res.ok) void onChanged();
+    if (!res.ok) return;
+    if (!rowId) setAddCollision(null);
+    await settle(rowId);
   }
 
   async function addEmail(e: React.FormEvent) {
@@ -162,8 +182,7 @@ export default function EmailEditor({
     if (res.ok) {
       setAddr("");
       setAddCollision(null);
-      void onChanged();
-      return;
+      return settle();
     }
     const body = await res.json().catch(() => null);
     if (body?.error?.code === "EMAIL_ACTIVE_ELSEWHERE") {
@@ -268,14 +287,14 @@ export default function EmailEditor({
                   <button
                     type="button"
                     className={styles.dupButton}
-                    onClick={() => reviewMerge(contactId, collision[d.id]!.contactId)}
+                    onClick={() => reviewMerge(contactId, collision[d.id]!.contactId, d.id)}
                   >
                     Keep this contact
                   </button>
                   <button
                     type="button"
                     className={styles.dupButton}
-                    onClick={() => reviewMerge(collision[d.id]!.contactId, contactId)}
+                    onClick={() => reviewMerge(collision[d.id]!.contactId, contactId, d.id)}
                   >
                     Keep {collision[d.id]!.displayName}
                   </button>

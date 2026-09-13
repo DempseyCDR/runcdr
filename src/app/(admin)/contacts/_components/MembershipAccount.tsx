@@ -39,7 +39,10 @@ export default function MembershipAccount({
   canWrite: boolean;
   onChanged: () => void | Promise<void>;
 }) {
-  const [level, setLevel] = useState(membership.asPayer?.level ?? "individual");
+  // Only a CHANGED level is held; otherwise show the account's own. Seeding at mount went stale when a
+  // re-fetch (onChanged) made this contact a payer, and Save would then write the default (feature 075).
+  const [levelEdit, setLevelEdit] = useState<string | null>(null);
+  const level = levelEdit ?? membership.asPayer?.level ?? "individual";
   const [error, setError] = useState<string | null>(null);
   // Adding a member is a SEARCH, not an id box. A contact id is an internal key; asking a human for one
   // makes the control unusable in practice — which is how a family account could end up with no workable
@@ -71,7 +74,10 @@ export default function MembershipAccount({
       headers: { "Content-Type": "application/json" },
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
-    if (res.ok) return void onChanged();
+    if (res.ok) {
+      await onChanged();
+      return setLevelEdit(null);
+    }
     const parsed = await res.json().catch(() => null);
     // A capacity refusal names who would be displaced — show it verbatim (FR-003a).
     setError(parsed?.error?.message ?? "Could not update the membership.");
@@ -134,7 +140,7 @@ export default function MembershipAccount({
                 <select
                   className={styles.input}
                   value={level}
-                  onChange={(e) => setLevel(e.target.value)}
+                  onChange={(e) => setLevelEdit(e.target.value)}
                 >
                   {LEVELS.map((l) => (
                     <option key={l} value={l}>
