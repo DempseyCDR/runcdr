@@ -151,6 +151,8 @@ the write path is what stops the two from disagreeing — the exact failure mode
 held-merge auto-close and the merge detection asked subtly different questions and produced a hold that
 reopened forever.
 
+**Superseded in part by feature 077 (2026-09-13):** the conclusion below still holds — a merge record never outlives its contacts, so there is no "contact is gone" verdict — but the reason changed. `merge_audit`'s contact keys are now `ON DELETE CASCADE`, so deleting a contact deletes its merge records rather than being refused. See the Mel Maintenance close-out list §2c and migration 0048.
+
 **Corrected at `/speckit-analyze`**: this decision originally listed a sixth verdict, `contact_missing`,
 for a merge whose retired contact no longer exists. It is unreachable. `merge_audit.canonical_id` and
 `merged_id` are `REFERENCES contacts(id)` with no `ON DELETE`

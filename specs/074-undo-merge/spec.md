@@ -147,7 +147,7 @@ Repeat as a holder of role-assignment authority and confirm the sign-in portion 
   hand, say. The undo cannot know this happened and will not remove it; the operator may be left with the
   detail on both records.
 - **Two people undo the same merge at once.** One succeeds; the other is refused as already undone.
-- **Neither contact in a merge can be deleted, so "the record is gone" is not a case.** The merge record
+- *(Superseded in part by feature 077, 2026-09-13: deleting a contact now deletes its merge records instead of being refused. "The record is gone" is still not a case, because the merge record goes with it.)* **Neither contact in a merge can be deleted, so "the record is gone" is not a case.** The merge record
   permanently references both contacts, and the database refuses to delete a contact a merge record
   names. An earlier draft carried a "contact no longer exists" refusal; it was removed because no
   sequence of actions can reach it. It should not be reintroduced without first removing that protection.

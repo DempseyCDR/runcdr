@@ -116,6 +116,8 @@ path, returning a discriminated union:
 | `contact_archived` | either contact has been archived since | FR-009 |
 | `already_undone` | a `merge_reversals` row exists for this merge | FR-010 |
 
+**Superseded in part by feature 077 (2026-09-13):** the conclusion below still holds — a merge record never outlives its contacts, so there is no "contact is gone" verdict — but the reason changed. `merge_audit`'s contact keys are now `ON DELETE CASCADE`, so deleting a contact deletes its merge records rather than being refused. See the Mel Maintenance close-out list §2c and migration 0048.
+
 These four refusals are **exhaustive**. A fifth, `contact_missing`, was carried in an earlier draft and
 removed: `merge_audit.canonical_id` and `merged_id` are `REFERENCES contacts(id)` with no `ON DELETE`
 ([0003_dedup.sql:5-6](../../src/server/db/migrations/0003_dedup.sql)), so the database permanently refuses

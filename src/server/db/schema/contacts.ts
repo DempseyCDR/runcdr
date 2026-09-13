@@ -24,6 +24,9 @@ export const contacts = pgTable("contacts", {
   // these — doing so would turn a governance ritual into a lockout on a forgotten meeting.
   volunteerApprovedAt: timestamp("volunteer_approved_at", { withTimezone: true }),
   volunteerApprovedBy: uuid("volunteer_approved_by"),
+  // ⚠️ Feature 077: the database FK is ON DELETE CASCADE (migration 0048) — deleting a survivor deletes every
+  // contact merged into it, down the chain. Never SET NULL: null here is what marks a contact ACTIVE, so
+  // nulling it would resurrect merged-away duplicates. The safe delete refuses a survivor with any.
   mergedIntoId: uuid("merged_into_id"),
   // Feature 065 (M-R9): reversible soft-archive marker (mirrors bands.archived_at). Archived ⇔ non-null;
   // excluded from every active-contact read, independent of merged_into_id.

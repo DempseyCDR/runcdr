@@ -34,10 +34,12 @@ export type Verdict = "reversible" | IrreversibleVerdict;
 /**
  * The four refusals above are EXHAUSTIVE for a merge that exists.
  *
- * A fifth, "the retired contact is gone", looks obviously necessary and is not: `merge_audit`'s
- * `canonical_id` and `merged_id` both reference `contacts(id)` with no ON DELETE, so Postgres
- * permanently refuses to delete either contact a merge record names. The branch was unreachable and no
- * test could have been written for it. Do not add it back without first removing that foreign key.
+ * A fifth, "the retired contact is gone", looks obviously necessary and is not, because a merge record can
+ * never outlive either of its contacts. The reason changed in feature 077: before it, `merge_audit`
+ * refused the delete outright; since it, `merge_audit.canonical_id` and `merged_id` are ON DELETE
+ * CASCADE, so deleting either contact deletes the merge record with it. Either way there is no merge row
+ * whose contact is missing, so the branch is unreachable. Do not add it back unless those keys are ever
+ * changed to SET NULL.
  */
 export type Reversibility =
   | { verdict: "reversible"; manifest: ReversalManifest; canonicalId: string; mergedId: string }
@@ -99,8 +101,9 @@ export async function reversibilityOf(db: DbOrTx, mergeId: string): Promise<Reve
 
   const canonical = pair.find((c) => c.id === canonicalId);
   const merged = pair.find((c) => c.id === mergedId);
-  // Both are guaranteed present by the foreign keys discussed above; this satisfies the type checker
-  // without inventing a verdict for a state the database forbids.
+  // Both are guaranteed present: the merge record cascades away with either contact (feature 077), so a
+  // loaded merge always has both. This satisfies the type checker without inventing a verdict for a state
+  // the database forbids.
   if (!canonical || !merged) throw errors.mergeNotFound();
 
   // FR-009. Reviving an archived record by undoing a merge would be a surprise, not a restoration.

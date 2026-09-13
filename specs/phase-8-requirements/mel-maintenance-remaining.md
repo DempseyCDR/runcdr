@@ -118,7 +118,7 @@ Small and self-contained: add the active-contact predicate. **Done in 076** — 
 requires `merged_into_id IS NULL AND archived_at IS NULL`, the same predicate 071 added at session
 read and 072 added at sign-in enrolment.
 
-## 2c. A contact that has been in a merge can never be deleted (FOUND 2026-09-12, DIRECTION DECIDED 2026-09-13, NOT FIXED)
+## 2c. A contact that has been in a merge can never be deleted — CLOSED by feature 077
 
 ### The finding
 
@@ -144,6 +144,17 @@ account gone.
 This contradicts the intent of undo. Undo is a **short-term** recovery, but the merge record pins both
 contacts **permanently**, undone or not. A retention window on the undo data would not help — the
 manifest and the foreign key are separate things, and it is the key that pins the contacts.
+
+### Shipped in 077
+
+Everything below landed as decided, plus one thing the implementation found: the staff check has to
+cover the **whole chain merged into** the contact, not just the contact. Deleting a survivor cascades
+into its merged-in contacts, and one of those may have acted as staff — Peggy Dempsey, merged into
+Peggy CDR, is exactly that — so checking only the target would have let the cascade reach a staff actor
+and fail on the database's refusal. A survivor that has absorbed others is refused on the SAFE path,
+with advice to undo first; only the unrestricted delete takes the chain. A new parity guard reads
+`pg_constraint` and fails on any delete-blocking reference into `contacts` the delete check does not
+know, so this class of gap cannot reopen silently.
 
 ### The direction taken
 
@@ -201,10 +212,10 @@ to retire such a contact.
 
 ## Sequencing note
 
-Items 1a, 1b, 2 and 2b have shipped (071, 072, 074, 076), as have both of §3's verification items. **All
+Items 1a, 1b, 2, 2b and 2c have shipped (071, 072, 074, 076, 077), as have both of §3's verification items. **All
 of what remains lands before Mel Maintenance is closed**, in this order:
 
-1. **077 — 2c**, merge history on delete. Its direction is decided, so it does not wait on anything.
+1. ~~**077 — 2c**, merge history on delete.~~ **Shipped.**
 2. **078 — 2a and 3's chooser**, both decisions about access at merge time. Needs a short requirements
    session first: 2a's recommended answer is to HOLD a merge that would newly make the survivor a
    volunteer, for `role.assign`, since simply carrying `is_volunteer` would let whoever controls the

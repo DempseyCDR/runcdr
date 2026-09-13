@@ -112,16 +112,20 @@ describe("contact delete (feature 065)", () => {
   });
 
   it("the guard checks exactly the enumerated categories (list-parity, C15)", () => {
-    expect(CONTACT_DELETE_BLOCKERS.map((b) => b.category).sort()).toEqual(
+    // Unique categories: one category may span several columns (staff_history covers five actor references).
+    expect([...new Set(CONTACT_DELETE_BLOCKERS.map((b) => b.category))].sort()).toEqual(
       [
         "attendance",
         "gate_sale",
         "membership",
         "membership_account",
         "membership_capture",
+        // Feature 077: a survivor's merged-in contacts, and any record of having acted as staff.
+        "merged_contacts",
         "officer",
         "performer",
         "role_grant",
+        "staff_history",
         "staff_identity",
         "venue_landlord",
       ].sort(),
