@@ -94,6 +94,22 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Feature 077: what to do instead of deleting, by WHY the delete was refused. "Merge or archive it" was
+ * the only advice, and it is wrong for two cases this feature adds — a contact that has acted as staff can
+ * never be deleted at all, and a survivor that absorbed others should have its merges undone first if any
+ * were mistakes. Staff wins when both apply, because undoing merges would still not make it deletable.
+ */
+function deleteAdvice(categories: string[]): string {
+  if (categories.includes("staff_history")) {
+    return "anyone who has acted as staff is never deleted, so archive it instead.";
+  }
+  if (categories.includes("merged_contacts")) {
+    return "deleting it would delete them too. Undo those merges first if any were mistakes, or archive it instead.";
+  }
+  return "merge or archive it instead of deleting.";
+}
+
 export const errors = {
   /** Feature 015: no valid staff session. Deliberately says nothing about why. */
   unauthenticated: () => new ApiError("UNAUTHENTICATED", 401, "Authentication required."),
@@ -208,7 +224,7 @@ export const errors = {
     new ApiError(
       "CONTACT_HAS_REFERENCES",
       409,
-      `Contact has ${labels.join(", ")} — merge or archive it instead of deleting.`,
+      `Contact has ${labels.join(", ")} — ${deleteAdvice(categories)}`,
       categories.join(","),
     ),
   emailNotFound: () => new ApiError("EMAIL_NOT_FOUND", 404, "Email not found."),

@@ -155,7 +155,7 @@ The person directory — the hub most other data links to. Names are structured 
 | is_volunteer | boolean NOT NULL default false | **the staff access gate** (feature 015): re-checked live on every session read |
 | volunteer_approved_at | timestamptz NULL | feature 016 annual President/VP review. **Advisory** — never on the session path |
 | volunteer_approved_by | uuid NULL | who approved |
-| merged_into_id | uuid NULL → contacts(id) | self-FK; non-null means this row was merged away |
+| merged_into_id | uuid NULL → contacts(id) **ON DELETE CASCADE** | self-FK; non-null means this row was merged away. Feature 077: deleting a survivor deletes every contact merged into it, down the chain — never SET NULL, which would resurrect them as active |
 | archived_at | timestamptz NULL | feature 065 (M-R9): reversible soft archive, independent of `merged_into_id` |
 | message_recipient_email_id | uuid NULL → contact_emails(id) | feature 067 (M-R23): the household address this contact **rides**. On `contacts`, not `contact_emails`, so active-email uniqueness, sign-in and `is_login` stay owner-only by construction |
 | needs_review | boolean NOT NULL default false | door-created / no-contact-info contacts flagged for admin |
@@ -289,6 +289,10 @@ Append-only record of contact dedup merges.
   history, and the UI says so rather than offering an action that would fail.
 - Still append-only. An undo writes `merge_reversals` and never touches this table: rewriting the record
   of a merge would erase the event it exists to record.
+- Feature 077: `canonical_id` and `merged_id` are **ON DELETE CASCADE** — deleting either contact deletes
+  the merge records naming it, matching `held_merges` and `dedup_rejections`. Append-only forbids
+  rewriting a record, not removing it with its contact. Before 077 this table refused such deletes
+  forever, so any contact that had ever been in a merge, undone or not, could never be deleted.
 
 ### `merge_reversals` (feature 074)
 
@@ -297,7 +301,7 @@ One row per undo — who reversed a merge, when, and what it could and could not
 | Column | Type | Notes |
 |---|---|---|
 | id | uuid PK | |
-| merge_audit_id | uuid NOT NULL **UNIQUE** → merge_audit(id) | the merge that was reversed |
+| merge_audit_id | uuid NOT NULL **UNIQUE** → merge_audit(id) **ON DELETE CASCADE** | the merge that was reversed; goes with it (feature 077) |
 | actor | text NOT NULL | |
 | restored_counts | jsonb NOT NULL default `{}` | per table, how many manifest entries were applied |
 | skipped | jsonb NOT NULL default `[]` | every entry NOT applied, with its reason (`gone`, `occupied`, `not_authorized`) |

@@ -1,8 +1,11 @@
-import { and, count, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { AnyPgColumn, PgTable } from "drizzle-orm/pg-core";
-import type { Db } from "@/server/db/client";
+import type { Db, DbOrTx } from "@/server/db/client";
 import {
+  auditEvents,
   clubSettings,
+  dedupRejections,
+  heldMerges,
   membershipAccounts,
   membershipMembers,
   attendance,
@@ -502,6 +505,21 @@ export async function restoreContact(db: Db, id: string): Promise<ContactRow> {
  * Feature 065 (M-R11): the substantive tables whose reference blocks a SAFE delete — the SINGLE source
  * of truth for the guard and its parity test (C15). `contact_emails` (owned, cascades) and audit rows
  * (a log) are deliberately excluded, so a contact whose only references are its own emails is bare.
+ *
+ * Feature 077 adds two kinds, and one flag:
+ *
+ * - `merged_contacts` — contacts merged INTO this one. Deleting a survivor deletes them too (the database
+ *   cascades down the chain), and if a merge was a mistake a merged-in record may be a different person.
+ *   So it blocks the SAFE delete, with advice to undo first; the unrestricted delete may proceed.
+ * - `staff_history` — any record of having ACTED as staff. `always` means it blocks the UNRESTRICTED delete
+ *   too: anyone who has ever acted as staff is never deleted (decided 2026-09-13), and those five
+ *   references refuse at the database regardless. Checked here so the refusal is clean rather than a raw
+ *   foreign-key error — and checked across the whole merged-in chain, because deleting a survivor would
+ *   reach a merged-in staff actor through the cascade.
+ *
+ * A parity guard (`contacts.deleteMergeHistory.test.ts`) reads `pg_constraint` and fails on any reference
+ * into `contacts` that refuses a delete but is missing from this list — which is how `merge_audit` went
+ * unnoticed from feature 003 to feature 077.
  */
 export const CONTACT_DELETE_BLOCKERS = [
   // Feature 070: this pointed at the RETIRED `memberships` table, which nothing has written since 068's
@@ -522,13 +540,40 @@ export const CONTACT_DELETE_BLOCKERS = [
   { category: "staff_identity", table: staffIdentities, column: staffIdentities.contactId },
   { category: "venue_landlord", table: venues, column: venues.landlordContactId },
   // Feature 068 (FR-009): a payer's contact cannot be deleted from under their membership account. Unlike
-  // 067's shared_email this IS a plain contact column, so it rides the generic list.
+  // 067's shared_email this IS a plain contact column, so it rides the generic list. The unrestricted
+  // path clears it deliberately (`deleteAccountOwnedBy`) — the only blocking reference it clears.
   {
     category: "membership_account",
     table: membershipAccounts,
     column: membershipAccounts.payerContactId,
   },
+  // Feature 077: contacts merged INTO this one. Safe path only — see above.
+  { category: "merged_contacts", table: contacts, column: contacts.mergedIntoId },
+  // Feature 077: having acted as staff. `always` — blocks the unrestricted delete too.
+  {
+    category: "staff_history",
+    table: auditEvents,
+    column: auditEvents.actorContactId,
+    always: true,
+  },
+  { category: "staff_history", table: roleGrants, column: roleGrants.grantedBy, always: true },
+  {
+    category: "staff_history",
+    table: dedupRejections,
+    column: dedupRejections.rejectedBy,
+    always: true,
+  },
+  { category: "staff_history", table: heldMerges, column: heldMerges.attemptedBy, always: true },
+  {
+    category: "staff_history",
+    table: contacts,
+    column: contacts.volunteerApprovedBy,
+    always: true,
+  },
 ] as const;
+
+type Blocker = (typeof CONTACT_DELETE_BLOCKERS)[number];
+const alwaysBlocks = (b: Blocker) => "always" in b && b.always;
 
 /**
  * Mel reads the refusal, so it must name references in her language — the categories above are table
@@ -547,29 +592,54 @@ const BLOCKER_LABELS: Record<string, string> = {
   venue_landlord: "a venue landlord record",
   shared_email: "other contacts reached at this contact's email",
   membership_account: "a membership account",
+  merged_contacts: "other contacts merged into it",
+  staff_history: "a history of acting as staff",
 };
 
 export const blockerLabel = (category: string): string => BLOCKER_LABELS[category] ?? category;
 
 async function referenced(
-  db: Db,
+  db: DbOrTx,
   table: PgTable,
   column: AnyPgColumn,
-  id: string,
+  ids: string[],
 ): Promise<boolean> {
   const rows = await db
     .select({ x: sql`1` })
     .from(table)
-    .where(eq(column, id))
+    .where(inArray(column, ids))
     .limit(1);
   return rows.length > 0;
 }
 
-/** Feature 065 (M-R11): which substantive categories reference this contact (empty ⇒ bare, safe-delete). */
-export async function contactDeleteBlockers(db: Db, id: string): Promise<string[]> {
-  const present: string[] = [];
+/**
+ * Every contact merged into this one, at any depth. Feature 077: the database cascades a survivor's delete
+ * down this chain, so anything that must never be deleted has to be checked across all of it.
+ */
+async function absorbedChain(db: DbOrTx, id: string): Promise<string[]> {
+  const rows = await db.execute<{ id: string }>(sql`
+    WITH RECURSIVE absorbed(id) AS (
+      SELECT c.id FROM contacts c WHERE c.merged_into_id = ${id}
+      UNION
+      SELECT c.id FROM contacts c JOIN absorbed a ON c.merged_into_id = a.id
+    )
+    SELECT id FROM absorbed
+  `);
+  return [...rows].map((r) => r.id);
+}
+
+/**
+ * Feature 065 (M-R11): which substantive categories reference this contact (empty ⇒ bare, safe-delete).
+ * Feature 077: `always` blockers are checked across the contact AND everything merged into it.
+ */
+export async function contactDeleteBlockers(db: DbOrTx, id: string): Promise<string[]> {
+  const present = new Set<string>();
+  const chain = [id, ...(await absorbedChain(db, id))];
   for (const b of CONTACT_DELETE_BLOCKERS) {
-    if (await referenced(db, b.table, b.column, id)) present.push(b.category);
+    if (present.has(b.category)) continue;
+    if (await referenced(db, b.table, b.column, alwaysBlocks(b) ? chain : [id])) {
+      present.add(b.category);
+    }
   }
   // Feature 067: other contacts ride this contact's address, so deleting it would leave a household
   // unreachable. Not a plain contact_id column, so it cannot ride the generic blocker list.
@@ -579,40 +649,54 @@ export async function contactDeleteBlockers(db: Db, id: string): Promise<string[
     .innerJoin(contactEmails, eq(contactEmails.id, contacts.messageRecipientEmailId))
     .where(eq(contactEmails.contactId, id))
     .limit(1);
-  if (riders) present.push("shared_email");
-  return present;
+  if (riders) present.add("shared_email");
+  return [...present];
 }
+
+const ALWAYS_CATEGORIES = new Set<string>(
+  CONTACT_DELETE_BLOCKERS.filter(alwaysBlocks).map((b) => b.category),
+);
 
 /**
  * Feature 065 (M-R11/M-R12): permanently delete a contact. The SAFE path refuses unless the contact is
- * bare; the UNRESTRICTED path (super_user) bypasses the guard. Both audit `contact.deleted`.
+ * bare; the UNRESTRICTED path (super_user) bypasses the guard — except for `always` blockers, which it
+ * never bypasses. Both audit `contact.deleted`.
+ *
+ * Feature 077: ONE transaction. The unrestricted path clears references and deletes the membership account
+ * before deleting the contact, and without a transaction a failure after those writes left them done —
+ * observed: the account destroyed and the contact still present.
  */
 export async function deleteContact(
   db: Db,
   id: string,
   opts: { unrestricted?: boolean; actor?: string | null } = {},
 ): Promise<void> {
-  const existing = await db.query.contacts.findFirst({ where: eq(contacts.id, id) });
-  if (!existing) throw errors.contactNotFound();
-  if (!opts.unrestricted) {
-    const blockers = await contactDeleteBlockers(db, id);
-    if (blockers.length > 0) {
-      throw errors.contactHasReferences(blockers.map(blockerLabel), blockers);
+  await db.transaction(async (tx) => {
+    const existing = await tx.query.contacts.findFirst({ where: eq(contacts.id, id) });
+    if (!existing) throw errors.contactNotFound();
+
+    const found = await contactDeleteBlockers(tx, id);
+    const blocking = opts.unrestricted ? found.filter((c) => ALWAYS_CATEGORIES.has(c)) : found;
+    if (blocking.length > 0) {
+      throw errors.contactHasReferences(blocking.map(blockerLabel), blocking);
     }
-  }
-  // Feature 067 (FR-012): the unrestricted path bypasses the guard above, so referrers must still be
-  // cleared AND flagged before the cascade takes this contact's emails. The FK alone would null their
-  // pointers without a trace.
-  await clearReferencesToOwner(db, id, opts.actor ?? null);
-  // Feature 068 (FR-009): likewise the membership account. Its FK deliberately REFUSES to be orphaned, so
-  // the deliberate force path clears it explicitly rather than hitting a raw constraint error.
-  await deleteAccountOwnedBy(db, id, opts.actor ?? null);
-  await db.delete(contacts).where(eq(contacts.id, id));
-  // Durable audit row (FR-010): every permanent deletion is recorded, safe or unrestricted.
-  await recordAudit(db, {
-    kind: "contact.deleted",
-    actorContactId: opts.actor ?? null,
-    details: { contactId: id, unrestricted: !!opts.unrestricted },
+
+    // Feature 067 (FR-012): the unrestricted path bypasses the guard above, so referrers must still be
+    // cleared AND flagged before the cascade takes this contact's emails. The FK alone would null their
+    // pointers without a trace.
+    await clearReferencesToOwner(tx, id, opts.actor ?? null);
+    // Feature 068 (FR-009): likewise the membership account. Its FK deliberately REFUSES to be orphaned,
+    // so the deliberate force path clears it explicitly rather than hitting a raw constraint error.
+    await deleteAccountOwnedBy(tx, id, opts.actor ?? null);
+    // Feature 077: merge records naming this contact, and any contacts merged into it, go with it — the
+    // database cascades both. The safe path has already refused a survivor that absorbed others.
+    await tx.delete(contacts).where(eq(contacts.id, id));
+    // Durable audit row (FR-010): every permanent deletion is recorded, safe or unrestricted.
+    await recordAudit(tx, {
+      kind: "contact.deleted",
+      actorContactId: opts.actor ?? null,
+      details: { contactId: id, unrestricted: !!opts.unrestricted },
+    });
   });
 }
 

@@ -63,15 +63,21 @@ export type StatusChangeAuditRow = typeof statusChangeAudit.$inferSelect;
  *
  * Still append-only. An undo writes `merge_reversals` and does NOT touch this table (FR-006): rewriting
  * the record of a merge would erase the event it exists to record.
+ *
+ * Feature 077: append-only forbids REWRITING a merge record, not removing it with its contact. Deleting
+ * either contact deletes the merge records that name it (and their reversals), matching `held_merges`
+ * and `dedup_rejections`. Before 077 this table refused such deletes forever, which made undo — a
+ * short-term recovery — leave both contacts permanently undeletable.
  */
 export const mergeAudit = pgTable("merge_audit", {
   id: uuid("id").primaryKey().defaultRandom(),
+  // Feature 077: CASCADE — a contact's merge history is deleted with the contact (migration 0048).
   canonicalId: uuid("canonical_id")
     .notNull()
-    .references(() => contacts.id),
+    .references(() => contacts.id, { onDelete: "cascade" }),
   mergedId: uuid("merged_id")
     .notNull()
-    .references(() => contacts.id),
+    .references(() => contacts.id, { onDelete: "cascade" }),
   actor: text("actor").notNull(),
   relinkedCounts: jsonb("relinked_counts").notNull().default({}),
   /** Feature 074: see `mergeManifest.ts` for the shape. Parsed with Zod on read, never trusted raw. */
@@ -94,7 +100,7 @@ export const mergeReversals = pgTable("merge_reversals", {
   mergeAuditId: uuid("merge_audit_id")
     .notNull()
     .unique()
-    .references(() => mergeAudit.id),
+    .references(() => mergeAudit.id, { onDelete: "cascade" }),
   actor: text("actor").notNull(),
   /** Per table, how many manifest entries were applied. */
   restoredCounts: jsonb("restored_counts").notNull().default({}),
