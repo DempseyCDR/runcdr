@@ -272,7 +272,17 @@ export async function listVolunteers(db: Db): Promise<VolunteerRow[]> {
       approvedAt: contacts.volunteerApprovedAt,
     })
     .from(contacts)
-    .where(eq(contacts.isVolunteer, true));
+    // Feature 076 (close-out §2b): only ACTIVE contacts. Without this a contact merged away still showed as a
+    // volunteer with no roles — its grants had moved to the survivor — and an archived one lingered too.
+    // The same predicate 071 added at session read and 072 added at sign-in enrolment; this read path was
+    // the one left behind.
+    .where(
+      and(
+        eq(contacts.isVolunteer, true),
+        isNull(contacts.mergedIntoId),
+        isNull(contacts.archivedAt),
+      ),
+    );
 
   const yearAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000);
 

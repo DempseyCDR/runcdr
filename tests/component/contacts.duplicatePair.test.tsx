@@ -16,6 +16,9 @@ const json = (body: unknown, status = 200) => ({
 const side = (over: Record<string, unknown> = {}) => ({
   id: "c-a",
   displayName: "Robert Jones",
+  firstName: "Robert",
+  lastName: "Jones",
+  displayNameOverride: null,
   membershipStatus: "current",
   membershipLevel: "family",
   phone: "+15855551234",
@@ -84,6 +87,64 @@ function stub(pairsFor: (includeRejected: boolean) => unknown[], onReject?: () =
 
 const openQueue = async (user: ReturnType<typeof userEvent.setup>) =>
   user.click(await screen.findByRole("button", { name: /review duplicates/i }));
+
+/**
+ * Feature 076 (069 manual pass). The display name is the header. When it is CUSTOM, the name the pair was
+ * actually proposed on — first + last — is shown beneath it, because pairing runs on first + last and a
+ * custom display name can hide that entirely. When it is automatic it IS first + last, so nothing is
+ * repeated. There is no "(custom)" marker: the line appearing is the signal.
+ */
+describe("the row's names (076)", () => {
+  it("shows first and last name beneath a CUSTOM display name", async () => {
+    stub(() => [
+      PAIR({
+        a: side({
+          displayName: "Peggy CDR",
+          firstName: "Peggy",
+          lastName: "Dempsey",
+          displayNameOverride: "Peggy CDR",
+        }),
+      }),
+    ]);
+    const user = userEvent.setup();
+    render(<ContactsPage />);
+    await openQueue(user);
+
+    const row = await screen.findByRole("listitem", { name: /Peggy CDR/i });
+    expect(within(row).getByText("Peggy Dempsey")).toBeTruthy();
+    expect(within(row).queryByText(/custom/i), "no custom marker is wanted").toBeNull();
+  });
+
+  it("shows nothing beneath an automatic display name", async () => {
+    stub(() => [PAIR()]);
+    const user = userEvent.setup();
+    render(<ContactsPage />);
+    await openQueue(user);
+
+    const row = await screen.findByRole("listitem", { name: /Robert Jones/i });
+    // Only the header carries the name — no second "Robert Jones" line beneath it.
+    expect(within(row).getAllByText(/^Robert Jones$/)).toHaveLength(1);
+  });
+
+  it("shows just the first name when a custom-named contact has no last name", async () => {
+    stub(() => [
+      PAIR({
+        a: side({
+          displayName: "The Fiddler",
+          firstName: "Zeke",
+          lastName: null,
+          displayNameOverride: "The Fiddler",
+        }),
+      }),
+    ]);
+    const user = userEvent.setup();
+    render(<ContactsPage />);
+    await openQueue(user);
+
+    const row = await screen.findByRole("listitem", { name: /The Fiddler/i });
+    expect(within(row).getByText(/^Zeke$/)).toBeTruthy();
+  });
+});
 
 describe("the duplicates worklist row (feature 069, M-R18)", () => {
   it("shows each side's reach, standing and record age, so the decision needs no other screen", async () => {

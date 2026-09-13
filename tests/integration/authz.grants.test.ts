@@ -406,4 +406,31 @@ describe("US2: assignment", () => {
       expect(row?.overdue).toBe(true);
     });
   });
+
+  /**
+   * Feature 076 (close-out §2b). The access page listed every contact with `is_volunteer = true`, with no
+   * merged or archived filter — so a contact merged away still appeared as a volunteer, showing no roles
+   * because its grants had moved to the survivor. Found walking feature 074's manual pass.
+   */
+  describe("the volunteer list shows only active contacts (076)", () => {
+    it("omits a volunteer who has been merged away", async () => {
+      const kept = await aVolunteer("kept@cdrochester.org");
+      const retired = await aVolunteer("retired@cdrochester.org");
+      await db.update(contacts).set({ mergedIntoId: kept }).where(eq(contacts.id, retired));
+
+      const ids = (await listVolunteers(db)).map((v) => v.contactId);
+      expect(ids).toContain(kept);
+      expect(ids, "a merged-away contact is still listed as a volunteer").not.toContain(retired);
+    });
+
+    it("omits a volunteer whose contact has been archived", async () => {
+      const kept = await aVolunteer("kept2@cdrochester.org");
+      const archived = await aVolunteer("archived@cdrochester.org");
+      await db.update(contacts).set({ archivedAt: new Date() }).where(eq(contacts.id, archived));
+
+      const ids = (await listVolunteers(db)).map((v) => v.contactId);
+      expect(ids).toContain(kept);
+      expect(ids, "an archived contact is still listed as a volunteer").not.toContain(archived);
+    });
+  });
 });
