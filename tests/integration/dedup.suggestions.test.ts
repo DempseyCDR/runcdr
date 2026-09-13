@@ -13,9 +13,11 @@ import { jsonReq, jsonReqAs, ctx } from "./helpers/http";
 import {
   countMergeSuggestions,
   getMergeSuggestions,
+  projectSuggestion,
 } from "@/server/domain/dedup/suggestionService";
 import { rejectPair } from "@/server/domain/dedup/rejectionService";
 import { createContact } from "@/server/domain/contacts/contactService";
+import { deriveContactNames } from "@/server/domain/contacts/normalize";
 
 // File-level DB lifecycle (shared across the describes below — a single closeDb for the pool).
 beforeAll(ensureSchema);
@@ -358,5 +360,62 @@ describe("the queue does not silently drop pairs (feature 069)", () => {
     const body = await res.json();
     expect(body.truncated).toBe(false);
     expect(body.pairs.length).toBe(await countMergeSuggestions(db));
+  });
+});
+
+/**
+ * Feature 076 (069 manual pass). A custom display name can hide the name the pair was actually proposed
+ * on: pairing runs on first + last, but the row showed only the display name. So the pair carries the
+ * structured names, and the row shows them whenever the display name is custom.
+ */
+describe("the pair carries each contact's structured names (076)", () => {
+  const named = (
+    firstName: string,
+    lastName: string | null,
+    displayNameOverride: string | null,
+  ) => ({
+    firstName,
+    lastName,
+    displayNameOverride,
+    ...deriveContactNames({ firstName, lastName, displayNameOverride }),
+  });
+
+  it("returns first name, last name and the display-name override for both sides", async () => {
+    await db
+      .insert(contacts)
+      .values([named("Peggy", "Dempsey", "Peggy CDR"), named("Peggy", "Dempsey", null)]);
+
+    const [pair] = await getMergeSuggestions(db, 0.4, 50);
+    expect(pair, "the two Peggy Dempseys were not proposed as a pair").toBeDefined();
+    const sides = [pair!.a, pair!.b];
+    const custom = sides.find((c) => c.displayNameOverride !== null)!;
+    const automatic = sides.find((c) => c.displayNameOverride === null)!;
+
+    expect(custom).toMatchObject({
+      displayName: "Peggy CDR",
+      firstName: "Peggy",
+      lastName: "Dempsey",
+      displayNameOverride: "Peggy CDR",
+    });
+    expect(automatic).toMatchObject({
+      displayName: "Peggy Dempsey",
+      firstName: "Peggy",
+      lastName: "Dempsey",
+      displayNameOverride: null,
+    });
+  });
+
+  it("keeps the names when contact details are projected away for a base reader", async () => {
+    // Names are not PII here — only reach (emails, phone) is withheld — so projection must keep them,
+    // or a reader without contact access would see the custom display name with nothing beneath it.
+    await db
+      .insert(contacts)
+      .values([named("Peggy", "Dempsey", "Peggy CDR"), named("Peggy", "Dempsey", null)]);
+    const [pair] = await getMergeSuggestions(db, 0.4, 50);
+
+    const projected = projectSuggestion(pair!, false);
+    const custom = [projected.a, projected.b].find((c) => c.displayNameOverride !== null)!;
+    expect(custom.emails, "projection should still withhold reach").toEqual([]);
+    expect(custom).toMatchObject({ firstName: "Peggy", lastName: "Dempsey" });
   });
 });

@@ -19,6 +19,14 @@ function escapeLike(s: string): string {
 export type MergeSuggestionContact = {
   id: string;
   displayName: string;
+  /**
+   * Feature 076: the structured names beneath the display name. Pairing runs on first + last, so when the
+   * display name is CUSTOM it can hide the very name the pair was proposed on — the row shows these
+   * whenever `displayNameOverride` is set. Names are not PII, so projection keeps them.
+   */
+  firstName: string;
+  lastName: string | null;
+  displayNameOverride: string | null;
   membershipStatus: string;
   membershipLevel: string | null;
   phone: string | null;
@@ -135,6 +143,9 @@ const contactCols = (alias: string): SQL =>
   sql.raw(`
     ${alias}.id AS ${alias}_id,
     ${alias}.display_name AS ${alias}_name,
+    ${alias}.first_name AS ${alias}_first,
+    ${alias}.last_name AS ${alias}_last,
+    ${alias}.display_name_override AS ${alias}_override,
     ${alias}.membership_status AS ${alias}_status,
     ${alias}.phone AS ${alias}_phone,
     ${alias}.created_at AS ${alias}_created,
@@ -160,6 +171,9 @@ const contactCols = (alias: string): SQL =>
 type Row = {
   a_id: string;
   a_name: string;
+  a_first: string;
+  a_last: string | null;
+  a_override: string | null;
   a_status: string;
   a_phone: string | null;
   a_emails: string[];
@@ -168,6 +182,9 @@ type Row = {
   a_level: string | null;
   b_id: string;
   b_name: string;
+  b_first: string;
+  b_last: string | null;
+  b_override: string | null;
   b_status: string;
   b_phone: string | null;
   b_emails: string[];
@@ -233,6 +250,9 @@ export async function getMergeSuggestions(
   const side = (r: Row, k: "a" | "b"): MergeSuggestionContact => ({
     id: r[`${k}_id`],
     displayName: r[`${k}_name`],
+    firstName: r[`${k}_first`],
+    lastName: r[`${k}_last`],
+    displayNameOverride: r[`${k}_override`],
     membershipStatus: r[`${k}_status`],
     membershipLevel: r[`${k}_level`],
     phone: r[`${k}_phone`],

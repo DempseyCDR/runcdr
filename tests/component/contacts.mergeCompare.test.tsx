@@ -16,6 +16,9 @@ const json = (body: unknown, status = 200) => ({
 const side = (over: Record<string, unknown> = {}) => ({
   id: "c-david",
   displayName: "David Jones",
+  firstName: "David",
+  lastName: "Jones",
+  displayNameOverride: null,
   membershipStatus: "current",
   membershipLevel: "family",
   phone: "+15855551234",
@@ -83,6 +86,34 @@ const open = () =>
  * inline field-by-field merge: one question — "are these one person?" — with three answers, of which only
  * one is destructive. This screen replaces the retired `/dedup` page and carries its guards across.
  */
+/** Feature 076: the comparison shows names by exactly the same rule as the queue row. */
+describe("the comparison's names (076)", () => {
+  it("shows first and last name beneath a CUSTOM display name, and nothing beneath an automatic one", async () => {
+    stub({ "c-david": owner, "c-bridget": referrerNoEmail });
+    const pair = {
+      ...PAIR,
+      b: side({
+        id: "c-bridget",
+        displayName: "Biddy",
+        firstName: "Bridgit",
+        lastName: "Jones",
+        displayNameOverride: "Biddy",
+        emails: [],
+      }),
+    };
+    render(
+      <MergeCompare pair={pair} onClose={() => {}} onMerged={() => {}} onRejected={() => {}} />,
+    );
+    const panel = await screen.findByRole("dialog");
+
+    expect(within(panel).getByText("Bridgit Jones")).toBeInTheDocument();
+    // David Jones is automatic: his name appears in the header and in the action buttons, but never as
+    // a separate name line.
+    expect(within(panel).getAllByText(/^David Jones$/)).toHaveLength(1);
+    expect(within(panel).queryByText(/custom/i)).toBeNull();
+  });
+});
+
 describe("the merge comparison", () => {
   it("shows EVERY email per side, whatever its status, and says the survivor inherits them (FR-009)", async () => {
     stub({ "c-david": owner, "c-bridget": referrerNoEmail });
@@ -92,6 +123,10 @@ describe("the merge comparison", () => {
     expect(within(panel).getByText(/dj-1998@aol\.com/)).toBeInTheDocument();
     expect(within(panel).getByText(/inactive/i)).toBeInTheDocument();
     expect(within(panel).getByText(/inherits every address/i)).toBeInTheDocument();
+    // Feature 076: since 074 a merge CAN be undone, and the queue row already says so. The comparison
+    // used to say it could not, contradicting the row one click earlier.
+    expect(within(panel).getByText(/can be undone afterwards/i)).toBeInTheDocument();
+    expect(within(panel).queryByText(/cannot be undone/i)).toBeNull();
   });
 
   it("offers all three resolutions, with merge marked as the destructive one (FR-015a)", async () => {

@@ -6,6 +6,7 @@ import RecordView from "@/app/(admin)/_components/RecordView";
 import { formatPhone } from "@/server/domain/contacts/phone";
 import type { DupContact, DupPair } from "./DuplicatePair";
 import styles from "../contacts.module.css";
+import PairContactName from "./PairContactName";
 
 type EmailRow = { id: string; email: string; status: string };
 type FullRecord = { id: string; displayName: string; emails: EmailRow[] };
@@ -110,10 +111,7 @@ export default function MergeCompare({
     const rec = records[c.id];
     return (
       <div className={styles.dupSide}>
-        <div className={styles.dupName}>
-          {c.displayName}
-          {c.hasLogin ? " · signs in" : ""}
-        </div>
+        <PairContactName c={c}>{c.hasLogin ? " · signs in" : ""}</PairContactName>
         <dl className={styles.dupFacts}>
           <div>
             <dt>Addresses</dt>
@@ -178,7 +176,8 @@ export default function MergeCompare({
           <p className={styles.mergeNote}>
             Merging keeps one contact and retires the other. The one you keep inherits every address
             shown above — active, transitioning or retired — along with the other&apos;s phone,
-            membership and history. It cannot be undone from here.
+            membership and history. It can be undone afterwards from the kept contact&apos;s merge
+            history.
           </p>
 
           <div className={styles.dupActions}>
