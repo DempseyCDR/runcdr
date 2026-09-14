@@ -61,7 +61,13 @@ function stub(records: Record<string, unknown>): Call[] {
       if (u.includes("/api/contacts/launcher-counts"))
         return json({ needsReview: 0, duplicates: 1 });
       if (u.includes("/api/me/capabilities"))
-        return json({ contactWrite: true, contactDelete: false, contactDeleteUnrestricted: false });
+        return json({
+          contactWrite: true,
+          contactDelete: false,
+          contactDeleteUnrestricted: false,
+          contactMailingWrite: true, // linking a shared address is hers (078 gates it)
+          dedupWrite: true,
+        });
       if (u.includes("/api/dedup/suggestions")) return json({ pairs: [PAIR] });
       const hit = Object.keys(records).find((id) => u.endsWith(`/api/contacts/${id}`));
       if (hit) return json(records[hit]);

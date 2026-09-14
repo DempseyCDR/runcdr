@@ -52,7 +52,7 @@ function stub() {
       const u = String(url);
       if (u.includes("/api/contacts/launcher-counts"))
         return json({ needsReview: 0, duplicates: 1 });
-      if (u.includes("/api/me/capabilities")) return json({ contactWrite: true });
+      if (u.includes("/api/me/capabilities")) return json({ contactWrite: true, dedupWrite: true });
       if (u.includes("/api/dedup/suggestions")) return json({ pairs: PAIRS });
       return json({ items: [] });
     }),

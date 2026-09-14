@@ -1,5 +1,8 @@
 # Mel contact maintenance — what is left
 
+> **Mel Maintenance is CLOSED (feature 078).** Every item on this list has landed. It stays as the record
+> of what was found after M-R1–M-R27 shipped, and where each finding was closed.
+
 Close-out companion to [mel-contact-maintenance.md](./mel-contact-maintenance.md). **Every requirement
 M-R1–M-R27 in that document is implemented** as of feature 070:
 
@@ -74,7 +77,7 @@ surviving account.
 
 See [specs/074-undo-merge/](../074-undo-merge/).
 
-## 2a. A merge can silently revoke a volunteer's access (FOUND 2026-09-12, NOT FIXED)
+## 2a. A merge can silently revoke a volunteer's access — CLOSED by feature 078
 
 Found walking feature 074's §4 manual pass: `dempsey.peggy@gmail.com` (mailing list manager) merged into
 `peggy@cdrochester.org`. The merge completed. Afterwards **neither address could sign in**, with no
@@ -96,7 +99,7 @@ this one.
 reached, so the person cannot simply sign in again — while the binding points at a non-volunteer, the
 attempt is refused. Undoing the merge fixes it, but the undo's sign-in portion needs `role.assign`.
 
-**The fix — undecided, for feature 078.** The obvious answer is to have a merge carry `is_volunteer`, so
+**The fix — as considered before 078.** The obvious answer is to have a merge carry `is_volunteer`, so
 the survivor becomes a volunteer if either side was. It is **not** recommended: once the survivor is a
 volunteer, whoever controls the survivor's OWN email address could enrol and sign in, so a mistaken merge
 would grant access to the wrong person on the mailing-list manager's authority alone.
@@ -106,6 +109,38 @@ holder to decide — the same "would the survivor GAIN something" rule feature 0
 Resolving in favour carries the flag together with its approval date and approver. Because this is the
 third service-layer invariant a merge has walked past, 078 should also audit `grantService` for any
 others rather than fixing only this one.
+
+### Shipped in 078
+
+The recommendation was taken. A volunteer merged into a non-volunteer is held as **`volunteer_status`**,
+answered by an officer (`role.assign`, which a President holds). Carrying it brings the approval date and
+approver across, records `volunteer.designated` naming the merge, and is written to the reversal manifest
+as three access-changing overwrites — so an undo restores the survivor's own values, and needs the same
+authority as undoing a moved Google account. The hold closes itself if the survivor is designated a
+volunteer on the access page instead.
+
+### Found while specifying 078, and closed by it
+
+- **Super-user moved through a merge.** A super-user merged into anyone who already held role-assigning
+  authority (a President, say) moved silently, because 072's rule only held on *gaining* `role.assign`.
+  Super-user is granted only at the command line. Rich's rule: a super-user merges only into a
+  super-user. Otherwise the merge is held as **`super_user`**, which **no one can answer in the app** —
+  the chooser gives the command-line instruction and **Don't merge**. Leaving the grant behind is not an
+  answer.
+- **The stuck pair.** A pair raising two questions (accounts, then roles) kept its hold's FIRST reason
+  forever: once the accounts question was answered, the queue went on asking it, and answering again
+  changed nothing. A hold now stores every answer given (`held_merges.answers`) and its reason is always
+  the decision still outstanding. An answer that stops fitting — the chosen account deleted, or moved to
+  someone else — is dropped and asked again, never applied.
+
+### The access-rule audit (FR-016)
+
+Every rule the access services enforce was listed with what a merge does about it. **The two rules 078
+adds were the only ones a merge walked past**: super-user being command-line only, and a grant's subject
+being a volunteer. Exclusive offices and gaining role-assigning authority were already held by 072; a
+grant's scope always exists; the Financial Secretary warning is advisory and computed on read. The list
+lives above `detectHold` in `mergeService.ts`, with the instruction that a new rule there needs a
+matching check.
 
 ## 2b. Retired contacts still appear on the access page — CLOSED by feature 076
 
@@ -197,10 +232,11 @@ to retire such a contact.
 
 ## 3. Smaller items
 
-- **Held-merge resolution chooser (UI).** The service and endpoints are complete and tested for both
-  `two_logins` and `two_accounts`; the needs-review queue's **Resolve** currently just opens the record.
-  It also blocks 074's quickstart §2 (the destructive account fold) and the original §4, which are
-  covered only by the automated suite until it exists.
+- **Held-merge resolution chooser (UI) — CLOSED by 078.** One chooser for every hold reason, opened from
+  the queue's **Resolve** (or **View**, for someone who cannot answer). It asks the hold's question as it
+  stands now, shows who can answer it, and says the merge can be undone. A President can now see and
+  answer holds; before, every hold route required duplicate-management authority, which a President does
+  not hold. Unblocks 074's quickstart §2 (the destructive account fold).
 - **Feature 069 quickstart manual pass — DONE 2026-09-13.** Walked in full. One finding: a proposed
   duplicate pair showed only each contact's display name, so a **custom** display name could hide the
   name the pair was actually proposed on (pairing runs on first + last). **Closed by 076**: the display
@@ -212,11 +248,9 @@ to retire such a contact.
 
 ## Sequencing note
 
-Items 1a, 1b, 2, 2b and 2c have shipped (071, 072, 074, 076, 077), as have both of §3's verification items. **All
-of what remains lands before Mel Maintenance is closed**, in this order:
+Every item has shipped — 1a, 1b, 2, 2a, 2b, 2c and all of §3 (071, 072, 074, 076, 077, 078). **Mel
+Maintenance is closed.**
 
 1. ~~**077 — 2c**, merge history on delete.~~ **Shipped.**
-2. **078 — 2a and 3's chooser**, both decisions about access at merge time. Needs a short requirements
-   session first: 2a's recommended answer is to HOLD a merge that would newly make the survivor a
-   volunteer, for `role.assign`, since simply carrying `is_volunteer` would let whoever controls the
-   survivor's own address enrol; the chooser's is one screen covering all three held-merge reasons.
+2. ~~**078 — 2a and 3's chooser**, both decisions about access at merge time.~~ **Shipped**, with the two
+   findings made while specifying it (super-user, the stuck pair).

@@ -127,7 +127,7 @@ deletion._
 | `notification_status` | matched, parked, resolved | `paypal_notifications.status` (feature 019) |
 | `role` | door_attendant, booker, financial_secretary, treasurer, vice_president, webmaster, mailing_list_manager, secretary, president, super_user | `role_grants.role` (feature 016) |
 | `mailing_list_id` | contra, english, openband, specialevents, performer, member, contact_tracing | `mailing_list_exports.list_id` |
-| `held_merge_reason` | two_logins, two_accounts | `held_merges.reason` (feature 069) |
+| `held_merge_reason` | two_logins, two_accounts, role_conflict, volunteer_status, super_user | `held_merges.reason` (069; `role_conflict` 072; the last two 078) |
 
 _The `event_group_kind` enum was retired — `event_groups.kind` is now free text._
 
@@ -347,17 +347,23 @@ collisions are detected before the transaction opens, so only this row is writte
 | id | uuid PK | |
 | canonical_id | uuid NOT NULL → contacts(id) ON DELETE CASCADE | |
 | merged_id | uuid NOT NULL → contacts(id) ON DELETE CASCADE | |
-| reason | held_merge_reason NOT NULL | `two_logins` \| `two_accounts` |
+| reason | held_merge_reason NOT NULL | **always the decision still outstanding** (feature 078) — moves on as questions are answered |
 | attempted_by | uuid NULL → contacts(id) | |
 | attempted_at | timestamptz NOT NULL default `now()` | |
 | resolved_at | timestamptz NULL | non-null once applied **or** auto-closed |
+| answers | jsonb NOT NULL default `'{}'` | feature 078: every answer given so far, possibly by different people — `survivingIdentityId`, `survivingLoginEmailId`, `survivingAccountId`, `keepGrantIds`, `carryVolunteer` |
 
 - **Indexes**: partial UNIQUE `held_merges_pair_open` on `(canonical_id, merged_id) WHERE resolved_at IS
   NULL` — retrying a blocked merge reuses the standing hold instead of piling up duplicates.
-- **Domain rules**: the authority follows the **reason** — `role.assign` to choose a surviving sign-in
-  (governance), `dedup.write` to choose a surviving account. A hold is **auto-closed on read** when its
-  cause disappears (either contact merged away or archived, or the colliding thing gone), so no other
-  write path has to remember this table exists.
+- **Domain rules**: the authority follows the **reason** — `role.assign` for a surviving sign-in, the roles
+  that move, or carrying volunteer status (governance); `dedup.write` for a surviving account; and nobody
+  in the app for `super_user`, which is settled only by granting the survivor super-user at the command
+  line. A hold is **auto-closed on read** when its cause disappears (either contact merged away or
+  archived, or the colliding thing gone), so no other write path has to remember this table exists.
+- **Answers** (feature 078): a retried merge re-checks every obstacle, so it is retried with every stored
+  answer. An answer that stops fitting the pair (the chosen account deleted or moved away) is **dropped**
+  and its question asked again — never applied, because applying the account and sign-in choices deletes
+  records.
 
 ---
 

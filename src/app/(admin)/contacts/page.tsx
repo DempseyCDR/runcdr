@@ -9,8 +9,14 @@ import EmailEditor, { type EmailRow } from "./_components/EmailEditor";
 import MessageRecipient, { type MessageRecipientRow } from "./_components/MessageRecipient";
 import MembershipAccount, { type MembershipBlock } from "./_components/MembershipAccount";
 import MergeHistory from "./_components/MergeHistory";
-import DuplicatePair, { type DupPair } from "./_components/DuplicatePair";
+import DuplicatePair, { type DupPair, type PairPermissions } from "./_components/DuplicatePair";
 import MergeCompare from "./_components/MergeCompare";
+import HeldMergeChooser, {
+  HOLD_REASON_TEXT,
+  WAITING_TEXT,
+  type HeldAuthority,
+  type HeldReason,
+} from "./_components/HeldMergeChooser";
 import { formatPhone } from "@/server/domain/contacts/phone";
 import styles from "./contacts.module.css";
 
@@ -35,6 +41,12 @@ type ContactSummary = {
  * Feature 072 (FR-018): what to tell the user the moment a merge stops. Each names the obstacle and the
  * way forward, because "held" on its own leaves them with nothing to do next.
  */
+/** Feature 078: the server's reason for refusing an action, for the page to show rather than swallow. */
+async function refusal(res: Response, fallback: string): Promise<string> {
+  const body = await res.json().catch(() => null);
+  return body?.error?.message ? `${fallback} ${body.error.message}` : fallback;
+}
+
 const HELD_FALLBACK = "Not merged — the merge was held and is now in the review queue.";
 const HELD_MESSAGE: Record<string, string> = {
   two_logins:
@@ -45,17 +57,26 @@ const HELD_MESSAGE: Record<string, string> = {
     "now in the review queue.",
   role_conflict:
     "Not merged: this would give one person the authority to assign roles, or two offices that must " +
-    "stay separate. An officer must remove the conflicting role first. It is now in the review queue.",
+    "stay separate. An officer chooses which roles move. It is now in the review queue.",
+  volunteer_status:
+    "Not merged: only the contact being retired is a volunteer. An officer must decide whether the kept " +
+    "contact becomes one, or its sign-in and roles would stop working. It is now in the review queue.",
+  super_user:
+    "Not merged: the contact being retired is a super-user and the kept one is not. Super-user can only " +
+    "be granted at the command line — grant it to the kept contact there, then merge again.",
 };
 
 // Feature 069 (FR-014): a merge held because it cannot complete without a decision (M-R21).
 type HeldMerge = {
   id: string;
-  reason: "two_logins" | "two_accounts" | "role_conflict";
+  reason: HeldReason;
   canonicalId: string;
   canonicalDisplayName: string;
   mergedId: string;
   mergedDisplayName: string;
+  // Feature 078 (research R8): the server says who can answer, so the page keeps no copy of the rules.
+  answerableBy: HeldAuthority;
+  canAnswer: boolean;
 };
 
 type Caps = {
@@ -126,6 +147,8 @@ export default function ContactsPage() {
   // Feature 069 (FR-014): the review queue renders TWO kinds of task. A held merge is not a flagged
   // contact — it is a question about a pair that someone has to answer, and often not this someone.
   const [held, setHeld] = useState<HeldMerge[]>([]);
+  // Feature 078: the held merge whose chooser is open.
+  const [choosing, setChoosing] = useState<string | null>(null);
   const [counts, setCounts] = useState<{ needsReview: number; duplicates: number }>({
     needsReview: 0,
     duplicates: 0,
@@ -371,6 +394,13 @@ export default function ContactsPage() {
     await refreshCounts();
   }
 
+  // Feature 078: what the person may do with a suggested pair — the server's own rules, as capabilities.
+  const pairPermissions: PairPermissions = {
+    merge: caps.dedupWrite,
+    share: caps.contactMailingWrite,
+    seeHolds: caps.dedupWrite || caps.roleAssign,
+  };
+
   async function merge(canonicalId: string, mergedId: string) {
     setComparing(null);
     setMergeNotice(null);
@@ -379,7 +409,9 @@ export default function ContactsPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ canonicalId, mergedId }),
     });
-    if (!res.ok) return;
+    // Feature 078: a refused merge used to return here with nothing on screen — found when a President's
+    // merge was refused and the page simply did nothing.
+    if (!res.ok) return void setMergeNotice(await refusal(res, "Not merged."));
     // Feature 072 (FR-018): a HELD merge is a 200 carrying `outcome: "held"`. Treating every 200 as
     // success meant the list silently refreshed and the user saw nothing — they learned the merge had
     // stopped only by later noticing an item in the review queue. Say so at the moment it happens.
@@ -412,7 +444,7 @@ export default function ContactsPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ contactAId, contactBId }),
     });
-    if (!res.ok) return;
+    if (!res.ok) return void setMergeNotice(await refusal(res, "Could not change that pair."));
     await refreshView();
     await refreshCounts();
   }
@@ -583,28 +615,31 @@ export default function ContactsPage() {
                     <div className={styles.dupName}>
                       Merge held — {h.canonicalDisplayName} and {h.mergedDisplayName}
                     </div>
-                    <p className={styles.dupHousehold}>
-                      {h.reason === "two_logins"
-                        ? "Both contacts sign in. Someone who can assign roles must choose which sign-in survives before these can be merged."
-                        : h.reason === "two_accounts"
-                          ? "Both contacts pay for a membership account. One account must be chosen before these can be merged."
-                          : // Feature 072 (FR-010a): say what to DO. There is no resolution screen, and
-                            // the supported route is to remove the cause on the access screen — the hold
-                            // then closes itself and the merge succeeds on a second attempt.
-                            "Merging these would give one person the authority to assign roles, or two offices that must stay separate. Remove the conflicting role on the access screen, then merge again."}
-                    </p>
+                    {/* Feature 078: one explanation per reason, shared with the chooser. */}
+                    <p className={styles.dupHousehold}>{HOLD_REASON_TEXT[h.reason]}</p>
                   </div>
                   <span className={styles.dupActions}>
-                    {(h.reason === "two_accounts" ? true : caps.roleAssign) ? (
+                    {/* Feature 078 (FR-001, FR-006): every hold opens its chooser. Whoever can answer
+                        gets Resolve; anyone else can still View what is being decided. */}
+                    {h.canAnswer ? (
                       <button
                         type="button"
                         className={styles.dupButton}
-                        onClick={() => void openRecord(h.canonicalId)}
+                        onClick={() => setChoosing(h.id)}
                       >
                         Resolve
                       </button>
                     ) : (
-                      <em className={styles.dupHousehold}>Waiting on an officer</em>
+                      <>
+                        <em className={styles.dupHousehold}>{WAITING_TEXT[h.answerableBy]}</em>
+                        <button
+                          type="button"
+                          className={styles.dupButton}
+                          onClick={() => setChoosing(h.id)}
+                        >
+                          View
+                        </button>
+                      </>
                     )}
                     {/* FR-017: always available to whoever could attempt the merge — otherwise the queue
                         fills with items the person working it has no way to clear. */}
@@ -627,6 +662,18 @@ export default function ContactsPage() {
       )}
 
       {/* Feature 072 (FR-018): why a merge did not complete, said at the moment it happens. */}
+      {choosing && (
+        <HeldMergeChooser
+          holdId={choosing}
+          onClose={() => setChoosing(null)}
+          onDone={async (message) => {
+            setChoosing(null);
+            setMergeNotice(message);
+            await refreshView();
+            await refreshCounts();
+          }}
+        />
+      )}
       {mergeNotice && (
         <p role="status" className={styles.warning}>
           {mergeNotice}
@@ -660,6 +707,8 @@ export default function ContactsPage() {
                   onOpen={(id) => void openRecord(id)}
                   onCompare={() => setComparing(p)}
                   onMerge={(canonicalId, mergedId) => void merge(canonicalId, mergedId)}
+                  onOpenHold={setChoosing}
+                  permissions={pairPermissions}
                 />
               ))}
             </ul>
@@ -673,6 +722,11 @@ export default function ContactsPage() {
           pair={comparing}
           onClose={() => setComparing(null)}
           onMerged={(canonicalId, mergedId) => merge(canonicalId, mergedId)}
+          permissions={pairPermissions}
+          onOpenHold={(id) => {
+            setComparing(null);
+            setChoosing(id);
+          }}
           onRejected={async () => {
             const p = comparing;
             setComparing(null);

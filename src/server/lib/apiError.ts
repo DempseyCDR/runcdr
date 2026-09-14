@@ -4,6 +4,9 @@ export type ApiErrorCode =
   // Feature 069 (M-R21): a merge held for a decision the survivor cannot make for itself.
   | "HELD_MERGE_NOT_FOUND"
   | "HELD_MERGE_REASON_MISMATCH"
+  // Feature 078: a hold answer that no longer fits the pair, and a hold nobody can answer in the app.
+  | "HELD_MERGE_STALE"
+  | "HELD_MERGE_NOT_ANSWERABLE"
   // Feature 074: undoing a merge.
   | "MERGE_NOT_FOUND"
   | "MERGE_NOT_REVERSIBLE"
@@ -110,6 +113,15 @@ function deleteAdvice(categories: string[]): string {
   return "merge or archive it instead of deleting.";
 }
 
+/** How a held merge's reason reads in a refusal. */
+const HELD_REASON_PHRASE: Record<string, string> = {
+  two_logins: "two staff sign-ins",
+  two_accounts: "two membership accounts",
+  role_conflict: "a role conflict",
+  volunteer_status: "volunteer status",
+  super_user: "super-user access",
+};
+
 export const errors = {
   /** Feature 015: no valid staff session. Deliberately says nothing about why. */
   unauthenticated: () => new ApiError("UNAUTHENTICATED", 401, "Authentication required."),
@@ -195,6 +207,14 @@ export const errors = {
     new ApiError("ACCOUNT_NOT_FOUND", 404, "This contact has no membership account."),
   heldMergeNotFound: () =>
     new ApiError("HELD_MERGE_NOT_FOUND", 404, "That held merge no longer exists."),
+  /**
+   * Feature 078 (FR-010, research R3): an answer — just given, or stored from earlier — no longer fits the
+   * pair. The answer is dropped and the question asked again; the message says what changed.
+   */
+  heldMergeStale: (message: string) => new ApiError("HELD_MERGE_STALE", 409, message),
+  /** Feature 078 (FR-015): a super-user hold. Refused for everyone; the message is how to proceed. */
+  heldMergeNotAnswerable: (message: string) =>
+    new ApiError("HELD_MERGE_NOT_ANSWERABLE", 409, message),
   /** Feature 074: no merge with that id. Distinct from a merge that exists but cannot be undone. */
   mergeNotFound: () => new ApiError("MERGE_NOT_FOUND", 404, "That merge no longer exists."),
   /**
@@ -211,7 +231,7 @@ export const errors = {
     new ApiError(
       "HELD_MERGE_REASON_MISMATCH",
       422,
-      `This merge is held because of ${reason === "two_logins" ? "two staff sign-ins" : "two membership accounts"}; the choice offered does not resolve that.`,
+      `This merge is held because of ${HELD_REASON_PHRASE[reason] ?? reason}; the choice offered does not resolve that.`,
       reason,
     ),
   contactNotFound: () => new ApiError("CONTACT_NOT_FOUND", 404, "Contact not found."),

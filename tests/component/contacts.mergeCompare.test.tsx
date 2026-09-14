@@ -46,6 +46,7 @@ const PAIR = {
   rejected: null,
   safeToReject: false,
   safeToMerge: false,
+  heldMergeId: null,
 };
 
 const owner = {
@@ -79,7 +80,16 @@ function stub(records: Record<string, unknown>): Call[] {
 }
 
 const open = () =>
-  render(<MergeCompare pair={PAIR} onClose={() => {}} onMerged={() => {}} onRejected={() => {}} />);
+  render(
+    <MergeCompare
+      pair={PAIR}
+      onClose={() => {}}
+      onMerged={() => {}}
+      onRejected={() => {}}
+      onOpenHold={() => {}}
+      permissions={{ merge: true, share: true, seeHolds: true }}
+    />,
+  );
 
 /**
  * Feature 069, US3 (FR-008/FR-009/FR-015a/FR-015b). The pair opens a COMPARISON of two records, not an
@@ -102,7 +112,14 @@ describe("the comparison's names (076)", () => {
       }),
     };
     render(
-      <MergeCompare pair={pair} onClose={() => {}} onMerged={() => {}} onRejected={() => {}} />,
+      <MergeCompare
+        pair={pair}
+        onClose={() => {}}
+        onMerged={() => {}}
+        onRejected={() => {}}
+        onOpenHold={() => {}}
+        permissions={{ merge: true, share: true, seeHolds: true }}
+      />,
     );
     const panel = await screen.findByRole("dialog");
 

@@ -17,7 +17,7 @@ import {
   makeContactWithEmail,
   makeMembershipAccount,
 } from "./helpers/factories";
-import { mergeContacts } from "@/server/domain/dedup/mergeService";
+import { detectHold, mergeContacts } from "@/server/domain/dedup/mergeService";
 import {
   abandonHeldMerge,
   listHeldMerges,
@@ -58,7 +58,7 @@ describe("a merge that cannot complete is HELD, not failed", () => {
     expect(result.outcome).toBe("held");
     if (result.outcome !== "held") throw new Error("expected held");
     if (result.reason !== "two_logins") throw new Error("expected two_logins");
-    expect(result.candidates.map((c) => c.email).sort()).toEqual([
+    expect(result.candidates.map((c) => c.loginEmail).sort()).toEqual([
       "terri@example.com",
       "terry@example.com",
     ]);
@@ -373,7 +373,7 @@ describe("resolving a role conflict (FR-009, FR-010a)", () => {
   });
 
   it("auto-closes when the conflicting grant is withdrawn instead (FR-010a)", async () => {
-    // This is the route that makes a hold recoverable without a resolution screen: an authorised person
+    // The other route out of a hold, beside answering it in the chooser (078): an authorised person
     // removes the cause where that decision already lives, and the merge then succeeds on a retry.
     const { officer, actor, heldMergeId } = await heldConflict();
     expect(heldMergeId).toBeTruthy();
@@ -617,5 +617,94 @@ describe("a hold closes only when the merge would actually succeed", () => {
     expect(await listHeldMerges(db)).toHaveLength(0);
     const retry = await mergeContacts(db, a.contactId, b.contactId, actor);
     expect(retry.outcome).toBe("completed");
+  });
+});
+
+/**
+ * Feature 078 (research R1). ONE function decides what, if anything, still blocks a merge — the merge,
+ * the chooser and the auto-close all call it. Feature 072 shipped the failure this prevents: the
+ * auto-close and the merge detection asked different versions of "can both sign in?", so a hold closed
+ * and the next attempt raised it again, forever.
+ */
+describe("one detector: the merge and the auto-close agree (078, R1)", () => {
+  it("detects the same reason the merge holds, for each existing reason", async () => {
+    const actor = await contact("Mel Actor");
+
+    const a = await withLogin("Terry", "terry@example.com");
+    const b = await withLogin("Terri", "terri@example.com");
+    const logins = await mergeContacts(db, a.contactId, b.contactId, actor);
+    expect(logins.outcome === "held" && logins.reason).toBe("two_logins");
+    expect((await detectHold(db, a.contactId, b.contactId)).hold?.reason).toBe("two_logins");
+
+    const payerA = await contact("Pat Payer");
+    const payerB = await contact("Pat Payor");
+    await makeMembershipAccount({ payerContactId: payerA, expiryDate: "2027-01-01" });
+    await makeMembershipAccount({ payerContactId: payerB, expiryDate: "2027-01-01" });
+    const accounts = await mergeContacts(db, payerA, payerB, actor);
+    expect(accounts.outcome === "held" && accounts.reason).toBe("two_accounts");
+    expect((await detectHold(db, payerA, payerB)).hold?.reason).toBe("two_accounts");
+
+    const president = await contact("Pres Ident");
+    const treasurer = await contact("Tres Urer");
+    await grant(president, "president");
+    await grant(treasurer, "treasurer");
+    const roles = await mergeContacts(db, president, treasurer, actor);
+    expect(roles.outcome === "held" && roles.reason).toBe("role_conflict");
+    expect((await detectHold(db, president, treasurer)).hold?.reason).toBe("role_conflict");
+  });
+
+  it("closes a hold exactly when the detector finds nothing — two accounts included", async () => {
+    const actor = await contact("Mel Actor");
+    const payerA = await contact("Pat Payer");
+    const payerB = await contact("Pat Payor");
+    const { accountId } = await makeMembershipAccount({
+      payerContactId: payerA,
+      expiryDate: "2027-01-01",
+    });
+    await makeMembershipAccount({ payerContactId: payerB, expiryDate: "2027-01-01" });
+    await mergeContacts(db, payerA, payerB, actor);
+    expect(await listHeldMerges(db)).toHaveLength(1);
+
+    // Still blocked: the hold stays.
+    expect((await detectHold(db, payerA, payerB)).hold).not.toBeNull();
+    expect(await listHeldMerges(db)).toHaveLength(1);
+
+    // Remove the obstacle: the detector clears, and so does the hold — no separate SQL count needed.
+    await db.delete(membershipAccounts).where(eq(membershipAccounts.id, accountId));
+    expect((await detectHold(db, payerA, payerB)).hold).toBeNull();
+    expect(await listHeldMerges(db)).toHaveLength(0);
+  });
+
+  it("never lets a foreign surviving account through — it would delete both of the pair's accounts", async () => {
+    // Analyze U1. The account fold deletes every account of the pair except the chosen one. An answer
+    // naming an account that is not the pair's used to count as settling the question merely by being
+    // present — so both of the pair's accounts would have been deleted.
+    const actor = await contact("Mel Actor");
+    const payerA = await contact("Pat Payer");
+    const payerB = await contact("Pat Payor");
+    const stranger = await contact("Stranger");
+    await makeMembershipAccount({ payerContactId: payerA, expiryDate: "2027-01-01" });
+    await makeMembershipAccount({ payerContactId: payerB, expiryDate: "2027-01-01" });
+    const { accountId: foreign } = await makeMembershipAccount({
+      payerContactId: stranger,
+      expiryDate: "2027-01-01",
+    });
+
+    const assessed = await detectHold(db, payerA, payerB, { survivingAccountId: foreign });
+    expect(assessed.hold?.reason).toBe("two_accounts");
+    expect(
+      assessed.hold?.stale,
+      "a foreign account must be reported stale, not settling",
+    ).toBeTruthy();
+    expect(assessed.apply.survivingAccountId).toBeUndefined();
+
+    await expect(
+      mergeContacts(db, payerA, payerB, actor, { survivingAccountId: foreign }),
+    ).rejects.toThrow();
+    const remaining = await db
+      .select()
+      .from(membershipAccounts)
+      .where(sql`${membershipAccounts.payerContactId} IN (${payerA}, ${payerB})`);
+    expect(remaining, "the pair's accounts were deleted by a foreign answer").toHaveLength(2);
   });
 });
