@@ -66,7 +66,12 @@ function stub(pairsFor: (includeRejected: boolean) => unknown[], onReject?: () =
       if (u.includes("/api/contacts/launcher-counts"))
         return json({ needsReview: 0, duplicates: 1 });
       if (u.includes("/api/me/capabilities"))
-        return json({ contactWrite: true, contactDelete: false, contactDeleteUnrestricted: false });
+        return json({
+          contactWrite: true,
+          contactDelete: false,
+          contactDeleteUnrestricted: false,
+          dedupWrite: true, // the mailing-list manager: these rows' actions are hers (078)
+        });
       if (u.includes("/api/dedup/rejections")) {
         if (method === "POST") onReject?.();
         return json({ ok: true });

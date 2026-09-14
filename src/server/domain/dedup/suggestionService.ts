@@ -56,6 +56,12 @@ export type MergeSuggestion = {
   sharedHousehold: { email: boolean; account: boolean };
   /** Present only when `includeRejected` asked for suppressed pairs (FR-004a). */
   rejected: { at: string; byDisplayName: string | null } | null;
+  /**
+   * Feature 078: the pair's open held merge, attempted either way round, or null. Answering the hold is
+   * the only way forward for such a pair, so the row and the comparison send people to it rather than
+   * offering a merge that would only stop at the same hold again.
+   */
+  heldMergeId: string | null;
   /** FR-005: derived from the projected fields above — see `deriveRowSafety`. */
   safeToReject: boolean;
   safeToMerge: boolean;
@@ -204,6 +210,7 @@ type Row = {
   shared_account: boolean;
   rejected_at: string | null;
   rejected_by_name: string | null;
+  held_merge_id: string | null;
 };
 
 /**
@@ -241,7 +248,12 @@ export async function getMergeSuggestions(
                      JOIN membership_members mb ON mb.account_id = ma.account_id
                     WHERE ma.contact_id = a.id AND mb.contact_id = b.id) AS shared_account,
            dr.rejected_at AS rejected_at,
-           (SELECT rc.display_name FROM contacts rc WHERE rc.id = dr.rejected_by) AS rejected_by_name
+           (SELECT rc.display_name FROM contacts rc WHERE rc.id = dr.rejected_by) AS rejected_by_name,
+           (SELECT h.id FROM held_merges h
+             WHERE h.resolved_at IS NULL
+               AND ((h.canonical_id = a.id AND h.merged_id = b.id)
+                 OR (h.canonical_id = b.id AND h.merged_id = a.id))
+             LIMIT 1) AS held_merge_id
     ${pairCriteria(threshold)}${qFilter}${rejectedFilter}
     ORDER BY sim DESC
     LIMIT ${limit}
@@ -278,6 +290,7 @@ export async function getMergeSuggestions(
       rejected: r.rejected_at
         ? { at: String(r.rejected_at), byDisplayName: r.rejected_by_name }
         : null,
+      heldMergeId: r.held_merge_id,
       ...deriveRowSafety(a, b, sharedHousehold),
     };
   });

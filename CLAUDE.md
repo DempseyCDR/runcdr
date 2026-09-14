@@ -1,7 +1,7 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at specs/077-merge-history-on-delete/plan.md
+at specs/078-merge-access-decisions/plan.md
 <!-- SPECKIT END -->
 
 ## Development conventions

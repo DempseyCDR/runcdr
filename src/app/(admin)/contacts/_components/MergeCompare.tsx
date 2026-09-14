@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/app/apiFetch";
 import RecordView from "@/app/(admin)/_components/RecordView";
 import { formatPhone } from "@/server/domain/contacts/phone";
-import type { DupContact, DupPair } from "./DuplicatePair";
+import type { DupContact, DupPair, PairPermissions } from "./DuplicatePair";
 import styles from "../contacts.module.css";
 import PairContactName from "./PairContactName";
 
@@ -47,8 +47,13 @@ export default function MergeCompare({
   onClose,
   onMerged,
   onRejected,
+  onOpenHold,
+  permissions,
 }: {
   pair: DupPair;
+  /** Feature 078: the answers offered are the ones this person may give; the rest is view-only. */
+  permissions: PairPermissions;
+  onOpenHold: (heldMergeId: string) => void;
   onClose: () => void;
   onMerged: (canonicalId: string, mergedId: string) => void | Promise<void>;
   onRejected: () => void | Promise<void>;
@@ -173,45 +178,78 @@ export default function MergeCompare({
             <Column c={b} />
           </div>
 
-          <p className={styles.mergeNote}>
-            Merging keeps one contact and retires the other. The one you keep inherits every address
-            shown above — active, transitioning or retired — along with the other&apos;s phone,
-            membership and history. It can be undone afterwards from the kept contact&apos;s merge
-            history.
-          </p>
+          {pair.heldMergeId ? (
+            // Feature 078: merging a held pair again would only stop at the same question. The way forward
+            // is the hold, answered by whoever its question belongs to.
+            <div className={styles.dupActions}>
+              <p className={styles.mergeNote}>
+                Their merge is held, waiting on a decision. It is answered in the held merge, not
+                here.
+              </p>
+              {permissions.seeHolds && (
+                <button
+                  type="button"
+                  className={styles.dupButton}
+                  onClick={() => onOpenHold(pair.heldMergeId!)}
+                >
+                  Open held merge
+                </button>
+              )}
+            </div>
+          ) : permissions.merge ? (
+            <>
+              <p className={styles.mergeNote}>
+                Merging keeps one contact and retires the other. The one you keep inherits every
+                address shown above — active, transitioning or retired — along with the other&apos;s
+                phone, membership and history. It can be undone afterwards from the kept
+                contact&apos;s merge history.
+              </p>
 
-          <div className={styles.dupActions}>
-            <button
-              type="button"
-              className={styles.destructiveButton}
-              onClick={() => void onMerged(a.id, b.id)}
-            >
-              Keep {a.displayName}, retire {b.displayName}
-            </button>
-            <button
-              type="button"
-              className={styles.destructiveButton}
-              onClick={() => void onMerged(b.id, a.id)}
-            >
-              Keep {b.displayName}, retire {a.displayName}
-            </button>
-          </div>
+              <div className={styles.dupActions}>
+                <button
+                  type="button"
+                  className={styles.destructiveButton}
+                  onClick={() => void onMerged(a.id, b.id)}
+                >
+                  Keep {a.displayName}, retire {b.displayName}
+                </button>
+                <button
+                  type="button"
+                  className={styles.destructiveButton}
+                  onClick={() => void onMerged(b.id, a.id)}
+                >
+                  Keep {b.displayName}, retire {a.displayName}
+                </button>
+              </div>
+            </>
+          ) : (
+            <p className={styles.mergeNote}>
+              You cannot merge or separate these contacts — that is for the mailing-list manager or
+              an officer who manages duplicates. You can still compare them here.
+            </p>
+          )}
 
           {/* The two reversible answers. Feature 067 (M-R26): different people, one household address. */}
           <div className={styles.dupActions}>
-            <button
-              type="button"
-              className={styles.dupButton}
-              onClick={() => proposeShare(a, b)}
-            >{`Share ${a.displayName}'s email`}</button>
-            <button
-              type="button"
-              className={styles.dupButton}
-              onClick={() => proposeShare(b, a)}
-            >{`Share ${b.displayName}'s email`}</button>
-            <button type="button" className={styles.dupButton} onClick={() => void onRejected()}>
-              Not duplicates
-            </button>
+            {permissions.share && (
+              <>
+                <button
+                  type="button"
+                  className={styles.dupButton}
+                  onClick={() => proposeShare(a, b)}
+                >{`Share ${a.displayName}'s email`}</button>
+                <button
+                  type="button"
+                  className={styles.dupButton}
+                  onClick={() => proposeShare(b, a)}
+                >{`Share ${b.displayName}'s email`}</button>
+              </>
+            )}
+            {permissions.merge && (
+              <button type="button" className={styles.dupButton} onClick={() => void onRejected()}>
+                Not duplicates
+              </button>
+            )}
             <button type="button" className={styles.dupButton} onClick={onClose}>
               Cancel
             </button>

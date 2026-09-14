@@ -87,7 +87,12 @@ function stub(opts: {
   pairs?: unknown[];
   record?: Rec;
   counts?: { needsReview: number; duplicates: number };
-  caps?: { contactWrite?: boolean; contactDelete?: boolean; contactDeleteUnrestricted?: boolean };
+  caps?: {
+    contactWrite?: boolean;
+    contactDelete?: boolean;
+    contactDeleteUnrestricted?: boolean;
+    dedupWrite?: boolean;
+  };
   deleteStatus?: number; // 200 ok, or 409 refusal
 }): Call[] {
   const calls: Call[] = [];
@@ -107,6 +112,7 @@ function stub(opts: {
           contactWrite: opts.caps?.contactWrite ?? false,
           contactDelete: opts.caps?.contactDelete ?? false,
           contactDeleteUnrestricted: opts.caps?.contactDeleteUnrestricted ?? false,
+          dedupWrite: opts.caps?.dedupWrite ?? false,
         });
       if (u.includes("/api/dedup/merge")) return json({});
       if (u.includes("/api/dedup/suggestions")) return json({ pairs: opts.pairs ?? [] });
@@ -207,6 +213,7 @@ describe("contacts launcher — duplicates view (feature 064)", () => {
     const calls = stub({
       pairs: [pair("Jon Smith", "John Smith", ["a1", "b1"])],
       counts: { needsReview: 0, duplicates: 1 },
+      caps: { dedupWrite: true },
     });
     render(<ContactsPage />);
     await userEvent.click(screen.getByRole("button", { name: /review duplicates/i }));
@@ -525,9 +532,12 @@ describe("contacts review queue — rows show and adapt (feature 069)", () => {
  * is waiting on someone else, so Mel is not left tapping an action she cannot complete (FR-013).
  */
 describe("held merges in the review queue (feature 069)", () => {
+  // Feature 078 (research R8): the server says who can answer each hold; the page no longer derives it.
   const HELD = (over: Partial<Record<string, unknown>> = {}) => ({
     id: "h1",
     reason: "two_logins",
+    answerableBy: "role.assign",
+    canAnswer: false,
     canonicalId: "c-terry",
     canonicalDisplayName: "Terry Vale",
     mergedId: "c-terri",
@@ -545,7 +555,21 @@ describe("held merges in the review queue (feature 069)", () => {
         calls.push({ url: u, init });
         if (u.includes("/api/contacts/launcher-counts"))
           return json({ needsReview: 1, duplicates: 0 });
-        if (u.includes("/api/me/capabilities")) return json({ contactWrite: true, roleAssign });
+        if (u.includes("/api/me/capabilities"))
+          return json({ contactWrite: true, roleAssign, dedupWrite: true });
+        if (/\/api\/dedup\/held\/[^/]+$/.test(u) && method === "GET") {
+          const h = (held as { id: string }[]).find((x) => u.endsWith(`/${x.id}`)) as Record<
+            string,
+            unknown
+          >;
+          return json({
+            ...h,
+            canonical: { id: h.canonicalId, displayName: h.canonicalDisplayName },
+            merged: { id: h.mergedId, displayName: h.mergedDisplayName },
+            answered: [],
+            candidates: [],
+          });
+        }
         if (u.includes("/api/dedup/held"))
           return json(method === "DELETE" ? { ok: true } : { held });
         if (u.includes("needsReview=1")) return json({ items: [] });
@@ -573,7 +597,7 @@ describe("held merges in the review queue (feature 069)", () => {
         if (u.includes("/api/contacts/launcher-counts"))
           return json({ needsReview: 0, duplicates: 1 });
         if (u.includes("/api/me/capabilities"))
-          return json({ contactWrite: true, roleAssign: false });
+          return json({ contactWrite: true, roleAssign: false, dedupWrite: true });
         if (u.includes("/api/dedup/merge"))
           return json({ outcome: "held", reason: "role_conflict", heldMergeId: "h9" });
         if (u.includes("/api/dedup/suggestions"))
@@ -632,7 +656,10 @@ describe("held merges in the review queue (feature 069)", () => {
   });
 
   it("lets a dedup worker resolve a two-account hold", async () => {
-    stubWithHeld([HELD({ id: "h2", reason: "two_accounts" })], false);
+    stubWithHeld(
+      [HELD({ id: "h2", reason: "two_accounts", answerableBy: "dedup.write", canAnswer: true })],
+      false,
+    );
     const user = userEvent.setup();
     render(<ContactsPage />);
     await openReview(user);
@@ -642,5 +669,38 @@ describe("held merges in the review queue (feature 069)", () => {
       within(row).getByText(/both contacts pay for a membership account/i),
     ).toBeInTheDocument();
     expect(within(row).getByRole("button", { name: /resolve/i })).toBeInTheDocument();
+  });
+
+  /**
+   * Feature 078 (FR-001). Resolve used to open the canonical contact's RECORD — there was no screen that
+   * asked the hold's question, so the only thing anyone could do with a hold was decline it.
+   */
+  it("opens the hold's chooser from Resolve, not a contact record", async () => {
+    const calls = stubWithHeld(
+      [HELD({ id: "h2", reason: "two_accounts", answerableBy: "dedup.write", canAnswer: true })],
+      false,
+    );
+    const user = userEvent.setup();
+    render(<ContactsPage />);
+    await openReview(user);
+
+    const row = await screen.findByRole("listitem", { name: /held merge/i });
+    await user.click(within(row).getByRole("button", { name: /resolve/i }));
+
+    expect(await screen.findByRole("dialog", { name: /held merge/i })).toBeInTheDocument();
+    expect(calls.some((c) => c.url.endsWith("/api/dedup/held/h2"))).toBe(true);
+    expect(calls.some((c) => /\/api\/contacts\/c-terry$/.test(c.url))).toBe(false);
+  });
+
+  it("lets someone who cannot answer still open the hold to see what is waiting (FR-006)", async () => {
+    const calls = stubWithHeld([HELD()], false);
+    const user = userEvent.setup();
+    render(<ContactsPage />);
+    await openReview(user);
+
+    const row = await screen.findByRole("listitem", { name: /held merge/i });
+    await user.click(within(row).getByRole("button", { name: /view/i }));
+    expect(await screen.findByRole("dialog", { name: /held merge/i })).toBeInTheDocument();
+    expect(calls.some((c) => c.url.endsWith("/api/dedup/held/h1"))).toBe(true);
   });
 });

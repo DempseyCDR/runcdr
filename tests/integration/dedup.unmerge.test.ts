@@ -22,6 +22,7 @@ import {
 } from "./helpers/factories";
 import { mergeContacts } from "@/server/domain/dedup/mergeService";
 import { undoMerge } from "@/server/domain/dedup/undoMergeService";
+import { parseManifest } from "@/server/domain/dedup/mergeManifest";
 import { resolveSignIn } from "@/server/auth/signIn";
 
 beforeAll(ensureSchema);
@@ -250,7 +251,9 @@ describe("undo is best-effort per entry, and says so (FR-018, FR-020)", () => {
     expect(result.skipped).toHaveLength(1);
     expect(result.skipped[0]).toMatchObject({ table: "attendance", kind: "move", reason: "gone" });
     // The rest still came back — one absent row must not sink the reversal.
-    expect(await db.select().from(performers).where(eq(performers.contactId, dupe))).toHaveLength(1);
+    expect(await db.select().from(performers).where(eq(performers.contactId, dupe))).toHaveLength(
+      1,
+    );
   });
 
   it("skips a destroyed row whose position is now taken, as `occupied`", async () => {
@@ -339,7 +342,9 @@ describe("undo refuses when it should (FR-008, FR-010, FR-019)", () => {
       /undo that later merge first/i,
     );
     // Nothing moved: the refusal happens before any write.
-    expect(await db.select().from(performers).where(eq(performers.contactId, dupe))).toHaveLength(0);
+    expect(await db.select().from(performers).where(eq(performers.contactId, dupe))).toHaveLength(
+      0,
+    );
   });
 
   it("refuses a merge recorded before this feature", async () => {
@@ -390,12 +395,17 @@ describe("restoring sign-in needs role-assignment authority (FR-024, FR-025)", (
       reason: "not_authorized",
     });
     expect(
-      (await db.query.staffIdentities.findFirst({ where: eq(staffIdentities.googleSub, "sub-drop") }))
-        ?.contactId,
+      (
+        await db.query.staffIdentities.findFirst({
+          where: eq(staffIdentities.googleSub, "sub-drop"),
+        })
+      )?.contactId,
       "the binding should have been left where it was",
     ).toBe(survivor);
     // Everything not about sign-in came back, and the contact is live again.
-    expect(await db.select().from(performers).where(eq(performers.contactId, dupe))).toHaveLength(1);
+    expect(await db.select().from(performers).where(eq(performers.contactId, dupe))).toHaveLength(
+      1,
+    );
     expect(
       (await db.query.contacts.findFirst({ where: eq(contacts.id, dupe) }))?.mergedIntoId,
     ).toBeNull();
@@ -416,8 +426,11 @@ describe("restoring sign-in needs role-assignment authority (FR-024, FR-025)", (
 
     expect(result.skipped).toEqual([]);
     expect(
-      (await db.query.staffIdentities.findFirst({ where: eq(staffIdentities.googleSub, "sub-drop") }))
-        ?.contactId,
+      (
+        await db.query.staffIdentities.findFirst({
+          where: eq(staffIdentities.googleSub, "sub-drop"),
+        })
+      )?.contactId,
     ).toBe(dupe);
   });
 
@@ -477,11 +490,18 @@ describe("restoring sign-in needs role-assignment authority (FR-024, FR-025)", (
     await db.update(contacts).set({ isVolunteer: true }).where(eq(contacts.id, dupe));
     await db.insert(staffIdentities).values({ contactId: dupe, googleSub: "sub-drop" });
 
-    const merged = await mergeContacts(db, survivor, dupe, survivor);
+    // Feature 078: a volunteer merged into a non-volunteer carries its status only on an officer's answer.
+    const merged = await mergeContacts(db, survivor, dupe, survivor, { carryVolunteer: true });
     if (merged.outcome !== "completed") throw new Error("expected completed");
 
     const result = await undoMerge(db, await mergeIdFor(dupe), survivor, MEL);
-    expect(result.skipped).toHaveLength(1);
+    // The moved binding, and the carry's three volunteer columns (078) — all access-changing.
+    expect(result.skipped.map((s) => s.table).sort()).toEqual([
+      "contacts",
+      "contacts",
+      "contacts",
+      "staff_identities",
+    ]);
 
     // The binding still points at the survivor, so that Google account cannot be re-enrolled — but a
     // DIFFERENT Google account presenting the restored contact's address enrols against it cleanly.
@@ -524,5 +544,75 @@ describe("undo never touches what happened after the merge (FR-022, SC-005)", ()
       (await db.query.contactEmails.findFirst({ where: eq(contactEmails.id, newEmail!.id) }))
         ?.contactId,
     ).toBe(survivor);
+  });
+});
+
+/**
+ * Feature 078 (FR-013): carrying volunteer status is a change to who can sign in, so undoing it is too —
+ * it rides the same role-assignment gate as a moved Google account.
+ */
+describe("undoing a merge that carried volunteer status (078 US3)", () => {
+  async function carried() {
+    const approver = await contact("Pat Approver");
+    const survivor = await contact("Keep Me");
+    const priorApproval = new Date("2025-01-01T00:00:00Z");
+    await db
+      .update(contacts)
+      .set({ volunteerApprovedAt: priorApproval, volunteerApprovedBy: approver })
+      .where(eq(contacts.id, survivor));
+    const dupe = await contact("Drop Me");
+    await db
+      .update(contacts)
+      .set({ isVolunteer: true, volunteerApprovedAt: new Date("2026-03-01T00:00:00Z") })
+      .where(eq(contacts.id, dupe));
+    const merged = await mergeContacts(db, survivor, dupe, survivor, { carryVolunteer: true });
+    if (merged.outcome !== "completed") throw new Error("expected completed");
+    return { survivor, dupe, approver, priorApproval };
+  }
+
+  it("records the carry as three access-changing overwrites", async () => {
+    const { dupe, approver, priorApproval } = await carried();
+    const row = await db.query.mergeAudit.findFirst({ where: eq(mergeAudit.mergedId, dupe) });
+    const overwrites = parseManifest(row!.reversalManifest)!.entries.filter(
+      (e) => e.kind === "overwrite" && e.table === "contacts",
+    );
+    expect(overwrites).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          column: "is_volunteer",
+          previousValue: false,
+          accessChanging: true,
+        }),
+        expect.objectContaining({
+          column: "volunteer_approved_at",
+          previousValue: priorApproval.toISOString(),
+          accessChanging: true,
+        }),
+        expect.objectContaining({
+          column: "volunteer_approved_by",
+          previousValue: approver,
+          accessChanging: true,
+        }),
+      ]),
+    );
+    expect(overwrites).toHaveLength(3);
+  });
+
+  it("an officer's undo makes the survivor a non-volunteer again, with its own approval back", async () => {
+    const { survivor, dupe, approver, priorApproval } = await carried();
+    await undoMerge(db, await mergeIdFor(dupe), survivor, FULL_AUTHORITY);
+    const kept = await db.query.contacts.findFirst({ where: eq(contacts.id, survivor) });
+    expect(kept).toMatchObject({ isVolunteer: false, volunteerApprovedBy: approver });
+    expect(kept?.volunteerApprovedAt?.toISOString()).toBe(priorApproval.toISOString());
+  });
+
+  it("an undo without role-assignment authority skips all three", async () => {
+    const { survivor, dupe } = await carried();
+    const result = await undoMerge(db, await mergeIdFor(dupe), survivor, { canAssignRoles: false });
+    expect(result.skipped.filter((s) => s.table === "contacts")).toHaveLength(3);
+    expect(result.skipped.every((s) => s.reason === "not_authorized")).toBe(true);
+    expect(
+      (await db.query.contacts.findFirst({ where: eq(contacts.id, survivor) }))?.isVolunteer,
+    ).toBe(true);
   });
 });

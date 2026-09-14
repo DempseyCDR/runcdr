@@ -16,6 +16,20 @@ import PairContactName from "./PairContactName";
 export type DupContact = MergeSuggestionContact;
 export type DupPair = MergeSuggestion;
 
+/**
+ * Feature 078: what the person looking at a pair may do with it. Merging and "not duplicates" both need
+ * duplicate-management authority; a President may answer a held merge without it. Offering an action the
+ * server will refuse is how a President's merge used to fail with nothing on screen.
+ */
+export type PairPermissions = {
+  /** `dedup.write`: merge, or mark not duplicates. */
+  merge: boolean;
+  /** `contact.mailing.write`: link a shared household address. */
+  share: boolean;
+  /** `dedup.write` or `role.assign`: open a held merge. */
+  seeHolds: boolean;
+};
+
 const day = (iso: string) => (iso ? String(iso).slice(0, 10) : "—");
 
 /**
@@ -88,8 +102,13 @@ export default function DuplicatePair({
   onOpen,
   onCompare,
   onMerge,
+  onOpenHold,
+  permissions,
 }: {
   pair: DupPair;
+  permissions: PairPermissions;
+  /** Feature 078: open the pair's held merge in the chooser. */
+  onOpenHold: (heldMergeId: string) => void;
   onReject: () => void;
   onUndoReject: () => void;
   onOpen: (contactId: string) => void;
@@ -126,15 +145,35 @@ export default function DuplicatePair({
       </div>
       <span className={styles.dupActions}>
         {rejected ? (
-          <button type="button" className={styles.dupButton} onClick={onUndoReject}>
-            Undo
-          </button>
+          permissions.merge && (
+            <button type="button" className={styles.dupButton} onClick={onUndoReject}>
+              Undo
+            </button>
+          )
+        ) : pair.heldMergeId ? (
+          <>
+            {/* Feature 078: a held pair has one way forward — its hold. Merging again would only stop at
+                the same question, so the row offers the question instead. */}
+            <span className={styles.hint}>Their merge is held, waiting on a decision.</span>
+            {permissions.seeHolds && (
+              <button
+                type="button"
+                className={styles.dupButton}
+                onClick={() => onOpenHold(pair.heldMergeId!)}
+              >
+                Open held merge
+              </button>
+            )}
+            <button type="button" className={styles.dupButton} onClick={onCompare}>
+              Open to resolve
+            </button>
+          </>
         ) : (
           <>
             {/* Merging retires a contact and picks winners, so the row offers it only when the row
                 itself settles it. A conflict between the records, or a collision the row cannot
                 resolve, sends the pair to the comparison instead (FR-006). */}
-            {pair.safeToMerge && (
+            {permissions.merge && pair.safeToMerge && (
               <>
                 <button
                   type="button"
@@ -158,7 +197,7 @@ export default function DuplicatePair({
             )}
             {/* Rejecting is blocked only by an address the row is not showing — a conflict between the
                 records is an argument FOR it, never against. */}
-            {pair.safeToReject && (
+            {permissions.merge && pair.safeToReject && (
               <button type="button" className={styles.dupButton} onClick={onReject}>
                 Not duplicates
               </button>
