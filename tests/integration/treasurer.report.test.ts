@@ -7,6 +7,8 @@ import { contacts, doorRecords, treasurerReportAudit, venues } from "@/server/db
 import { updateDoorRecord } from "@/server/domain/door/doorRecordService";
 import { createBooking } from "@/server/domain/bookings/bookingService";
 import { createPerformerPayment } from "@/server/domain/payments/performerPaymentService";
+import { recordAttendance } from "@/server/domain/attendance/attendanceService";
+import { getAttendanceBreakdown } from "@/server/domain/attendance/breakdownService";
 import { GET as REPORT } from "@/app/api/events/[id]/treasurer-report/route";
 
 // FR-001/003/004/005/006/007/012/014
@@ -212,5 +214,24 @@ describe("GET /api/events/:id/treasurer-report", () => {
     const { status, body } = await report(evt.id);
     expect(status).toBe(404);
     expect(body.error.code).toBe("DOOR_RECORD_NOT_FOUND");
+  });
+
+  /** Feature 079 (FR-027, MEG-R10): the treasurer report carries the evening's attendance breakdown. */
+  it("carries the attendance breakdown, identical to the door's", async () => {
+    const evt = await makeEvent({ seriesKey: "tnc" });
+    const drId = await makeDoorRecord(evt.id);
+    await updateDoorRecord(db, drId, { grossCash: 100, seedFloat: 0 });
+    const caller = await makePerformer("Pat Caller");
+    await createBooking(db, evt.id, { performerId: caller.id, performerType: "caller", pay: 0 });
+    await recordAttendance(db, evt.id, { contactId: caller.contactId! });
+    await recordAttendance(db, evt.id, { unmatched: true, childrenCount: 2, isComp: true });
+    for (let i = 0; i < 6; i++) await recordAttendance(db, evt.id, { unmatched: true });
+
+    const { status, body } = await report(evt.id);
+    expect(status).toBe(200);
+    expect(body.attendance).toEqual(await getAttendanceBreakdown(db, evt.id));
+    expect(body.attendance).toMatchObject({ children: 2, performers: { caller: 1 } });
+    // Existing fields are unchanged.
+    expect(body.compCount).toBe(1);
   });
 });

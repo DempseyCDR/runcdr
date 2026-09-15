@@ -3,6 +3,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import GatePage from "@/app/(door)/gate/page";
+import { BREAKDOWN } from "./fixtures/attendanceBreakdown";
 
 // Feature 031 (P5-R4) US3: the anonymous-sales comment is sent as `note` on the anon line(s) on save, and
 // reloads from the persisted note on reopen.
@@ -34,6 +35,7 @@ function stub(calls: Call[], gateSales: unknown[]) {
       const method = init?.method ?? "GET";
       calls.push({ url: u, method, body: init?.body ? JSON.parse(String(init.body)) : undefined });
       const json = async () => {
+        if (u.includes("/attendance-breakdown")) return BREAKDOWN(); // feature 079
         if (u.includes("/api/series")) return { items: [{ id: "s1", key: "tnc", name: "TNC" }] };
         if (u.endsWith("/door-record")) return drRecord(gateSales);
         if (u.includes("/gate-sales")) return { enrolled: [] };

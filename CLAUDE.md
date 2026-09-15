@@ -1,7 +1,7 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at specs/078-merge-access-decisions/plan.md
+at specs/079-mobile-door-checkin/plan.md
 <!-- SPECKIT END -->
 
 ## Development conventions

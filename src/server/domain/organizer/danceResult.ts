@@ -19,8 +19,12 @@ export function danceNetCents(i: {
 }
 
 /**
- * paying dancers = attendance − distinct performers − 1 (door attendant) − comps, floored at 0.
+ * paying dancers = attendance − performers checked in − 1 (door attendant) − comps, floored at 0.
  * comps (feature 014) = people admitted free; default 0 keeps historical callers unchanged (FR-013, FR-003).
+ *
+ * Feature 079: `performerCount` is the booked performers who were CHECKED IN, not every booked performer — one
+ * who never came through the door was never counted in attendance, so subtracting them made paying one too
+ * low. The figure comes from `getAttendanceBreakdown`, which every surface shares.
  */
 export function payingDancers(
   attendanceCount: number,

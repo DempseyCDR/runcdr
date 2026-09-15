@@ -3,6 +3,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import TreasurerReportPage from "@/app/(admin)/treasurer/page";
+import { BREAKDOWN } from "./fixtures/attendanceBreakdown";
 
 // Feature 028 (P5-R1) US4 + FR-010: the treasurer report is a single `/treasurer` page (no `[eventId]` URL).
 // It renders the shared selector + the report for the default event, and reloads the report when the
@@ -40,6 +41,8 @@ function report(eventId: string) {
     // Feature 040 (P6-R9): reconciliation counts.
     compCount: 3,
     giftCardRedemptionCount: 2,
+    // Feature 079: the evening's attendance breakdown.
+    attendance: BREAKDOWN({ paying: eventId === "e_old" ? 12 : 21, comps: 3, giftCards: 2 }),
   };
 }
 
@@ -109,13 +112,19 @@ describe("TreasurerReportPage — /treasurer single page + selector (028)", () =
     expect(screen.getByRole("button", { name: /print/i })).toBeInTheDocument();
   });
 
-  // Feature 040 (P6-R9): the two reconciliation counts render (always shown, including 0).
-  it("shows comp-admission and gift-card-redemption counts", async () => {
+  // Feature 040 (P6-R9) counts, since feature 079 inside the attendance breakdown at the top of the report.
+  it("shows the attendance breakdown at the top, comps and gift cards included (079)", async () => {
     stub();
     render(<TreasurerReportPage />);
     await screen.findByText(/Gate Sales Summary — Cust e_recent/);
 
-    expect(screen.getByText(/comp admissions/i)).toHaveTextContent(/3/);
-    expect(screen.getByText(/gift.?card redemptions/i)).toHaveTextContent(/2/);
+    const breakdown = screen.getByRole("region", { name: /attendance/i });
+    expect(breakdown).toHaveTextContent(/Paying 21/);
+    expect(breakdown).toHaveTextContent(/Comps 3/);
+    expect(breakdown).toHaveTextContent(/Gift cards 2/);
+    const sales = screen.getByRole("heading", { name: /Sales Receipts/i });
+    expect(
+      breakdown.compareDocumentPosition(sales) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 });

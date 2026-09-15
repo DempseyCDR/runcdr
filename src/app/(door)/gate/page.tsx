@@ -1,6 +1,8 @@
 "use client";
 import { apiFetch } from "@/app/apiFetch";
 import { EventSelector } from "@/app/EventSelector";
+import AttendanceBreakdownView from "@/app/_components/AttendanceBreakdownView";
+import type { AttendanceBreakdown } from "@/server/domain/attendance/breakdownService";
 
 import { useEffect, useState } from "react";
 
@@ -50,6 +52,8 @@ export default function GatePage() {
   const [giftCount, setGiftCount] = useState("");
   const [openBandCount, setOpenBandCount] = useState(0);
   const [deposit, setDeposit] = useState<number | null>(null);
+  // Feature 079 (FR-027): the evening's attendance breakdown — the FS wants to see who came.
+  const [breakdown, setBreakdown] = useState<AttendanceBreakdown | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   // contact search for adding a named line
   const [search, setSearch] = useState("");
@@ -63,10 +67,17 @@ export default function GatePage() {
       .then((d) => setCandidates(d.items ?? []));
   }, [search]);
 
+  async function loadBreakdown(forEventId: string) {
+    if (!forEventId) return setBreakdown(null);
+    const res = await apiFetch(`/api/events/${forEventId}/attendance-breakdown`);
+    setBreakdown(res.ok ? ((await res.json()) as AttendanceBreakdown) : null);
+  }
+
   async function openDoorRecord(selectedEventId: string) {
     setEventId(selectedEventId);
     setDoorRecordId("");
     setDeposit(null);
+    void loadBreakdown(selectedEventId);
     setMessage(null);
     setAnon(JSON.parse(JSON.stringify(emptyAnon)));
     setAnonNote("");
@@ -218,6 +229,7 @@ export default function GatePage() {
     }
     const body = await res.json();
     setDeposit(body.deposit); // fee intentionally not returned
+    void loadBreakdown(eventId); // comps and gift cards may have just changed
     if (enrolled.length > 0) {
       const who = enrolled.map((e) => `${e.displayName} (through ${e.expiryDate})`).join(", ");
       setMessage(`Saved. Membership recorded: ${who}`);
@@ -240,6 +252,7 @@ export default function GatePage() {
       {doorRecordId && (
         <p style={{ color: "#666" }}>Door record open ({doorRecordId.slice(0, 8)}…)</p>
       )}
+      {breakdown && <AttendanceBreakdownView breakdown={breakdown} />}
 
       <h2>Anonymous gate sales</h2>
       <table>

@@ -2,6 +2,7 @@
 import { apiFetch } from "@/app/apiFetch";
 
 import { useEffect, useRef, useState } from "react";
+import { localToday } from "@/app/localToday";
 
 // Feature 028 (P5-R1): the shared event selector for every single-event surface (check-in, gate, payments,
 // treasurer). Owns the event/series fetch, the series + date-range filters, and the default; reports the
@@ -63,7 +64,7 @@ export function EventSelector({
   // soonest upcoming. The ref guard means adjusting a filter never re-defaults (and never re-fires onSelect).
   useEffect(() => {
     if (didDefault.current || value || !filtered.length) return;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localToday(); // feature 079: the device's date, not UTC's
     const def = filtered.find((e) => e.eventDate <= today) ?? filtered[filtered.length - 1];
     if (def) {
       didDefault.current = true;

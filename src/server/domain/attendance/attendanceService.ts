@@ -1,5 +1,5 @@
-import { and, eq, sql } from "drizzle-orm";
-import type { Db } from "@/server/db/client";
+import { and, eq, inArray, sql } from "drizzle-orm";
+import type { Db, Tx } from "@/server/db/client";
 import {
   attendance,
   bookings,
@@ -16,6 +16,7 @@ import { writeAudit } from "@/server/lib/audit";
 import { deriveContactNames } from "@/server/domain/contacts/normalize";
 import { normalizePhone } from "@/server/domain/contacts/phone";
 import { ensureDoorRecord } from "@/server/domain/door/doorRecordService";
+import { linkMessageRecipientIn } from "@/server/domain/contacts/referenceService";
 import type { AttendanceInput, AttendancePatchInput } from "@/server/validation/attendance";
 
 const UNIQUE_VIOLATION = "23505";
@@ -23,11 +24,24 @@ const UNIQUE_VIOLATION = "23505";
 /**
  * Record attendance against an event (not a door record). Three paths: existing
  * contact, new door-created contact (flagged needs_review), or unmatched.
+ *
+ * Feature 079: one transaction. A door-created contact, its email or shared-address link, the check-in and
+ * the counts land together or not at all — so a refused check-in never leaves a half-made contact behind.
  */
 export async function recordAttendance(
   db: Db,
   eventId: string,
   input: AttendanceInput,
+  actor: string | null = null,
+): Promise<AttendanceRow> {
+  return db.transaction((tx) => recordAttendanceIn(tx, eventId, input, actor));
+}
+
+async function recordAttendanceIn(
+  db: Tx,
+  eventId: string,
+  input: AttendanceInput,
+  actor: string | null,
 ): Promise<AttendanceRow> {
   const event = await db.query.events.findFirst({ where: eq(events.id, eventId) });
   if (!event) throw errors.eventNotFound();
@@ -66,6 +80,13 @@ export async function recordAttendance(
       }
     }
   } else if ("newContact" in input) {
+    const { email, shareEmail } = input.newContact;
+    // Feature 079 (FR-016, research R6): an address already reaching someone else is a question, not a
+    // detail to drop. Ask BEFORE writing anything; with `shareEmail` the answer is "a different person who
+    // shares it", so the new contact rides that address instead of owning it.
+    const owner = email ? await ownerOfEmail(db, email) : null;
+    if (owner && !shareEmail) throw errors.emailActiveElsewhere(owner);
+
     const names = deriveContactNames({
       firstName: input.newContact.firstName,
       lastName: input.newContact.lastName ?? null,
@@ -87,20 +108,22 @@ export async function recordAttendance(
       .returning();
     if (!created) throw new Error("contact insert failed");
     contactId = created.id;
-    // Capture the door-entered email best-effort; a duplicate (already in the
-    // directory) is left for admin review rather than blocking check-in.
-    if (input.newContact.email) {
-      try {
-        await db
-          .insert(contactEmails)
-          .values({ contactId: created.id, email: input.newContact.email });
-      } catch (err) {
-        if (
-          !(typeof err === "object" && err && (err as { code?: string }).code === UNIQUE_VIOLATION)
-        ) {
+
+    if (owner) {
+      // Linking at creation needs no `contact.mailing.write`: it records the walk-in's address, which the
+      // door attendant already may — the contact simply rides the address rather than owning it (R6).
+      await linkMessageRecipientIn(db, created.id, { emailId: owner.emailId }, actor);
+    } else if (email) {
+      // The owner check above is not a lock: an address claimed a moment later still reaches the unique
+      // index. It is refused rather than dropped — the transaction is already aborted, so the owner cannot
+      // be looked up; Meg retries and is then asked about them.
+      await db
+        .insert(contactEmails)
+        .values({ contactId: created.id, email })
+        .catch((err: unknown) => {
+          if ((err as { code?: string }).code === UNIQUE_VIOLATION) throw errors.emailDuplicate();
           throw err;
-        }
-      }
+        });
     }
   }
   // else unmatched → contactId stays null
@@ -109,10 +132,16 @@ export async function recordAttendance(
   // ride inside events.attendance_count (the persisted source for the report — no formula change).
   const childrenCount = "childrenCount" in input ? (input.childrenCount ?? 0) : 0;
 
+  // Feature 079 (research R12): two attendants can both pass the "already in?" check above before either
+  // inserts. The unique index refuses the second; say so the way the check would have.
   const [row] = await db
     .insert(attendance)
     .values({ eventId, contactId, childrenCount, isOpenBand })
-    .returning();
+    .returning()
+    .catch((err: unknown) => {
+      if ((err as { code?: string }).code === UNIQUE_VIOLATION) throw errors.alreadyCheckedIn();
+      throw err;
+    });
   if (!row) throw new Error("attendance insert failed");
   // Persisted per-event count for the organizer report; survives the 90-day purge.
   await db
@@ -143,12 +172,36 @@ export async function recordAttendance(
   return row;
 }
 
+/** Who, if anyone, an address still reaches (active or in transition — what the uniqueness index guards). */
+async function ownerOfEmail(
+  db: Tx,
+  email: string,
+): Promise<{ contactId: string; displayName: string; emailId: string } | null> {
+  const [hit] = await db
+    .select({
+      contactId: contactEmails.contactId,
+      displayName: contacts.displayName,
+      emailId: contactEmails.id,
+    })
+    .from(contactEmails)
+    .innerJoin(contacts, eq(contacts.id, contactEmails.contactId))
+    .where(
+      and(
+        sql`lower(trim(${contactEmails.email}::text)) = lower(trim(${email}))`,
+        inArray(contactEmails.status, ["active", "transition"]),
+      ),
+    )
+    .limit(1);
+  return hit ?? null;
+}
+
 export type AttendeeView = {
   id: string;
   contactId: string | null;
   firstName: string | null; // null for unmatched placeholders
   lastName: string | null;
   displayName: string | null; // null for unmatched placeholders
+  displayNameOverride: string | null; // feature 079: non-null means the display name is custom (076's rule)
   childrenCount: number; // B35: children on this check-in
   isOpenBand: boolean; // B36: open-band musician marker
   createdAt: string;
@@ -159,8 +212,11 @@ export type EventAttendanceView = {
   attendees: AttendeeView[];
 };
 
-/** Roster sort field (B33): by first or by last name; the other name is the tiebreak. */
-export type RosterSort = "first" | "last";
+/**
+ * Roster sort field (B33): by first or by last name; the other name is the tiebreak. Feature 079 adds
+ * `display` — the checked-in dialog's default, by the name the door shows (FR-018).
+ */
+export type RosterSort = "display" | "first" | "last";
 
 /**
  * The checked-in attendee list for an event. Serves both contact-tracing (FR-001b — count + display
@@ -174,9 +230,11 @@ export async function listEventAttendance(
   sort: RosterSort = "last",
 ): Promise<EventAttendanceView> {
   const orderBy =
-    sort === "first"
-      ? sql`lower(${contacts.firstName}) asc nulls last, lower(${contacts.lastName}) asc nulls last, ${attendance.createdAt} asc`
-      : sql`lower(${contacts.lastName}) asc nulls last, lower(${contacts.firstName}) asc nulls last, ${attendance.createdAt} asc`;
+    sort === "display"
+      ? sql`lower(${contacts.displayName}) asc nulls last, lower(${contacts.firstName}) asc nulls last, lower(${contacts.lastName}) asc nulls last, ${attendance.createdAt} asc`
+      : sort === "first"
+        ? sql`lower(${contacts.firstName}) asc nulls last, lower(${contacts.lastName}) asc nulls last, ${attendance.createdAt} asc`
+        : sql`lower(${contacts.lastName}) asc nulls last, lower(${contacts.firstName}) asc nulls last, ${attendance.createdAt} asc`;
 
   const rows = await db
     .select({
@@ -185,6 +243,7 @@ export async function listEventAttendance(
       firstName: contacts.firstName,
       lastName: contacts.lastName,
       displayName: contacts.displayName,
+      displayNameOverride: contacts.displayNameOverride,
       childrenCount: attendance.childrenCount,
       isOpenBand: attendance.isOpenBand,
       createdAt: attendance.createdAt,
@@ -200,6 +259,7 @@ export async function listEventAttendance(
     firstName: r.firstName ?? null,
     lastName: r.lastName ?? null,
     displayName: r.displayName ?? null,
+    displayNameOverride: r.displayNameOverride ?? null,
     childrenCount: r.childrenCount,
     isOpenBand: r.isOpenBand,
     createdAt: r.createdAt.toISOString(),

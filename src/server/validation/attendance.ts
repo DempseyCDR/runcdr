@@ -25,6 +25,9 @@ export const attendanceSchema = z.union([
       displayNameOverride: z.string().trim().min(1).optional(),
       email: z.string().trim().email().optional(),
       phone: z.string().trim().min(1).optional(),
+      // Feature 079 (FR-016b): the email belongs to someone else, and this is a different person sharing it —
+      // create the contact reached through that address rather than owning it.
+      shareEmail: z.literal(true).optional(),
     }),
     ...personExtras,
     ...countExtras,

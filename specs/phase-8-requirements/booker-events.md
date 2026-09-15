@@ -33,7 +33,25 @@ Requirement IDs are `BK-Rn`. Anything marked _(open)_ is not yet decided.
 
 ## 3. Open considerations
 
-- **BK-C1 — Group completeness / validation.** MEG-R7 relies on a community-dance group actually
-  containing its paired contra. Should the Booker's group view **flag an incomplete pairing** (a
-  community_dance group with no contra), so gaps like "Sept 2026 2nd Thursday" are caught? _(See MEG-R7
-  data dependency.)_
+- **BK-C1 — Group completeness / validation.** Should the Booker's group view **flag an incomplete pairing**
+  (a community_dance group with no contra), so gaps like "Sept 2026 2nd Thursday" are caught? _(No longer
+  required by MEG-R7, whose paired-contra rule was dropped on 2026-09-14; still useful on its own.)_
+- **BK-C2 — A performer booked twice for one event (raised 2026-09-14, feature 079).** Nothing prevents it,
+  and it is usually a mistake — but not always: a musician is handling sound at a particular future dance.
+  The booking workflow should **flag it for the booker to confirm** rather than refuse it. Until then, the
+  door's attendance breakdown counts such a performer once and shows a warning (079, FR-033).
+- **BK-C3 — Performers with no contact (deferred 2026-09-14 from feature 079).** Ideally every performer
+  has a contact. The few that don't are artifacts of standing up the database; a performer with no contact
+  can never be recognised as checked in at the door, so is never subtracted from paying.
+- **BK-C4 — Mobile layout for the booker's tasks (raised 2026-09-15, feature 079's manual pass).** A refused
+  booking — a sound tech on a Community Dance, whose series has no sound-tech slot — showed its message below
+  the fold, so the booker did not see that nothing was booked. The booker's screens need the same mobile-first
+  pass the door got in 079, with refusals shown where the action was taken.
+- **BK-C5 — Warn about unconfirmed bookings where money is handled (raised 2026-09-15, feature 079's manual
+  pass).** The caller booked for the test event was still unconfirmed on the night. On or after an event's
+  date, a booking that is not `confirmed` (proposed, requested or tentative) should raise a warning to the
+  Financial Secretary on `/gate` and `/payments`, and to the Treasurer on `/treasurer`. Confirming bookings on
+  time in the booker's workflow is the fix; these warnings are the safety net. To decide when specified: the
+  exact statuses and date rule, whether each warning names and links the booking, and whether it touches the
+  treasurer report's performer-payment reconciliation or only warns. Door counts are unaffected — a performer
+  counts as booked in any status (079, FR-024).

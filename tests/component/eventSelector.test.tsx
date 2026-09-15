@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
+import { localToday } from "@/app/localToday";
 import { useState } from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -108,5 +109,45 @@ describe("EventSelector", () => {
     await user.selectOptions(eventSelect(), "old");
     await waitFor(() => expect(picks).toHaveLength(2));
     expect(picks[1]?.id).toBe("old");
+  });
+
+  /**
+   * Feature 079 (research R9): "today" is the device's local date. At 9:30 pm on the East Coast the UTC date
+   * is already tomorrow, so the old UTC default would have picked tomorrow's event — and the door's new "not
+   * today" warning would have fired on the evening's own dance.
+   */
+  describe("today is the device's local date (079)", () => {
+    const originalTz = process.env.TZ;
+    afterEach(() => {
+      vi.useRealTimers();
+      process.env.TZ = originalTz;
+    });
+
+    it("defaults to tonight's event after the UTC date has rolled over", async () => {
+      process.env.TZ = "America/New_York";
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-09-18T01:30:00Z")); // 21:30 on 17 September, Eastern
+      expect(localToday()).toBe("2026-09-17");
+
+      const picks: EventRow[] = [];
+      stub([
+        {
+          id: "tomorrow",
+          eventDate: "2026-09-18",
+          seriesId: "s1",
+          startTime: "19:30:00",
+          label: null,
+        },
+        {
+          id: "tonight",
+          eventDate: "2026-09-17",
+          seriesId: "s1",
+          startTime: "19:30:00",
+          label: null,
+        },
+      ]);
+      render(<Harness onPick={(e) => picks.push(e)} />);
+      await waitFor(() => expect(picks[0]?.id).toBe("tonight"));
+    });
   });
 });

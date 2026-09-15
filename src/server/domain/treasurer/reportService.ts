@@ -22,6 +22,10 @@ import { centsToDollars } from "@/server/lib/money";
 import { computeEventGate } from "@/server/domain/gate/eventMoney";
 import { reconcilePayments } from "@/server/domain/payments/reconcile";
 import { resolveEventRentCents } from "@/server/domain/parameters/rentService";
+import {
+  getAttendanceBreakdown,
+  type AttendanceBreakdown,
+} from "@/server/domain/attendance/breakdownService";
 
 // Anonymous non-admission categories shown on the gate receipt (admission is derived).
 const ANON_CATEGORIES: GateCategory[] = ["merchandise", "gift_card", "misc_sales"];
@@ -79,6 +83,8 @@ export type TreasurerReport = {
   // (from the door record). Display-only; they alter no money figure.
   compCount: number;
   giftCardRedemptionCount: number;
+  /** Feature 079 (FR-027): the evening's attendance breakdown, identical to the door's and the gate page's. */
+  attendance: AttendanceBreakdown;
 };
 
 export async function assembleTreasurerReport(
@@ -305,5 +311,6 @@ export async function assembleTreasurerReport(
     },
     compCount: door.compCount, // raw free-admission count (NOT effective comps — research D4)
     giftCardRedemptionCount: door.giftCardRedemptionCount,
+    attendance: await getAttendanceBreakdown(db, eventId),
   };
 }

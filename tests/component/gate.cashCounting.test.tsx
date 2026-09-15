@@ -3,6 +3,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import GatePage from "@/app/(door)/gate/page";
+import { BREAKDOWN } from "./fixtures/attendanceBreakdown";
 
 // Feature 031 (P5-R4) US1/US2: an optional denomination helper totals cash (Σ bill count × face + coins +
 // checks) into the single gross-cash field; the direct gross-cash entry always works.
@@ -28,6 +29,7 @@ function stub() {
     vi.fn(async (url: string) => {
       const u = String(url);
       const json = async () => {
+        if (u.includes("/attendance-breakdown")) return BREAKDOWN(); // feature 079
         if (u.includes("/api/series")) return { items: [{ id: "s1", key: "tnc", name: "TNC" }] };
         if (u.endsWith("/door-record")) return SAVED;
         if (u.includes("/gate-sales")) return { enrolled: [] };

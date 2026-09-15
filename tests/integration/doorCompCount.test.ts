@@ -8,14 +8,16 @@ import { assembleOrganizerReport } from "@/server/domain/organizer/reportService
 
 const year = 2026;
 
-// A tnc event with `attendees` unmatched attendees, one caller (1 performer), and a door record
-// whose admission = `admissionDollars` (grossCash with seed float 0, no non-admission sales).
-// Baseline paying dancers = attendees − 1 performer − 1 door attendant.
+// A tnc event with `attendees` people through the door — one of them the booked caller, checked in (feature
+// 079: a performer is subtracted only when checked in) — and a door record whose admission = `admissionDollars`
+// (grossCash with seed float 0, no non-admission sales). Baseline paying dancers = attendees − 1 performer − 1
+// door attendant.
 async function buildEvent(attendees: number, admissionDollars: number): Promise<string> {
   const evt = await makeEvent({ seriesKey: "tnc", eventDate: "2026-06-18" });
   const caller = await makePerformer("Cal Caller");
   await createBooking(db, evt.id, { performerId: caller.id, performerType: "caller", pay: 100 });
-  for (let i = 0; i < attendees; i++) await recordAttendance(db, evt.id, { unmatched: true });
+  await recordAttendance(db, evt.id, { contactId: caller.contactId! });
+  for (let i = 1; i < attendees; i++) await recordAttendance(db, evt.id, { unmatched: true });
   const drId = await makeDoorRecord(evt.id);
   await updateDoorRecord(db, drId, { grossCash: admissionDollars, seedFloat: 0 });
   return drId;
