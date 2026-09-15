@@ -3,8 +3,10 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import CheckinPage from "@/app/(door)/checkin/page";
+import { BREAKDOWN } from "./fixtures/attendanceBreakdown";
 
-// Feature 025 US1 (FR-001..FR-010) + US5 (FR-018): the roster row opens a correction modal whose actions post
+// Feature 025 US1 (FR-001..FR-010) + US5 (FR-018): the roster row opens a correction modal — since feature 079,
+// from inside the Show checked in dialog — whose actions post
 // to the correct endpoints; a refusal surfaces inline; and there is no "open door record" button.
 type Call = { url: string; init?: RequestInit };
 
@@ -15,6 +17,7 @@ const ROSTER = [
     firstName: "Ann",
     lastName: "Lee",
     displayName: "Ann Lee",
+    displayNameOverride: null,
     childrenCount: 0,
     isOpenBand: false,
   },
@@ -46,6 +49,7 @@ function stub(calls: Call[], onDoorCount?: () => { ok: boolean; body: unknown })
           };
         if (u.includes("/api/series")) return { items: [{ id: "s1", key: "tnc", name: "TNC" }] };
         if (u.includes("/group-siblings")) return { items: SIBLINGS };
+        if (u.includes("/attendance-breakdown")) return BREAKDOWN();
         if (u.includes("/attendance")) return { attendees: ROSTER };
         return { items: [] };
       };
@@ -71,6 +75,7 @@ describe("CheckinPage — roster correction modal", () => {
     render(<CheckinPage />);
 
     // The roster row is a clickable button.
+    await user.click(await screen.findByRole("button", { name: /show checked in/i }));
     const rowBtn = await screen.findByRole("button", { name: /Ann Lee/ });
     await user.click(rowBtn);
     const dialog = await screen.findByRole("dialog", { name: /correct attendance/i });
@@ -103,6 +108,7 @@ describe("CheckinPage — roster correction modal", () => {
     const user = userEvent.setup();
     render(<CheckinPage />);
 
+    await user.click(await screen.findByRole("button", { name: /show checked in/i }));
     await user.click(await screen.findByRole("button", { name: /Ann Lee/ }));
     const dialog = await screen.findByRole("dialog", { name: /correct attendance/i });
     await user.click(within(dialog).getByRole("button", { name: /comp −1|comp -1/i }));

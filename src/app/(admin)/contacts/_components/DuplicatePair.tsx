@@ -6,7 +6,7 @@ import type {
 } from "@/server/domain/dedup/suggestionService";
 import { formatPhone } from "@/server/domain/contacts/phone";
 import styles from "../contacts.module.css";
-import PairContactName from "./PairContactName";
+import ContactName from "@/app/_components/ContactName";
 
 /**
  * The row's shape IS the server's projection — imported, not re-declared. FR-005 makes the row's
@@ -46,7 +46,7 @@ const day = (iso: string) => (iso ? String(iso).slice(0, 10) : "—");
 function Side({ c, onOpen }: { c: DupContact; onOpen: () => void }) {
   return (
     <div className={styles.dupSide}>
-      <PairContactName c={c}>{c.hasLogin ? " · signs in" : ""}</PairContactName>
+      <ContactName c={c}>{c.hasLogin ? " · signs in" : ""}</ContactName>
       {/* FR-007: the underlying record is reachable from every row, whatever the row's own action is. */}
       <button type="button" className={styles.dupOpen} onClick={onOpen}>
         Open {c.displayName}

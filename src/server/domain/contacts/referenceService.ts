@@ -1,5 +1,5 @@
 import { and, eq, inArray } from "drizzle-orm";
-import type { Db, DbOrTx } from "@/server/db/client";
+import type { Db, DbOrTx, Tx } from "@/server/db/client";
 import { contactEmails, contacts } from "@/server/db/schema";
 import { errors } from "@/server/lib/apiError";
 import { recordAudit } from "@/server/lib/audit";
@@ -22,57 +22,69 @@ export async function linkMessageRecipient(
   input: MessageRecipientInput,
   actor: string | null,
 ): Promise<void> {
-  await db.transaction(async (tx) => {
-    const contact = await tx.query.contacts.findFirst({ where: eq(contacts.id, contactId) });
-    if (!contact) throw errors.contactNotFound();
+  await db.transaction((tx) => linkMessageRecipientIn(tx, contactId, input, actor));
+}
 
-    const target = await tx.query.contactEmails.findFirst({
-      where: eq(contactEmails.id, input.emailId),
+/**
+ * The same link, inside a transaction the caller already holds — feature 079's door check-in creates the
+ * contact, links it and checks it in as one unit, so a refused check-in leaves no half-made contact behind.
+ * Every rule and the audit are the ones above; only the transaction boundary moves.
+ */
+export async function linkMessageRecipientIn(
+  tx: Tx,
+  contactId: string,
+  input: MessageRecipientInput,
+  actor: string | null,
+): Promise<void> {
+  const contact = await tx.query.contacts.findFirst({ where: eq(contacts.id, contactId) });
+  if (!contact) throw errors.contactNotFound();
+
+  const target = await tx.query.contactEmails.findFirst({
+    where: eq(contactEmails.id, input.emailId),
+  });
+  if (!target) throw errors.emailNotFound();
+  // A contact cannot ride its own address (FR-003).
+  if (target.contactId === contactId) throw errors.referenceSelf();
+  // A dead address is not worth pointing at (FR-014).
+  if (!REACHABLE.includes(target.status as (typeof REACHABLE)[number])) {
+    throw errors.referenceTargetNotActive();
+  }
+
+  // The address-edit path replaces this contact's own address with the household one: retire the row
+  // being edited BEFORE the ownership check, so the edit path links cleanly while a contact with an
+  // unrelated working address is still refused (FR-017).
+  if (input.retireEmailId) {
+    const own = await tx.query.contactEmails.findFirst({
+      where: eq(contactEmails.id, input.retireEmailId),
     });
-    if (!target) throw errors.emailNotFound();
-    // A contact cannot ride its own address (FR-003).
-    if (target.contactId === contactId) throw errors.referenceSelf();
-    // A dead address is not worth pointing at (FR-014).
-    if (!REACHABLE.includes(target.status as (typeof REACHABLE)[number])) {
-      throw errors.referenceTargetNotActive();
-    }
-
-    // The address-edit path replaces this contact's own address with the household one: retire the row
-    // being edited BEFORE the ownership check, so the edit path links cleanly while a contact with an
-    // unrelated working address is still refused (FR-017).
-    if (input.retireEmailId) {
-      const own = await tx.query.contactEmails.findFirst({
-        where: eq(contactEmails.id, input.retireEmailId),
-      });
-      if (!own || own.contactId !== contactId) throw errors.emailNotFound();
-      await tx
-        .update(contactEmails)
-        .set({ status: "inactive", updatedAt: new Date() })
-        .where(eq(contactEmails.id, input.retireEmailId));
-    }
-
-    // A contact with a working address of its own is not a referrer (FR-002/FR-017).
-    const ownActive = await tx
-      .select({ id: contactEmails.id })
-      .from(contactEmails)
-      .where(
-        and(eq(contactEmails.contactId, contactId), inArray(contactEmails.status, [...REACHABLE])),
-      )
-      .limit(1);
-    if (ownActive.length > 0) throw errors.referrerOwnsEmail();
-
-    if (contact.messageRecipientEmailId === input.emailId) return; // idempotent
-
+    if (!own || own.contactId !== contactId) throw errors.emailNotFound();
     await tx
-      .update(contacts)
-      .set({ messageRecipientEmailId: input.emailId, updatedAt: new Date() })
-      .where(eq(contacts.id, contactId));
+      .update(contactEmails)
+      .set({ status: "inactive", updatedAt: new Date() })
+      .where(eq(contactEmails.id, input.retireEmailId));
+  }
 
-    await recordAudit(tx, {
-      kind: "contact.reference.linked",
-      actorContactId: actor,
-      details: { contactId, emailId: input.emailId, ownerContactId: target.contactId },
-    });
+  // A contact with a working address of its own is not a referrer (FR-002/FR-017).
+  const ownActive = await tx
+    .select({ id: contactEmails.id })
+    .from(contactEmails)
+    .where(
+      and(eq(contactEmails.contactId, contactId), inArray(contactEmails.status, [...REACHABLE])),
+    )
+    .limit(1);
+  if (ownActive.length > 0) throw errors.referrerOwnsEmail();
+
+  if (contact.messageRecipientEmailId === input.emailId) return; // idempotent
+
+  await tx
+    .update(contacts)
+    .set({ messageRecipientEmailId: input.emailId, updatedAt: new Date() })
+    .where(eq(contacts.id, contactId));
+
+  await recordAudit(tx, {
+    kind: "contact.reference.linked",
+    actorContactId: actor,
+    details: { contactId, emailId: input.emailId, ownerContactId: target.contactId },
   });
 }
 

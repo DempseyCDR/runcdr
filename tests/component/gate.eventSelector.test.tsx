@@ -3,6 +3,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import GatePage from "@/app/(door)/gate/page";
+import { BREAKDOWN } from "./fixtures/attendanceBreakdown";
 
 // Feature 028 (P5-R1) US4: the gate uses the shared EventSelector; selecting an event runs the gate's own
 // side effect — opening/loading that event's door record. Two events (dates far past so "≤ today" is
@@ -27,6 +28,7 @@ function stub(calls: Call[]) {
       const u = String(url);
       calls.push({ url: u, method: init?.method ?? "GET" });
       const json = async () => {
+        if (u.includes("/attendance-breakdown")) return BREAKDOWN(); // feature 079
         if (u.includes("/door-record"))
           return {
             doorRecord: {

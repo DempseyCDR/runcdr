@@ -9,6 +9,7 @@ import { createContact } from "@/server/domain/contacts/contactService";
 import { recordAttendance } from "@/server/domain/attendance/attendanceService";
 import { purgeOldAttendance } from "@/server/domain/attendance/retentionService";
 import { assembleOrganizerReport } from "@/server/domain/organizer/reportService";
+import { getAttendanceBreakdown } from "@/server/domain/attendance/breakdownService";
 
 const year = 2026;
 
@@ -28,8 +29,9 @@ describe("organizer report", () => {
     // admission = 350 − 0 − 50(merch cash) = 300
     const caller = await makePerformer("Cal Caller");
     await createBooking(db, evt.id, { performerId: caller.id, performerType: "caller", pay: 150 });
-    // one attendee so dancers = 1 − 1 performer − 1 door = floored 0 → set more
-    for (let i = 0; i < 20; i++) await recordAttendance(db, evt.id, { unmatched: true });
+    // Feature 079: the caller counts as a performer only once checked in — they are one of the 20.
+    await recordAttendance(db, evt.id, { contactId: caller.contactId! });
+    for (let i = 1; i < 20; i++) await recordAttendance(db, evt.id, { unmatched: true });
 
     const report = await assembleOrganizerReport(db, "tnc", year);
     const row = report.perDanceRows[0] as Record<string, unknown>;
@@ -39,7 +41,7 @@ describe("organizer report", () => {
     expect(row.rent).toBe(80);
     expect(row.performerTotal).toBe(150);
     expect(row.danceNet).toBe(120);
-    // dancers = 20 attendance − 1 performer(caller) − 1 door = 18
+    // dancers = 20 attendance − 1 checked-in performer (caller) − 1 door = 18
     expect(row.dancers).toBe(18);
     expect(row.caller).toBe("Cal Caller");
     expect((row.performers as unknown[]).length).toBe(1);
@@ -70,7 +72,10 @@ describe("organizer report", () => {
     );
     const caller = await makePerformer("Cal Caller");
     await createBooking(db, evt.id, { performerId: caller.id, performerType: "caller", pay: 150 });
-    for (let i = 0; i < 20; i++) await recordAttendance(db, evt.id, { unmatched: true });
+    for (const p of [lead, musician, caller]) {
+      await recordAttendance(db, evt.id, { contactId: p.contactId! });
+    }
+    for (let i = 3; i < 20; i++) await recordAttendance(db, evt.id, { unmatched: true });
 
     const report = await assembleOrganizerReport(db, "tnc", year);
     const row = report.perDanceRows[0] as Record<string, unknown>;
@@ -78,7 +83,7 @@ describe("organizer report", () => {
     // FR-005 parity: the band-name change touches no computed figure.
     expect(row.grossGate).toBe(350);
     expect(row.performerTotal).toBe(350); // 100 + 100 + 150
-    expect(row.dancers).toBe(16); // 20 attendance − 3 performers − 1 door
+    expect(row.dancers).toBe(16); // 20 attendance − 3 checked-in performers − 1 door
     expect(row.danceNet).toBe(0); // 350 admission − 350 performers
     // the member roster is still available for the drill-in detail
     expect((row.performers as unknown[]).length).toBe(3);
@@ -238,5 +243,33 @@ describe("organizer report", () => {
     expect(report.perDanceRows.length).toBe(53);
     expect(report.trend).not.toBeNull();
     expect(elapsedMs).toBeLessThan(2000);
+  });
+
+  /**
+   * Feature 079 (FR-023, FR-028; research R3). A booked performer is subtracted from paying dancers only once
+   * checked in — someone who never came through the door was never counted in attendance, so subtracting
+   * them made paying one too low. And the report's paying figure is the attendance breakdown's.
+   */
+  it("subtracts only the booked performers who were checked in, matching the breakdown", async () => {
+    const evt = await makeEvent({ seriesKey: "tnc", eventDate: "2026-06-18" });
+    const drId = await makeDoorRecord(evt.id);
+    await updateDoorRecord(db, drId, { grossCash: 300, seedFloat: 0 });
+    const caller = await makePerformer("Cal Caller");
+    const sound = await makePerformer("Sam Sound");
+    await createBooking(db, evt.id, { performerId: caller.id, performerType: "caller", pay: 150 });
+    await createBooking(db, evt.id, {
+      performerId: sound.id,
+      performerType: "sound_tech",
+      pay: 50,
+    });
+    await recordAttendance(db, evt.id, { contactId: caller.contactId! });
+    for (let i = 0; i < 19; i++) await recordAttendance(db, evt.id, { unmatched: true });
+
+    const report = await assembleOrganizerReport(db, "tnc", year);
+    const row = report.perDanceRows[0] as { dancers: number; avgTicket: number };
+    // 20 through the door − the caller (checked in) − 1 door; the sound tech never checked in.
+    expect(row.dancers).toBe(18);
+    expect(row.dancers).toBe((await getAttendanceBreakdown(db, evt.id)).paying);
+    expect(row.avgTicket).toBeCloseTo(300 / 18, 2); // dollars
   });
 });

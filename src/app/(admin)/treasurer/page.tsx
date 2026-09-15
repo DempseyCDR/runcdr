@@ -1,6 +1,8 @@
 "use client";
 import { apiFetch } from "@/app/apiFetch";
 import { EventSelector } from "@/app/EventSelector";
+import AttendanceBreakdownView from "@/app/_components/AttendanceBreakdownView";
+import type { AttendanceBreakdown } from "@/server/domain/attendance/breakdownService";
 
 import { useCallback, useEffect, useState } from "react";
 
@@ -36,6 +38,7 @@ type Report = {
   fees: { doorFee: number; onlineFee: number; total: number };
   compCount: number;
   giftCardRedemptionCount: number;
+  attendance: AttendanceBreakdown;
 };
 
 const money = (n: number) => `$${n.toFixed(2)}`;
@@ -83,11 +86,9 @@ export default function TreasurerReportPage() {
             {report.event.date} ({report.event.seriesKey})
           </h2>
 
-          {/* Feature 040 (P6-R9): reconciliation counts (free admissions + gift cards redeemed). */}
-          <p>
-            Comp admissions: {report.compCount} · Gift-card redemptions:{" "}
-            {report.giftCardRedemptionCount}
-          </p>
+          {/* Feature 079 (FR-027): the evening's attendance breakdown — the same figures as the door and the
+              gate page. Its comps and gift cards are feature 040's reconciliation counts (P6-R9). */}
+          <AttendanceBreakdownView breakdown={report.attendance} />
 
           {/* Feature 040 (P6-R8): sections read in QBO data-entry order — Sales Receipts → Bills →
               Performer Payments → Deposit → Fees. */}

@@ -1,0 +1,32 @@
+/* Feature 079: the attendance breakdown — a compact, wrapping list that fits a phone and a desk alike. */
+.breakdown {
+  margin: 0 0 var(--space-3);
+}
+
+.counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.count {
+  white-space: nowrap;
+}
+
+.label {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+.warning {
+  color: #a15c00;
+  font-size: var(--fs-sm);
+  margin-top: var(--space-2);
+}
+
+.warning p {
+  margin: 0;
+}

@@ -8,7 +8,8 @@ import { getBookingsForEvent } from "@/server/domain/bookings/bookingService";
 import { settledCentsByBookingForEvent } from "@/server/domain/payments/performerPaymentService";
 import { resolveOngoingTotalCents } from "@/server/domain/parameters/seriesParameterService";
 import { resolveEventRentCents } from "@/server/domain/parameters/rentService";
-import { avgTicketCents, breakEvenDancers, danceNetCents, payingDancers } from "./danceResult";
+import { avgTicketCents, breakEvenDancers, danceNetCents } from "./danceResult";
+import { getAttendanceBreakdown } from "@/server/domain/attendance/breakdownService";
 import { quarterlySummary, type QuarterlyRow } from "./quarterly";
 import { buildTrend, type TrendPoint } from "./trend";
 
@@ -61,11 +62,9 @@ export async function assembleOrganizerReport(
     const settled = await settledCentsByBookingForEvent(db, ev.id);
     const costForBookingCents = (b: (typeof bookings)[number]) => settled.get(b.id) ?? b.payCents;
     const performerTotalCents = bookings.reduce((a, b) => a + costForBookingCents(b), 0);
-    const performerCount = new Set(bookings.map((b) => b.performerId)).size;
-    // B36: open-band musicians are comped too. Effective comps = manual comp count + open-band count
-    // (both persisted counters, so historical quarters stay correct after the 90-day attendance purge).
-    const effectiveComps = gate.compCount + gate.openBandCount;
-    const dancers = payingDancers(ev.attendanceCount, performerCount, effectiveComps);
+    // Feature 079 (FR-028): paying dancers are the attendance breakdown's — performers subtracted only when
+    // checked in, comps including open-band musicians — the same figure the door, gate and treasurer show.
+    const dancers = (await getAttendanceBreakdown(db, ev.id)).paying;
 
     const rentCents = await resolveEventRentCents(db, ev);
     const ongoingCents = await resolveOngoingTotalCents(db, ev.seriesId, ev.eventDate);

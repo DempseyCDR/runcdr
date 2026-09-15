@@ -439,6 +439,10 @@ A single scheduled dance.
 - **Indexes**: `events_series_date` `(series_id, event_date)`, `events_group` `(group_id)`.
 - **Domain rule**: `attendance_count` is the source for "paying dancers" in the organizer report after
   identifiable attendance rows are purged.
+- **Paying dancers** (feature 079) = `attendance_count` − booked performers **checked in** − 1 (door
+  attendant) − comps (`comp_count` + `open_band_count`), never below zero. A booked performer counts only
+  through a check-in of their contact, once per person. One computation, `getAttendanceBreakdown`, serves
+  the door's checked-in dialog, the gate page, the treasurer report and the organizer report.
 
 ---
 
@@ -533,6 +537,26 @@ Permanent aggregate that outlives the attendance purge.
 | attendee_count | integer NOT NULL default 0 | |
 
 - **Unique**: `(series_id, year, quarter)`.
+
+### `event_attendance_rollups` (feature 079)
+
+What an event's check-ins said, kept after the 90-day purge deletes them. One row per event, created the
+first time any of its check-ins are purged.
+
+| Column | Type | Notes |
+|---|---|---|
+| event_id | uuid PK → events(id) ON DELETE CASCADE | |
+| children_count | integer NOT NULL default 0 | CHECK ≥ 0 |
+| caller_count | integer NOT NULL default 0 | booked callers checked in; CHECK ≥ 0 |
+| band_count | integer NOT NULL default 0 | lead musicians, musicians, open-band leaders; CHECK ≥ 0 |
+| sound_tech_count | integer NOT NULL default 0 | CHECK ≥ 0 |
+| instructor_count | integer NOT NULL default 0 | CHECK ≥ 0 |
+| updated_at | timestamptz NOT NULL default `now()` | |
+
+- **Domain rule**: written only by the attendance purge, which **adds** the counts of the rows it is about
+  to delete, in the same transaction. An event's breakdown is this rollup plus what its remaining check-ins
+  say, so it never changes when check-ins are purged. After the purge the performer counts are frozen: a
+  later booking change no longer moves them.
 
 ---
 

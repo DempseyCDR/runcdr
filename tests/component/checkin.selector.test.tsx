@@ -41,7 +41,8 @@ describe("CheckinPage — event selector", () => {
     stub();
     render(<CheckinPage />);
 
-    const select = (await screen.findByLabelText(/event/i)) as HTMLSelectElement;
+    // Feature 079: the page now also has an "Event" region confirming the choice, so ask for the select itself.
+    const select = (await screen.findByRole("combobox", { name: "Event" })) as HTMLSelectElement;
     await waitFor(() => expect(select.value).toBe("recent")); // 2020-01-15, not the 2099 future event
 
     // The recent option shows date + HH:MM start time + label.

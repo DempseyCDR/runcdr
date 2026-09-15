@@ -3,6 +3,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import GatePage from "@/app/(door)/gate/page";
+import { BREAKDOWN } from "./fixtures/attendanceBreakdown";
 
 // Feature 043 (P6-R12): performer substitution moved off the gate page to /payments. The gate must no longer
 // render a "Substitute a performer" control.
@@ -15,6 +16,7 @@ function stub(calls: Call[]) {
       calls.push({ url: String(url), init });
       const u = String(url);
       const json = async () => {
+        if (u.includes("/attendance-breakdown")) return BREAKDOWN(); // feature 079
         if (u.endsWith("/door-record"))
           return {
             doorRecord: {

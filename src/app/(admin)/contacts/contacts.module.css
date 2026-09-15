@@ -418,13 +418,6 @@
   font-weight: 600;
 }
 
-/* Feature 076: first + last beneath a CUSTOM display name. Quieter than the header it qualifies, because it
-   answers "who is this really" rather than naming the row. */
-.dupStructuredName {
-  color: var(--text-muted);
-  font-size: var(--fs-sm);
-}
-
 .dupFacts {
   margin: var(--space-1) 0 0;
   font-size: var(--fs-sm);

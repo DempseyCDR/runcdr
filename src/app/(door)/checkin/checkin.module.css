@@ -1,0 +1,242 @@
+/* Feature 079 (research R12): the door check-in page, mobile-first. The top region — event, search, extras,
+   anonymous check-in, Add contact and Show checked in — must fit a medium phone (390 × 844) with the
+   browser's bars showing, so it stays compact; results scroll beneath it. */
+
+.page {
+  box-sizing: border-box;
+  margin: 0 auto;
+  max-width: 40rem;
+  padding: var(--space-2) var(--space-3) var(--space-5);
+}
+
+.top {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.event {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.eventLine {
+  align-items: baseline;
+  display: flex;
+  gap: var(--space-2);
+  justify-content: space-between;
+}
+
+.eventHeading {
+  font-size: 1.15rem;
+  line-height: 1.3;
+  margin: 0;
+}
+
+.warning {
+  color: #a15c00;
+  font-size: var(--fs-sm);
+  margin: 0;
+}
+
+.linkButton {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  padding: var(--space-1);
+  text-decoration: underline;
+  white-space: nowrap;
+}
+
+.search {
+  box-sizing: border-box;
+  font-size: 1rem; /* 16px or more stops iOS zooming into the field */
+  min-height: 2.75rem;
+  padding: var(--space-2);
+  width: 100%;
+}
+
+.extras {
+  align-items: center;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  margin: 0;
+  padding: var(--space-1) var(--space-2);
+}
+
+.extras label {
+  align-items: center;
+  display: inline-flex;
+  gap: var(--space-1);
+  min-height: 2.25rem;
+}
+
+.childrenInput {
+  font-size: 1rem;
+  width: 3.5rem;
+}
+
+.actions {
+  display: grid;
+  gap: var(--space-2);
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.button,
+.primaryButton {
+  font-size: 0.95rem;
+  min-height: 2.75rem;
+  padding: var(--space-1) var(--space-2);
+}
+
+.primaryButton {
+  font-weight: 600;
+}
+
+.status {
+  font-size: var(--fs-sm);
+  margin: 0;
+}
+
+.error {
+  color: #b00020;
+  font-size: var(--fs-sm);
+  margin: 0;
+}
+
+.results {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+}
+
+.result {
+  align-items: center;
+  border-bottom: 1px solid var(--hairline);
+  display: flex;
+  gap: var(--space-2);
+  justify-content: space-between;
+  padding: var(--space-2) 0;
+}
+
+/* FR-008: the name and its action stay on one line; the name shrinks, the button never wraps below it. */
+.resultName {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.resultMeta {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+
+.resultAction {
+  flex: 0 0 auto;
+}
+
+.checkmark {
+  display: inline-block;
+  font-size: 1.4rem;
+  min-width: 2.75rem;
+  text-align: center;
+}
+
+.hint {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+/* Dialogs (US2, US3): a backdrop and a panel that scrolls within the viewport. */
+.backdrop {
+  background: rgba(0, 0, 0, 0.45);
+  inset: 0;
+  overflow-y: auto;
+  padding: var(--space-2);
+  position: fixed;
+  z-index: 50;
+}
+
+.panel {
+  background: var(--surface, #fff);
+  border-radius: 8px;
+  box-sizing: border-box;
+  margin: 0 auto;
+  max-height: calc(100dvh - 2 * var(--space-2));
+  max-width: 40rem;
+  overflow-y: auto;
+  padding: var(--space-3);
+}
+
+.attendeeButton {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  min-height: 2.75rem;
+  padding: 0;
+  text-align: left;
+  width: 100%;
+}
+
+/* The sort currently in force (FR-018) — found in the browser check: all three looked alike. */
+.choices [aria-pressed="true"] {
+  border: 2px solid currentColor;
+  font-weight: 600;
+}
+
+.suggestHeading {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  margin: var(--space-3) 0 0;
+}
+
+.dialogHeading {
+  font-size: 1.15rem;
+  margin: 0 0 var(--space-2);
+}
+
+.form {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.form label {
+  display: grid;
+  font-size: var(--fs-sm);
+  gap: 2px;
+}
+
+.form input {
+  font-size: 1rem;
+  min-height: 2.5rem;
+  padding: var(--space-1) var(--space-2);
+}
+
+.question {
+  border-left: 3px solid #a15c00;
+  margin: var(--space-3) 0;
+  padding-left: var(--space-2);
+}
+
+.question p {
+  margin: 0 0 var(--space-2);
+}
+
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+@media (max-width: 22.5rem) {
+  .actions {
+    grid-template-columns: 1fr 1fr;
+  }
+}

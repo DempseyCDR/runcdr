@@ -6,7 +6,7 @@ import RecordView from "@/app/(admin)/_components/RecordView";
 import { formatPhone } from "@/server/domain/contacts/phone";
 import type { DupContact, DupPair, PairPermissions } from "./DuplicatePair";
 import styles from "../contacts.module.css";
-import PairContactName from "./PairContactName";
+import ContactName from "@/app/_components/ContactName";
 
 type EmailRow = { id: string; email: string; status: string };
 type FullRecord = { id: string; displayName: string; emails: EmailRow[] };
@@ -116,7 +116,7 @@ export default function MergeCompare({
     const rec = records[c.id];
     return (
       <div className={styles.dupSide}>
-        <PairContactName c={c}>{c.hasLogin ? " · signs in" : ""}</PairContactName>
+        <ContactName c={c}>{c.hasLogin ? " · signs in" : ""}</ContactName>
         <dl className={styles.dupFacts}>
           <div>
             <dt>Addresses</dt>

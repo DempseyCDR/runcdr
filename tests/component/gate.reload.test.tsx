@@ -3,6 +3,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import GatePage from "@/app/(door)/gate/page";
+import { BREAKDOWN } from "./fixtures/attendanceBreakdown";
 
 // D2 (gate data-loss fix): re-opening a door record must REPOPULATE the form from the persisted record —
 // money scalars + gate-sale lines — so a subsequent Save round-trips them instead of writing blanks (0 /
@@ -48,6 +49,7 @@ function stub(calls: Call[]) {
       const u = String(url);
       const json = async () => {
         if (u.endsWith("/door-record")) return SAVED; // POST open → full reload payload
+        if (u.includes("/attendance-breakdown")) return BREAKDOWN({ paying: 40 });
         if (u.includes("/gate-sales")) return { enrolled: [] };
         if (u.includes("/door-records/")) return { deposit: 0 }; // PATCH door record
         if (u.includes("/bookings")) return { bookings: [] }; // 025 substitute section
@@ -99,5 +101,27 @@ describe("GatePage — reload persisted state on open (D2)", () => {
     // And the money PATCH carries the reloaded gross cash, not 0.
     const patch = calls.find((c) => c.init?.method === "PATCH" && c.url.includes("/door-records/"));
     expect(JSON.parse(patch!.init!.body as string)).toMatchObject({ grossCash: 344, pcGross: 223 });
+  });
+
+  /** Feature 079 (FR-027, MEG-R10): the Financial Secretary sees the evening's attendance at the top. */
+  it("shows the attendance breakdown at the top, and fetches it again after a save", async () => {
+    const calls: Call[] = [];
+    stub(calls);
+    const user = userEvent.setup();
+    render(<GatePage />);
+    await user.selectOptions(await screen.findByRole("combobox", { name: /event/i }), "e1");
+
+    const breakdown = await screen.findByRole("region", { name: /attendance/i });
+    await waitFor(() => expect(breakdown).toHaveTextContent(/Paying 40/));
+    const heading = screen.getByRole("heading", { name: /anonymous gate sales/i });
+    expect(
+      breakdown.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    const fetches = () =>
+      calls.filter((c) => c.url.includes("/api/events/e1/attendance-breakdown")).length;
+    const before = fetches();
+    await user.click(screen.getByRole("button", { name: /^save$/i }));
+    await waitFor(() => expect(fetches()).toBeGreaterThan(before));
   });
 });

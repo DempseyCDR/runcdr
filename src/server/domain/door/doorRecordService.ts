@@ -20,7 +20,11 @@ export const CLUB_DEFAULT_SEED_FLOAT_CENTS = 1500;
  * effect on the event date, or the club default when unconfigured (FR-022/FR-024). A configured $0 is
  * honoured — `resolveParameterCentsOrNull` keeps it distinct from unconfigured (R4).
  */
-async function resolveSeedFloatCents(db: Db, seriesId: string, onDate: string): Promise<number> {
+async function resolveSeedFloatCents(
+  db: DbOrTx,
+  seriesId: string,
+  onDate: string,
+): Promise<number> {
   const configured = await resolveParameterCentsOrNull(db, {
     category: "door",
     kind: "seed_float",
@@ -99,7 +103,7 @@ export async function createDoorRecord(
 
 /** Get-or-create the door record for an event (used when money/donations appear). */
 export async function ensureDoorRecord(
-  db: Db,
+  db: DbOrTx,
   eventId: string,
   actor: string | null = null,
 ): Promise<DoorRecordRow> {

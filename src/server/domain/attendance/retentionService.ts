@@ -1,6 +1,12 @@
 import { sql } from "drizzle-orm";
 import type { Db } from "@/server/db/client";
-import { attendance, events, quarterlyAttendanceCounts } from "@/server/db/schema";
+import {
+  attendance,
+  eventAttendanceRollups,
+  events,
+  quarterlyAttendanceCounts,
+} from "@/server/db/schema";
+import { classifyCheckedInPerformers } from "./breakdownService";
 import { writeAudit } from "@/server/lib/audit";
 
 const RETENTION_DAYS = 90;
@@ -50,6 +56,50 @@ export async function purgeOldAttendance(db: Db): Promise<{ rolledUp: number; pu
           ],
           set: {
             attendeeCount: sql`${quarterlyAttendanceCounts.attendeeCount} + ${g.count}`,
+          },
+        });
+    }
+
+    // Feature 079 (research R2): the rows about to go are the only record of how many children came and which
+    // booked performers were checked in. Roll those up first, ADDING to what an earlier run kept — an
+    // evening's check-ins span hours, so one event's rows can straddle two runs. The breakdown classifies
+    // the rows still present the same way, through the same function.
+    const doomed = await tx
+      .select({
+        eventId: attendance.eventId,
+        contactId: attendance.contactId,
+        childrenCount: attendance.childrenCount,
+      })
+      .from(attendance)
+      .where(sql`${attendance.createdAt} < ${cutoff}`);
+    const byEvent = new Map<string, { children: number; contactIds: string[] }>();
+    for (const r of doomed) {
+      const e = byEvent.get(r.eventId) ?? { children: 0, contactIds: [] };
+      e.children += r.childrenCount;
+      if (r.contactId) e.contactIds.push(r.contactId);
+      byEvent.set(r.eventId, e);
+    }
+    for (const [eventId, { children, contactIds }] of byEvent) {
+      const { counts } = await classifyCheckedInPerformers(tx, eventId, contactIds);
+      const add = {
+        childrenCount: children,
+        callerCount: counts.caller,
+        bandCount: counts.band,
+        soundTechCount: counts.soundTech,
+        instructorCount: counts.instructor,
+      };
+      await tx
+        .insert(eventAttendanceRollups)
+        .values({ eventId, ...add })
+        .onConflictDoUpdate({
+          target: eventAttendanceRollups.eventId,
+          set: {
+            childrenCount: sql`${eventAttendanceRollups.childrenCount} + ${add.childrenCount}`,
+            callerCount: sql`${eventAttendanceRollups.callerCount} + ${add.callerCount}`,
+            bandCount: sql`${eventAttendanceRollups.bandCount} + ${add.bandCount}`,
+            soundTechCount: sql`${eventAttendanceRollups.soundTechCount} + ${add.soundTechCount}`,
+            instructorCount: sql`${eventAttendanceRollups.instructorCount} + ${add.instructorCount}`,
+            updatedAt: new Date(),
           },
         });
     }

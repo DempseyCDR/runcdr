@@ -33,5 +33,23 @@ export const quarterlyAttendanceCounts = pgTable(
   }),
 );
 
+/**
+ * Feature 079 (research R2): what an event's check-ins said, kept after the purge deletes them — children,
+ * and booked performers checked in by kind. Written ONLY by the purge, which adds what it is about to
+ * delete; the attendance breakdown is this plus what the check-ins still present say.
+ */
+export const eventAttendanceRollups = pgTable("event_attendance_rollups", {
+  eventId: uuid("event_id")
+    .primaryKey()
+    .references(() => events.id, { onDelete: "cascade" }),
+  childrenCount: integer("children_count").notNull().default(0),
+  callerCount: integer("caller_count").notNull().default(0),
+  bandCount: integer("band_count").notNull().default(0),
+  soundTechCount: integer("sound_tech_count").notNull().default(0),
+  instructorCount: integer("instructor_count").notNull().default(0),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export type AttendanceRow = typeof attendance.$inferSelect;
+export type EventAttendanceRollupRow = typeof eventAttendanceRollups.$inferSelect;
 export type QuarterlyAttendanceCountRow = typeof quarterlyAttendanceCounts.$inferSelect;
