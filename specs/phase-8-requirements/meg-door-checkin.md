@@ -153,6 +153,11 @@ is given. Cross-cutting search work lives as **X-R3** in [mel-contact-maintenanc
     with the booked performers, never as an open-band comp. Already enforced: a booked performer cannot be
     checked in as open band (feature 017, FR-022a).
 
+- **MEG-R11 — Record a named customer sale from the door.** _(Raised 2026-09-15, after 079.)_ A button on
+  `/checkin` opens the named-sale dialog shared with Mary's `/gate` — a membership, donation or future-event
+  payment tied to a contact. Specified with Mary's work: see **MARY-R8** in
+  [mary-fs-payments.md](mary-fs-payments.md), including Meg's authority (she does not hold `gate.write`).
+
 ## 3. Open considerations for Meg's check-in duties
 
 - **C1 — Door-created contacts → Mel.** Every door-created contact is flagged `needs_review` — **built**.

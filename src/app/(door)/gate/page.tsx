@@ -3,6 +3,8 @@ import { apiFetch } from "@/app/apiFetch";
 import { EventSelector } from "@/app/EventSelector";
 import AttendanceBreakdownView from "@/app/_components/AttendanceBreakdownView";
 import type { AttendanceBreakdown } from "@/server/domain/attendance/breakdownService";
+import type { MembershipLevel } from "@/server/db/schema/enums";
+import { MEMBERSHIP_LEVELS, MEMBERSHIP_LEVEL_LABELS } from "@/app/membershipLevels";
 
 import { useEffect, useState } from "react";
 
@@ -25,7 +27,32 @@ type NamedLine = {
   contactName: string;
   amount: string;
   paymentMethod: PaymentMethod;
+  // Feature 080 (MARY-R5): what a membership line bought — "" until chosen, and always "" on other lines.
+  membershipLevel: MembershipLevel | "";
+  // Set by a save refused for want of a level; kept on the line so removing another line cannot move it.
+  levelMissing: boolean;
 };
+
+type Enrollment = { displayName: string; expiryDate: string };
+const enrolledText = (enrolled: Enrollment[]) =>
+  enrolled.map((e) => `${e.displayName} (through ${e.expiryDate})`).join(", ");
+
+/** Feature 080 (FR-007): the server's own reason for a refusal, or its status when the body says nothing. */
+async function reasonOf(res: Response): Promise<string> {
+  const body = await res.json().catch(() => null);
+  return body?.error?.message ?? `the server refused it (${res.status})`;
+}
+
+const UNREACHABLE = "Could not reach the server";
+
+/** A request that never reached the server resolves to null, so the caller can say what was not saved. */
+async function send(url: string, init: RequestInit): Promise<Response | null> {
+  try {
+    return await apiFetch(url, init);
+  } catch {
+    return null;
+  }
+}
 
 export default function GatePage() {
   const [eventId, setEventId] = useState("");
@@ -119,6 +146,7 @@ export default function GatePage() {
       contactId: string | null;
       contactName: string | null;
       note: string | null;
+      membershipLevel: MembershipLevel | null;
     }[]) {
       const amount = String(s.amountCents / 100);
       if ((ANON_CATEGORIES as readonly string[]).includes(s.category)) {
@@ -132,6 +160,9 @@ export default function GatePage() {
           contactName: s.contactName ?? "(unknown)",
           amount,
           paymentMethod: s.paymentMethod,
+          // Feature 080 (FR-005): the save is replace-all, so the stored level must ride along again.
+          membershipLevel: s.category === "membership" ? (s.membershipLevel ?? "") : "",
+          levelMissing: false,
         });
       }
     }
@@ -153,6 +184,8 @@ export default function GatePage() {
         contactName: c.displayName,
         amount: "",
         paymentMethod: "card",
+        membershipLevel: "",
+        levelMissing: false,
       },
     ]);
     setSearch("");
@@ -165,6 +198,20 @@ export default function GatePage() {
 
   async function save() {
     setMessage(null);
+    // Feature 080 (FR-006): a membership line the save would send must say what was bought — check before
+    // anything is sent, so a refusal can never leave half the evening saved.
+    const unlevelled = named.filter(
+      (l) => l.category === "membership" && Number(l.amount) > 0 && !l.membershipLevel,
+    );
+    if (unlevelled.length > 0) {
+      setNamed((lines) => lines.map((l) => ({ ...l, levelMissing: unlevelled.includes(l) })));
+      const names = unlevelled.map((l) => l.contactName);
+      return setMessage(
+        names.length === 1
+          ? `Choose a level for ${names[0]}'s membership. Nothing was saved.`
+          : `Choose a level for each membership: ${names.join(", ")}. Nothing was saved.`,
+      );
+    }
     const note = anonNote.trim();
     const sales = [
       ...ANON_CATEGORIES.flatMap((c) =>
@@ -185,12 +232,15 @@ export default function GatePage() {
                 paymentMethod: l.paymentMethod,
                 amount: v,
                 contactId: l.contactId,
+                ...(l.category === "membership" && l.membershipLevel
+                  ? { membershipLevel: l.membershipLevel }
+                  : {}),
               },
             ]
           : [];
       }),
     ];
-    const gsRes = await apiFetch(`/api/door-records/${doorRecordId}/gate-sales`, {
+    const gsRes = await send(`/api/door-records/${doorRecordId}/gate-sales`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sales }),
@@ -198,15 +248,22 @@ export default function GatePage() {
     // Gate money is the Financial Secretary's to write (FR-020). A Door Attendant reaches this page and
     // reads it — money is not secret — but a save is refused server-side. Surface that plainly rather
     // than as a generic failure. (Proactively disabling the control belongs with US5's role-aware UI.)
+    // Feature 080 (FR-007, FR-008): the sales are one transaction, so a refusal here saved nothing at all.
+    if (!gsRes) return setMessage(`Nothing was saved: ${UNREACHABLE}`);
     if (gsRes.status === 403) {
       return setMessage("Only the Financial Secretary may record gate money for this event.");
     }
-    if (!gsRes.ok) return setMessage("Gate sales failed");
+    if (!gsRes.ok) return setMessage(`Nothing was saved: ${await reasonOf(gsRes)}`);
     // Feature 019 (B31): show which named contacts got a membership created/renewed by this save.
     const gsBody = await gsRes.json().catch(() => null);
-    const enrolled: { displayName: string; expiryDate: string }[] = gsBody?.enrolled ?? [];
+    const enrolled: Enrollment[] = gsBody?.enrolled ?? [];
+    const moneyRefused = (reason: string) =>
+      setMessage(
+        `Sales saved, but the money figures were not: ${reason}` +
+          (enrolled.length > 0 ? `. Membership recorded: ${enrolledText(enrolled)}` : ""),
+      );
 
-    const res = await apiFetch(`/api/door-records/${doorRecordId}`, {
+    const res = await send(`/api/door-records/${doorRecordId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -220,19 +277,16 @@ export default function GatePage() {
         ...(cashPaidOutReason ? { cashPaidOutReason } : {}),
       }),
     });
+    if (!res) return moneyRefused(UNREACHABLE);
     if (res.status === 403) {
       return setMessage("Only the Financial Secretary may record gate money for this event.");
     }
-    if (!res.ok) {
-      const b = await res.json().catch(() => null);
-      return setMessage(b?.error?.message ?? "Update failed");
-    }
+    if (!res.ok) return moneyRefused(await reasonOf(res));
     const body = await res.json();
     setDeposit(body.deposit); // fee intentionally not returned
     void loadBreakdown(eventId); // comps and gift cards may have just changed
     if (enrolled.length > 0) {
-      const who = enrolled.map((e) => `${e.displayName} (through ${e.expiryDate})`).join(", ");
-      setMessage(`Saved. Membership recorded: ${who}`);
+      setMessage(`Saved. Membership recorded: ${enrolledText(enrolled)}`);
     } else {
       setMessage("Saved");
     }
@@ -331,6 +385,29 @@ export default function GatePage() {
               onChange={(e) => setNamedField(i, { amount: e.target.value })}
               style={{ width: 80 }}
             />{" "}
+            {l.category === "membership" && (
+              <>
+                <select
+                  aria-label={`Level for ${l.contactName}`}
+                  aria-invalid={l.levelMissing || undefined}
+                  value={l.membershipLevel}
+                  onChange={(e) =>
+                    setNamedField(i, {
+                      membershipLevel: e.target.value as MembershipLevel | "",
+                      levelMissing: false,
+                    })
+                  }
+                  style={l.levelMissing ? { outline: "2px solid #b00020" } : undefined}
+                >
+                  <option value="">Level…</option>
+                  {MEMBERSHIP_LEVELS.map((level) => (
+                    <option key={level} value={level}>
+                      {MEMBERSHIP_LEVEL_LABELS[level]}
+                    </option>
+                  ))}
+                </select>{" "}
+              </>
+            )}
             <select
               value={l.paymentMethod}
               onChange={(e) => setNamedField(i, { paymentMethod: e.target.value as PaymentMethod })}

@@ -30,6 +30,7 @@ const SAVED = {
       amountCents: 4000,
       contactId: "c1",
       contactName: "Jane Doe",
+      membershipLevel: "family",
     },
     {
       category: "merchandise",
@@ -80,6 +81,10 @@ describe("GatePage — reload persisted state on open (D2)", () => {
     expect((screen.getByLabelText(/card transactions/i) as HTMLInputElement).value).toBe("16");
     // The named membership line reloads with its payer's name.
     expect(screen.getByText(/membership — Jane Doe/)).toBeInTheDocument();
+    // Feature 080 (FR-005): …and with the level it was bought at.
+    expect(
+      (screen.getByRole("combobox", { name: "Level for Jane Doe" }) as HTMLSelectElement).value,
+    ).toBe("family");
 
     // Saving now round-trips the reloaded lines instead of wiping them.
     await user.click(screen.getByRole("button", { name: /^save$/i }));
@@ -92,7 +97,12 @@ describe("GatePage — reload persisted state on open (D2)", () => {
         contactId?: string;
       }[];
       expect(sales).toContainEqual(
-        expect.objectContaining({ category: "membership", amount: 40, contactId: "c1" }),
+        expect.objectContaining({
+          category: "membership",
+          amount: 40,
+          contactId: "c1",
+          membershipLevel: "family",
+        }),
       );
       expect(sales).toContainEqual(
         expect.objectContaining({ category: "merchandise", amount: 12 }),
@@ -101,6 +111,33 @@ describe("GatePage — reload persisted state on open (D2)", () => {
     // And the money PATCH carries the reloaded gross cash, not 0.
     const patch = calls.find((c) => c.init?.method === "PATCH" && c.url.includes("/door-records/"));
     expect(JSON.parse(patch!.init!.body as string)).toMatchObject({ grossCash: 344, pcGross: 223 });
+  });
+
+  /** Feature 080 (FR-005, SC-003): correcting another figure on a saved evening keeps the level. */
+  it("keeps a membership line's level through a second save", async () => {
+    const calls: Call[] = [];
+    stub(calls);
+    const user = userEvent.setup();
+    render(<GatePage />);
+    await user.selectOptions(await screen.findByRole("combobox", { name: /event/i }), "e1");
+    await waitFor(() =>
+      expect((screen.getByLabelText(/gross cash/i) as HTMLInputElement).value).toBe("344"),
+    );
+
+    const puts = () =>
+      calls.filter((c) => c.init?.method === "PUT" && c.url.includes("/gate-sales"));
+    await user.click(screen.getByRole("button", { name: /^save$/i }));
+    await waitFor(() => expect(puts()).toHaveLength(1));
+
+    await user.clear(screen.getByLabelText(/gross cash/i));
+    await user.type(screen.getByLabelText(/gross cash/i), "350");
+    await user.click(screen.getByRole("button", { name: /^save$/i }));
+    await waitFor(() => expect(puts()).toHaveLength(2));
+
+    const second = JSON.parse(puts()[1]!.init!.body as string).sales as Record<string, unknown>[];
+    expect(second.find((s) => s.category === "membership")).toMatchObject({
+      membershipLevel: "family",
+    });
   });
 
   /** Feature 079 (FR-027, MEG-R10): the Financial Secretary sees the evening's attendance at the top. */

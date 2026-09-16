@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { apiFetch } from "@/app/apiFetch";
+import { MEMBERSHIP_LEVELS } from "@/app/membershipLevels";
 import styles from "../contacts.module.css";
 
 // Feature 068 (FR-018/FR-019): the MEMBERSHIP household on a contact record — who paid, and who the
@@ -17,8 +18,6 @@ export type MembershipBlock = {
   /** Present when someone else's account covers this contact. */
   asMember: { payerContactId: string; payerDisplayName: string } | null;
 };
-
-const LEVELS = ["individual", "family", "supporter", "student"] as const;
 
 const STATUS_LABEL: Record<MembershipBlock["status"], string> = {
   never: "not a member",
@@ -142,7 +141,7 @@ export default function MembershipAccount({
                   value={level}
                   onChange={(e) => setLevelEdit(e.target.value)}
                 >
-                  {LEVELS.map((l) => (
+                  {MEMBERSHIP_LEVELS.map((l) => (
                     <option key={l} value={l}>
                       {l}
                     </option>
