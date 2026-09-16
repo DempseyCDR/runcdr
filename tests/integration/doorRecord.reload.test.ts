@@ -28,7 +28,13 @@ describe("getDoorRecord — full reload payload", () => {
     await putGateSales(db, dr.id, {
       sales: [
         { category: "merchandise", paymentMethod: "cash", amount: 12 },
-        { category: "membership", paymentMethod: "card", amount: 40, contactId },
+        {
+          category: "membership",
+          paymentMethod: "card",
+          amount: 40,
+          contactId,
+          membershipLevel: "family",
+        },
       ],
     });
     await updateDoorRecord(db, dr.id, { grossCash: 344, pcGross: 223, posTransactionCount: 16 });
@@ -45,6 +51,8 @@ describe("getDoorRecord — full reload payload", () => {
     const membership = view.gateSales.find((s) => s.category === "membership")!;
     expect(membership.contactId).toBe(contactId);
     expect(membership.contactName).toBe("Jane Doe");
+    // Feature 080 (FR-005): the level bought comes back, so the gate page can show it and re-send it.
+    expect(membership.membershipLevel).toBe("family");
     const merch = view.gateSales.find((s) => s.category === "merchandise")!;
     expect(merch.contactName).toBeNull(); // anon line, no contact
   });
