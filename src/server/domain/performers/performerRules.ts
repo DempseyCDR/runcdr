@@ -25,14 +25,15 @@ export const PERFORMER_RULES: Record<PerformerType, PerformerRule> = {
     rateKind: "musician",
   },
   musician: { paid: true, requiresCheck: true, publicDisplay: "full_bio", rateKind: "musician" },
+  // Feature 081 (FR-009): free unless given an amount — then payable (requiresCheck follows pay > 0).
   open_band_musician: {
     paid: false,
-    requiresCheck: false,
+    requiresCheck: true,
     publicDisplay: "open_band_label",
     rateKind: null,
   },
   sound_tech: { paid: true, requiresCheck: true, publicDisplay: "hidden", rateKind: "sound_tech" },
-  instructor: { paid: false, requiresCheck: false, publicDisplay: "name_note", rateKind: null },
+  instructor: { paid: false, requiresCheck: true, publicDisplay: "name_note", rateKind: null },
 };
 
 /** A booking requires a check only when its type's rule says so AND it is actually paid. */

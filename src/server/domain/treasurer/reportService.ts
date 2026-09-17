@@ -1,4 +1,4 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 import type { Db } from "@/server/db/client";
 import { settledCentsByBookingForEvent } from "@/server/domain/payments/performerPaymentService";
 import {
@@ -21,6 +21,7 @@ import { writeAudit } from "@/server/lib/audit";
 import { centsToDollars } from "@/server/lib/money";
 import { computeEventGate } from "@/server/domain/gate/eventMoney";
 import { reconcilePayments } from "@/server/domain/payments/reconcile";
+import { compareCheckNumbers } from "@/server/domain/payments/order";
 import { resolveEventRentCents } from "@/server/domain/parameters/rentService";
 import {
   getAttendanceBreakdown,
@@ -74,6 +75,24 @@ export type TreasurerReport = {
     checkNumber: string | null;
     voidReason: string | null;
   }[];
+  /**
+   * Feature 081 (FR-027, FR-028): every check recorded at the event — live and voided — in check-number order,
+   * with its void reason, the number that replaced it, Mary's note, and each line's booked and paid amounts
+   * (`eventDate` only when the booking was at another event).
+   */
+  checks: (PaymentReportLine & {
+    checkNumber: string;
+    class: string;
+    voided: boolean;
+    voidReason: string | null;
+    replacedBy: string | null;
+  })[];
+  /** Feature 081 (FR-038): live cash paid to performers from this evening's takings. */
+  cashPayments: PaymentReportLine[];
+  /** Feature 081 (FR-033): the gate's other cash payouts. */
+  otherCashPaidOut: { amount: number; reason: string | null };
+  /** Feature 081 (FR-038): this event's bookings paid by a payment recorded at another event. */
+  paidElsewhere: { performer: string; amount: number; eventDate: string }[];
   // Feature 019 US2 (FR-008) / 023 (M1): expected (sum of booked obligations) vs. actual (LIVE per-line
   // amounts settling the event's bookings). A non-zero delta surfaces a gap — booked but not yet paid.
   performerReconciliation: { expected: number; actual: number; delta: number };
@@ -85,6 +104,14 @@ export type TreasurerReport = {
   giftCardRedemptionCount: number;
   /** Feature 079 (FR-027): the evening's attendance breakdown, identical to the door's and the gate page's. */
   attendance: AttendanceBreakdown;
+};
+
+/** Feature 081: one payment as the treasurer report lists it. */
+export type PaymentReportLine = {
+  payee: string;
+  amount: number;
+  note: string | null;
+  lines: { performer: string; booked: number; paid: number; eventDate: string | null }[];
 };
 
 export async function assembleTreasurerReport(
@@ -201,6 +228,8 @@ export async function assembleTreasurerReport(
       checkNumber: performerPayments.checkNumber,
       voidedAt: performerPayments.voidedAt,
       voidReason: performerPayments.voidReason,
+      method: performerPayments.method,
+      note: performerPayments.overrideReason,
     })
     .from(performerPayments)
     .innerJoin(performers, eq(performers.id, performerPayments.payeePerformerId))
@@ -216,10 +245,14 @@ export async function assembleTreasurerReport(
           bookingId: paymentBookings.bookingId,
           amountCents: paymentBookings.amountCents,
           performer: performers.displayName,
+          bookedCents: bookings.payCents,
+          bookingEventId: bookings.eventId,
+          bookingEventDate: events.eventDate,
         })
         .from(paymentBookings)
         .innerJoin(bookings, eq(bookings.id, paymentBookings.bookingId))
         .innerJoin(performers, eq(performers.id, bookings.performerId))
+        .innerJoin(events, eq(events.id, bookings.eventId))
         .where(inArray(paymentBookings.paymentId, paymentIds))
     : [];
   const linesByPayment = new Map<string, typeof lineRows>();
@@ -253,6 +286,67 @@ export async function assembleTreasurerReport(
       checkNumber: p.checkNumber,
       voidReason: p.voidReason,
     }));
+
+  // Feature 081 (R15): the checks in number order, the cash apart, and what replaced each voided check.
+  const replacements = paymentIds.length
+    ? await db
+        .select({
+          replaces: performerPayments.replacesPaymentId,
+          checkNumber: performerPayments.checkNumber,
+        })
+        .from(performerPayments)
+        .where(inArray(performerPayments.replacesPaymentId, paymentIds))
+    : [];
+  const replacedBy = new Map(replacements.map((r) => [r.replaces, r.checkNumber]));
+  const asReport = (p: (typeof paymentRows)[number]): PaymentReportLine => ({
+    payee: p.payee,
+    amount: centsToDollars(p.amountCents),
+    note: p.note,
+    lines: (linesByPayment.get(p.id) ?? []).map((l) => ({
+      performer: l.performer,
+      booked: centsToDollars(l.bookedCents),
+      paid: centsToDollars(l.amountCents),
+      eventDate: l.bookingEventId === eventId ? null : l.bookingEventDate,
+    })),
+  });
+  const checks = paymentRows
+    .filter((p) => p.method === "check" && p.checkNumber !== null)
+    .sort((x, y) => compareCheckNumbers(x.checkNumber!, y.checkNumber!))
+    .map((p) => ({
+      ...asReport(p),
+      checkNumber: p.checkNumber!,
+      class: qboClass,
+      voided: p.voidedAt !== null,
+      voidReason: p.voidReason,
+      replacedBy: replacedBy.get(p.id) ?? null,
+    }));
+  const cashPayments = paymentRows
+    .filter((p) => p.method === "cash" && p.voidedAt === null)
+    .map(asReport);
+  const paidElsewhere = (
+    await db
+      .select({
+        performer: performers.displayName,
+        amountCents: paymentBookings.amountCents,
+        eventDate: events.eventDate,
+      })
+      .from(paymentBookings)
+      .innerJoin(bookings, eq(bookings.id, paymentBookings.bookingId))
+      .innerJoin(performers, eq(performers.id, bookings.performerId))
+      .innerJoin(performerPayments, eq(performerPayments.id, paymentBookings.paymentId))
+      .innerJoin(events, eq(events.id, performerPayments.eventId))
+      .where(
+        and(
+          eq(bookings.eventId, eventId),
+          eq(paymentBookings.live, true),
+          ne(performerPayments.eventId, eventId),
+        ),
+      )
+  ).map((r) => ({
+    performer: r.performer,
+    amount: centsToDollars(r.amountCents),
+    eventDate: r.eventDate,
+  }));
 
   // Reconciliation (M1): expected = the event's bookings' pay; actual = the LIVE per-line amounts settling
   // those bookings (regardless of which check paid them, excluding voided).
@@ -302,6 +396,13 @@ export async function assembleTreasurerReport(
     bills,
     performerPayments: performerPaymentLines,
     voidedPerformerPayments,
+    checks,
+    cashPayments,
+    otherCashPaidOut: {
+      amount: centsToDollars(door.cashPaidOutCents),
+      reason: door.cashPaidOutReason,
+    },
+    paidElsewhere,
     performerReconciliation,
     deposit: { amount: centsToDollars(door.depositCents) },
     fees: {

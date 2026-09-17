@@ -2,19 +2,22 @@
 import { useState } from "react";
 import { EventSelector, type EventRow } from "@/app/EventSelector";
 import { localToday } from "@/app/localToday";
-import styles from "./checkin.module.css";
+import styles from "./EventConfirm.module.css";
 
 type SeriesRow = { id: string; key: string; name: string };
 
-/** The DB `time` column round-trips as HH:MM:SS; show HH:MM (feature 020 normalization). */
-function toHHMM(t: string | null): string {
+/** The DB `time` column round-trips as HH:MM:SS; feature 081 shows it on a 12-hour clock ("7:30 PM"). */
+function to12Hour(t: string | null): string {
   if (!t) return "";
   const m = /^(\d{2}):(\d{2})/.exec(t);
-  return m ? `${m[1]}:${m[2]}` : t;
+  if (!m) return t;
+  const hours = Number(m[1]);
+  return `${hours % 12 || 12}:${m[2]} ${hours < 12 ? "AM" : "PM"}`;
 }
 
 /**
  * Feature 079 (FR-003, research R9): the event Meg is checking dancers into, confirmed before she starts.
+ * Feature 081 (FR-002): shared with the performer payments page, where Mary confirms the evening she pays.
  *
  * Shown large, with a warning when it is not today's — on the device's own date, since the door phone is at
  * the venue. The shared selector stays mounted (it picks the default event) but is shown only on **Change**,
@@ -38,7 +41,8 @@ export default function EventConfirm({
       <div className={styles.eventLine}>
         <h1 className={styles.eventHeading}>
           {event
-            ? [event.eventDate, seriesName, toHHMM(event.startTime), event.label]
+            ? // Feature 081: the series first, then the label, the date and the time.
+              [seriesName, event.label, event.eventDate, to12Hour(event.startTime)]
                 .filter(Boolean)
                 .join(" · ")
             : "No event selected"}

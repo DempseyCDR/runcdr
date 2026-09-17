@@ -15,7 +15,8 @@ is given. Earlier thinking on the payment model lives in `runcdr_Phase4_FS_Payme
 
 1. **MARY-R5 first, as a small fix** — the gate cannot save a membership sale. **Delivered by feature 080**
    (`specs/080-fix-gate-membership-level/`).
-2. **`/payments`** — MARY-R3, R4, R6, R7, R9, R11–R14, R17 and X-P1.
+2. **`/payments`** — MARY-R3, R4, R6, R7, R9, R11–R14, R17–R19 and X-P1. **Delivered by feature 081**
+   (`specs/081-payments-page-update/`), with R1 and R2 for `/payments` and R14 on both pages.
 3. **`/gate` and named sales** — MARY-R8, R15, R16 (and MEG-R11 at the door).
 
 Features 2 and 3 share MARY-R1 (mobile-first), R2 (the event confirmation) and R14 (the summary line).
@@ -162,6 +163,9 @@ Features 2 and 3 share MARY-R1 (mobile-first), R2 (the event confirmation) and R
     #1500"** (the check then settles both, its amount growing to match) or **"Change the number"**. Never a
     second check with the same number. The server refuses a duplicate either way.
   - Existing duplicates in the data are corrected with MARY-R12's delete once it exists.
+  - **Form** _(resolved 2026-09-16, feature 081)_. A check number is digits with an optional letter, for a
+    duplicate check book (1500, 1500A), stored in capitals. The phone's number keypad has no letters; entering
+    one on a phone is YAGNI.
 
 - **MARY-R14 — What is left to pay, at a glance.** _(Resolved 2026-09-15.)_ The top of `/payments` — and of
   `/gate`, where Mary works the same evening — carries a compact summary in the style of the door's
@@ -184,6 +188,8 @@ Features 2 and 3 share MARY-R1 (mobile-first), R2 (the event confirmation) and R
     **Cash** (gross cash with a **Count** button, seed float, cash paid out), **Card** (card gross, card
     transactions), **Other sales** (merchandise, gift cards and misc, each with cash and card, and the
     comment), **Named sales** (the list and its dialog, MARY-R8).
+  - **The deposit above the fold** _(raised 2026-09-17, in feature 081's manual pass)_. The deposit line
+    moves up, near the summary of performer payments, so Mary sees it without scrolling.
   - **Q10 — See the result while typing** _(resolved 2026-09-16)_. Admission (cash and card), the card fee and
     the deposit update as Mary types, before she saves.
   - **Q11 — Catch the likely mistakes** _(resolved 2026-09-16)_. Warn when admission comes out negative (more
@@ -218,6 +224,18 @@ Features 2 and 3 share MARY-R1 (mobile-first), R2 (the event confirmation) and R
 - **MARY-R17 — The order of performers on `/payments`.** _(Resolved 2026-09-16.)_ The list runs **caller,
   lead musician, musician, sound tech, then everyone else** (instructor, open-band musician), and by name within
   each role. Today there is no order at all — the list comes back however the database returns it.
+
+- **MARY-R18 — Paying a performer in cash.** _(Resolved 2026-09-16.)_ Paying a performer in lieu
+  of a check is the most common reason for cash paid out at the gate. **Cash** is an option for
+  settling a **single** booking, in place of a check number, and is **not** offered in the
+  several-performers dialog. Cash paid to performers counts in the event's cash paid out on `/gate` —
+  shown as its own line and taken off the deposit — so it is entered once. Today it is entered twice:
+  as a payment with no check number and a note, and again as gate cash paid out.
+
+- **MARY-R19 — Paying a booking from an earlier event.** _(Raised 2026-09-16.)_ A performer not paid
+  at the event may be paid at a later one. From the later event's page, Mary pays the earlier booking;
+  the payment belongs to the evening the money comes from, and the earlier event shows the booking
+  "Paid at {date}". Today the server allows it but no screen does.
 
 ## 3. Open considerations
 

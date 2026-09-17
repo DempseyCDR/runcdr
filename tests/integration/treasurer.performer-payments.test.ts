@@ -24,6 +24,7 @@ describe("performer payments with check numbers", () => {
     });
 
     await createPerformerPayment(db, {
+      method: "check",
       eventId: evt.id,
       payeePerformerId: p.id,
       checkNumber: "1042",

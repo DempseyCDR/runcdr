@@ -55,6 +55,8 @@ describe("event delete guardrail (feature 019)", () => {
       pay: 125,
     });
     await createPerformerPayment(db, {
+      method: "check",
+      checkNumber: "1001",
       eventId: evt.id,
       payeePerformerId: p.id,
       lines: [{ bookingId: b.id, amount: 125 }],

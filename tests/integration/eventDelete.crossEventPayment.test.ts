@@ -28,6 +28,8 @@ describe("event delete guardrail — cross-event payment (023, H1)", () => {
     );
     // A delayed check recorded at B that settles A's booking.
     await createPerformerPayment(db, {
+      method: "check",
+      checkNumber: "1001",
       eventId: eventB.id,
       payeePerformerId: p.id,
       lines: [{ bookingId: bA.id, amount: 100 }],
@@ -47,6 +49,8 @@ describe("event delete guardrail — cross-event payment (023, H1)", () => {
       "t",
     );
     const pay = await createPerformerPayment(db, {
+      method: "check",
+      checkNumber: "1002",
       eventId: eventB.id,
       payeePerformerId: p.id,
       lines: [{ bookingId: bA.id, amount: 100 }],

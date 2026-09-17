@@ -2,12 +2,18 @@ import { beforeAll, beforeEach, afterAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { ensureSchema, resetDb, closeDb, db } from "./helpers/db";
 import { jsonReqAs, ctx } from "./helpers/http";
-import { makeActor, makeEvent, makePerformer } from "./helpers/factories";
+import { makeActor, makeDoorRecord, makeEvent, makePerformer } from "./helpers/factories";
 import { createBooking } from "@/server/domain/bookings/bookingService";
 import { bookings, series } from "@/server/db/schema";
 import { POST as CREATE } from "@/app/api/performer-payments/route";
 import { PATCH, DELETE } from "@/app/api/performer-payments/[id]/route";
 import { GET as LIST } from "@/app/api/events/[id]/performer-payments/route";
+import {
+  createPerformerPayment,
+  listPerformerPayments,
+  voidPerformerPayment,
+} from "@/server/domain/payments/performerPaymentService";
+import { assembleTreasurerReport } from "@/server/domain/treasurer/reportService";
 
 async function seriesId(key: string): Promise<string> {
   const s = await db.query.series.findFirst({ where: eq(series.key, key) });
@@ -17,10 +23,11 @@ async function seriesId(key: string): Promise<string> {
 
 // Feature 019 US2 + 023: actual disbursements, separate from bookings. Substitute payee, one check across
 // bookings (per-line amounts), cross-event settlement (023); booked pay_cents never altered; reconciliation.
+afterAll(closeDb);
+
 describe("performer payments", () => {
   beforeAll(ensureSchema);
   beforeEach(resetDb);
-  afterAll(closeDb);
 
   async function fsToken() {
     const { token } = await makeActor({
@@ -43,6 +50,7 @@ describe("performer payments", () => {
 
     const res = await CREATE(
       jsonReqAs(token, "POST", "/api/performer-payments", {
+        method: "check",
         eventId: event.id,
         payeePerformerId: sub.id,
         checkNumber: "1001",
@@ -72,6 +80,7 @@ describe("performer payments", () => {
 
     const res = await CREATE(
       jsonReqAs(token, "POST", "/api/performer-payments", {
+        method: "check",
         eventId: event.id,
         payeePerformerId: p1.id, // one check to the lead
         checkNumber: "1002",
@@ -97,6 +106,7 @@ describe("performer payments", () => {
 
     const res = await CREATE(
       jsonReqAs(token, "POST", "/api/performer-payments", {
+        method: "cash",
         eventId: event.id,
         payeePerformerId: p.id,
         lines: [{ bookingId: bOther.id, amount: 100 }],
@@ -107,6 +117,22 @@ describe("performer payments", () => {
     const body = await res.json();
     expect(body.eventId).toBe(event.id); // recorded-at = the writing event
     expect(body.lines[0].bookingId).toBe(bOther.id); // line settles the past booking
+    // Feature 081 (T010): the view says how it was paid and what each line settles, where and for what.
+    expect(body).toMatchObject({
+      method: "cash",
+      checkNumber: null,
+      voidedAt: null,
+      replacedByCheckNumber: null,
+    });
+    expect(body.lines[0]).toEqual({
+      bookingId: bOther.id,
+      amount: 100,
+      booked: 100,
+      eventId: other.id,
+      eventDate: "2026-06-25",
+      performer: "P",
+      performerType: "musician",
+    });
   });
 
   it("GET lists payments with a reconciliation delta", async () => {
@@ -116,6 +142,7 @@ describe("performer payments", () => {
     const b = await book(event.id, p.id, 125); // expected 12500
     await CREATE(
       jsonReqAs(token, "POST", "/api/performer-payments", {
+        method: "cash",
         eventId: event.id,
         payeePerformerId: p.id,
         lines: [{ bookingId: b.id, amount: 100 }], // actual under expected → delta -25
@@ -142,6 +169,7 @@ describe("performer payments", () => {
     const created = await (
       await CREATE(
         jsonReqAs(token, "POST", "/api/performer-payments", {
+          method: "cash",
           eventId: event.id,
           payeePerformerId: p1.id,
           lines: [{ bookingId: b1.id, amount: 125 }],
@@ -170,6 +198,7 @@ describe("performer payments", () => {
     const created = await (
       await CREATE(
         jsonReqAs(token, "POST", "/api/performer-payments", {
+          method: "cash",
           eventId: event.id,
           payeePerformerId: p.id,
           lines: [{ bookingId: b.id, amount: 125 }],
@@ -194,6 +223,7 @@ describe("performer payments", () => {
     const b = await book(event.id, p.id, 125);
     const res = await CREATE(
       jsonReqAs(token, "POST", "/api/performer-payments", {
+        method: "cash",
         eventId: event.id,
         payeePerformerId: p.id,
         lines: [{ bookingId: b.id, amount: 125 }],
@@ -201,5 +231,53 @@ describe("performer payments", () => {
       ctx(),
     );
     expect(res.status).toBe(403);
+  });
+});
+
+/**
+ * Feature 081 (FR-017, FR-021, research R17): the list shows voided checks under the bookings they settled,
+ * wherever they were recorded, and when the treasurer report was last generated.
+ */
+describe("performer payments list — voids and the treasurer report (081)", () => {
+  beforeAll(ensureSchema);
+  beforeEach(resetDb);
+
+  it("lists voided checks by booking, and the latest treasurer report", async () => {
+    const tonight = await makeEvent({ eventDate: "2026-06-18" });
+    const later = await makeEvent({ eventDate: "2026-06-25" });
+    const p = await makePerformer("Pat Fiddle");
+    const b = await createBooking(db, tonight.id, {
+      performerId: p.id,
+      performerType: "musician",
+      pay: 100,
+    });
+    const here = await createPerformerPayment(db, {
+      eventId: tonight.id,
+      payeePerformerId: p.id,
+      method: "check",
+      checkNumber: "9001",
+      lines: [{ bookingId: b.id, amount: 100 }],
+    });
+    await voidPerformerPayment(db, here.id, "wrong amount");
+    const elsewhere = await createPerformerPayment(db, {
+      eventId: later.id,
+      payeePerformerId: p.id,
+      method: "check",
+      checkNumber: "9002",
+      lines: [{ bookingId: b.id, amount: 100 }],
+    });
+    await voidPerformerPayment(db, elsewhere.id, "lost");
+
+    let list = await listPerformerPayments(db, tonight.id);
+    expect(list.voidedByBooking[b.id]).toEqual([
+      { paymentId: here.id, checkNumber: "9001", reason: "wrong amount" },
+      { paymentId: elsewhere.id, checkNumber: "9002", reason: "lost" },
+    ]);
+    expect(list.treasurerReportGeneratedAt).toBeNull();
+
+    await makeDoorRecord(tonight.id);
+    await assembleTreasurerReport(db, tonight.id, "t");
+    list = await listPerformerPayments(db, tonight.id);
+    expect(list.treasurerReportGeneratedAt).toEqual(expect.any(String));
   });
 });

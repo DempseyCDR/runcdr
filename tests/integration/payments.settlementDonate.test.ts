@@ -66,6 +66,7 @@ describe("donate-at-settlement (030 US3)", () => {
   it("refuses a booking already settled by a live check (void first)", async () => {
     const { evt, p, b } = await bookPaid();
     await createPerformerPayment(db, {
+      method: "check",
       eventId: evt.id,
       payeePerformerId: p.id,
       checkNumber: "1001",

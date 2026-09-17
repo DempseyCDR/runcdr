@@ -22,6 +22,7 @@ describe("everyone who plays gets a booking", () => {
       pay: 125,
     });
     await createPerformerPayment(db, {
+      method: "check",
       eventId: evt.id,
       payeePerformerId: booked.id,
       checkNumber: "3001",

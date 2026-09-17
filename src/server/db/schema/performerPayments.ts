@@ -1,8 +1,9 @@
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
-import { integer, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, integer, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { events } from "./events";
 import { performers } from "./performers";
 import { bookings } from "./bookings";
+import { performerPaymentMethodEnum } from "./enums";
 
 /**
  * Feature 019 (B28): what was ACTUALLY disbursed to a performer, distinct from a booking's *expected*
@@ -18,6 +19,9 @@ export const performerPayments = pgTable("performer_payments", {
     .notNull()
     .references(() => performers.id),
   amountCents: integer("amount_cents").notNull(),
+  // Feature 081 (R1, R3a): a check carries a number — digits and an optional letter, unique club-wide, live or
+  // voided — and cash carries none (table checks `performer_payments_method_number` / `_check_number_form`).
+  method: performerPaymentMethodEnum("method").notNull().default("check"),
   checkNumber: text("check_number"),
   overrideReason: text("override_reason"),
   // Feature 023: void state. A voided check persists (the treasurer records the void) and never settles a
@@ -48,6 +52,9 @@ export const paymentBookings = pgTable(
     // Feature 023: the portion of the check applied to this booking (per-line allocation). Lines of a
     // check sum to its total.
     amountCents: integer("amount_cents").notNull(),
+    // Feature 081 (R2): false once the payment is voided (never set back). A partial unique index on
+    // `booking_id WHERE live` holds a booking to one live payment.
+    live: boolean("live").notNull().default(true),
   },
   (t) => ({ pk: primaryKey({ columns: [t.paymentId, t.bookingId] }) }),
 );

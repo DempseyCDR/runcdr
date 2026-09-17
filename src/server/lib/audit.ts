@@ -98,6 +98,7 @@ export type AuditEvent = {
     | "performer_payment.created"
     | "performer_payment.updated"
     | "performer_payment.voided"
+    | "performer_payment.line_added" // feature 081 (R4)
     | "performer_payment.deleted"
     | "paypal.notification.parked"
     | "paypal.notification.rejected"

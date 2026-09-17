@@ -123,11 +123,20 @@ describe("the check-in page (079)", () => {
     stub();
     render(<CheckinPage />);
     const heading = await eventHeading(/Thursday Night Contra/);
-    expect(heading).toHaveTextContent(today());
-    expect(heading).toHaveTextContent("19:30");
+    // Feature 081: series first, then the date and a 12-hour time.
+    expect(heading).toHaveTextContent(`Thursday Night Contra · ${today()} · 7:30 PM`);
     const event = screen.getByRole("region", { name: /event/i });
     expect(within(event).getByRole("button", { name: /change/i })).toBeInTheDocument();
     expect(within(event).queryByText(/not today/i)).toBeNull();
+  });
+
+  it("names the event's label after its series (081)", async () => {
+    stub({ events: [EVENT({ label: "Masquerade Ball", startTime: "12:05:00" })] });
+    render(<CheckinPage />);
+    const heading = await eventHeading(/Masquerade Ball/);
+    expect(heading).toHaveTextContent(
+      `Thursday Night Contra · Masquerade Ball · ${today()} · 12:05 PM`,
+    );
   });
 
   it("warns when the confirmed event is on another date", async () => {

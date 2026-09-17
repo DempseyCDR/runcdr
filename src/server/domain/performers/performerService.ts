@@ -1,7 +1,7 @@
-import { and, eq, gte, ilike, lte, sql } from "drizzle-orm";
+import { and, eq, gte, ilike, inArray, lte, sql } from "drizzle-orm";
 import type { Db } from "@/server/db/client";
 import { bookings, contactEmails, contacts, events, performers } from "@/server/db/schema";
-import type { PerformerRow } from "@/server/db/schema";
+import type { PerformerRow, PerformerType } from "@/server/db/schema";
 import { errors } from "@/server/lib/apiError";
 import { centsToDollars } from "@/server/lib/money";
 import { deriveContactNames } from "@/server/domain/contacts/normalize";
@@ -87,7 +87,12 @@ export async function listPerformers(db: Db): Promise<PerformerRow[]> {
   return db.select().from(performers);
 }
 
-export type PerformerSummary = { id: string; displayName: string };
+export type PerformerSummary = {
+  id: string;
+  displayName: string;
+  /** Feature 081 (FR-024): the role this performer is booked in on the event asked about, if any. */
+  bookedAs?: PerformerType | null;
+};
 
 /**
  * Feature 020 US2 (FR-012): typeahead over performers by display name — ILIKE, ordered by display name.
@@ -95,19 +100,39 @@ export type PerformerSummary = { id: string; displayName: string };
  * query are escaped so a stray `%`/`_` matches literally, not as a wildcard (analyze L1). Empty query
  * browses the full list ordered by display name. Returns a performer id — what a booking references.
  */
-export async function searchPerformers(db: Db, q: string, limit = 20): Promise<PerformerSummary[]> {
+export async function searchPerformers(
+  db: Db,
+  q: string,
+  limit = 20,
+  eventId?: string,
+): Promise<PerformerSummary[]> {
   const cols = { id: performers.id, displayName: performers.displayName };
   const needle = q.trim();
-  if (!needle) {
-    return db.select(cols).from(performers).orderBy(performers.displayName).limit(limit);
-  }
   const escaped = needle.replace(/[\\%_]/g, (c) => `\\${c}`);
-  return db
+  const found = await db
     .select(cols)
     .from(performers)
-    .where(ilike(performers.displayName, `%${escaped}%`))
+    .where(needle ? ilike(performers.displayName, `%${escaped}%`) : undefined)
     .orderBy(performers.displayName)
     .limit(limit);
+  if (!eventId) return found;
+  // Feature 081 (FR-024): say who is already booked on the evening, and as what.
+  const booked = found.length
+    ? await db
+        .select({ performerId: bookings.performerId, performerType: bookings.performerType })
+        .from(bookings)
+        .where(
+          and(
+            eq(bookings.eventId, eventId),
+            inArray(
+              bookings.performerId,
+              found.map((p) => p.id),
+            ),
+          ),
+        )
+    : [];
+  const roleOf = new Map(booked.map((b) => [b.performerId, b.performerType]));
+  return found.map((p) => ({ ...p, bookedAs: roleOf.get(p.id) ?? null }));
 }
 
 /**

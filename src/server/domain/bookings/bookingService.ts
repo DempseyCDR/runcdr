@@ -16,8 +16,11 @@ import {
 import { isAllowedBookingTransition } from "./bookingStatus";
 import type { BookingCreateInput, BookingPatchInput } from "@/server/validation/performers";
 
-/** Types that are always free regardless of input. */
-function isForcedFree(type: PerformerType): boolean {
+/**
+ * Types that are free unless given an amount. Feature 081 (FR-009, R11): they were always free; now a pay
+ * set for one (the Add dialog's rate, or the Booker's) makes the booking payable like any other.
+ */
+function isFreeByDefault(type: PerformerType): boolean {
   return type === "instructor" || type === "open_band_musician";
 }
 
@@ -52,13 +55,13 @@ export async function createBooking(
   let isOverridden = false;
   let isDonated = false;
 
-  if (isForcedFree(type)) {
-    payCents = 0; // instructor / open band: always free
-  } else if (input.isDonated) {
+  if (input.isDonated) {
     isDonated = true; // donated fee → $0, counts appearance, excluded from earnings
   } else if (input.pay !== undefined) {
     payCents = dollarsToCents(input.pay);
     isOverridden = true;
+  } else if (isFreeByDefault(type)) {
+    payCents = 0; // instructor / open band: free unless given an amount (081)
   } else if (rule.rateKind) {
     payCents = await resolveParameterCents(db, {
       category: "rate",
@@ -173,7 +176,7 @@ export async function patchBooking(
     if (!event) throw errors.eventNotFound();
     const rule = PERFORMER_RULES[type];
     let payCents = 0;
-    if (!isForcedFree(type) && rule.rateKind) {
+    if (!isFreeByDefault(type) && rule.rateKind) {
       payCents = await resolveParameterCents(db, {
         category: "rate",
         kind: rule.rateKind,
@@ -215,9 +218,9 @@ export async function patchBooking(
   let isDonated = current.isDonated;
   let isOverridden = current.isOverridden;
 
-  if (isForcedFree(type)) {
-    payCents = 0;
-  } else if (input.isDonated === true) {
+  // Feature 081 (R11): no role is forced to $0 any more — an instructor or open-band booking takes a pay
+  // like any other.
+  if (input.isDonated === true) {
     isDonated = true;
     payCents = 0;
   } else {
@@ -316,16 +319,33 @@ export async function substitutePerformer(
   });
   if (!newPerformer) throw errors.performerNotFound();
 
-  // Unpaid (or only voided) → the clean-swap path: re-point the slot in place. patchBooking's re-point
-  // branch resets to `proposed`/standard rate and re-checks the discriminator (belt-and-braces).
+  // Feature 081 (FR-025, R13): the substitute steps into the slot at its booked amount. A donated fee was the
+  // outgoing performer's gift, so the substitute's slot is $0 but not donated.
+  const payCents = current.isDonated ? 0 : current.payCents;
+  const isOverridden = current.isDonated ? false : current.isOverridden;
+
+  // Unpaid (or only voided) → the clean swap: re-point the slot in place, as a fresh `proposed` booking, keeping
+  // what it was booked at (the Booker's own re-point through patchBooking still resets to the standard rate).
   if (!(await bookingHasLivePayment(db, bookingId))) {
-    const booking = await patchBooking(
-      db,
-      bookingId,
-      { performerId: newPerformerId },
+    const [booking] = await db
+      .update(bookings)
+      .set({
+        performerId: newPerformerId,
+        status: "proposed",
+        isDonated: false,
+        isOverridden,
+        payCents,
+        requiresCheck: bookingRequiresCheck(current.performerType, payCents),
+        updatedAt: new Date(),
+      })
+      .where(eq(bookings.id, bookingId))
+      .returning();
+    if (!booking) throw errors.bookingNotFound();
+    writeAudit({
+      kind: "booking.updated",
       actor,
-      undefined, // 043: event scope already asserted above (either capability); bypass patchBooking's booking.write
-    );
+      details: { bookingId, repointed: true, substitute: true },
+    });
     return { booking, noShow: null };
   }
 
@@ -337,14 +357,21 @@ export async function substitutePerformer(
       .where(eq(bookings.id, bookingId))
       .returning();
     if (!noShow) throw errors.bookingNotFound();
-    const booking = await createBooking(
+    const created = await createBooking(
       tx,
       current.eventId,
-      { performerId: newPerformerId, performerType: current.performerType },
+      { performerId: newPerformerId, performerType: current.performerType, pay: payCents / 100 },
       actor,
       current.bandId,
       undefined, // 043: event scope already asserted above (either capability); bypass createBooking's booking.write
     );
+    // createBooking marks a given pay as an override; the slot keeps the outgoing booking's flag instead.
+    const [booking] = await tx
+      .update(bookings)
+      .set({ isOverridden })
+      .where(eq(bookings.id, created.id))
+      .returning();
+    if (!booking) throw errors.bookingNotFound();
     return { booking, noShow };
   });
   writeAudit({
@@ -387,25 +414,36 @@ export async function donateBookingAtSettlement(
 /**
  * Feature 030 (FR-011): the FS adds a last-minute performer at settlement so they can be paid — creates a
  * booking WITHOUT holding booking.write. Gated on performer_payment.write scope; createBooking runs with no
- * authz (booking scope already asserted here). Dedupes: a performer already booked on the event returns the
- * existing booking (no duplicate).
+ * authz (booking scope already asserted here). Feature 081: a performer already booked on the event is refused
+ * (ALREADY_BOOKED), and a pay given becomes the booked amount.
  */
 export async function addSettlementPerformer(
   db: Db,
   eventId: string,
-  input: { performerId: string; performerType: PerformerType },
+  input: { performerId: string; performerType: PerformerType; pay?: number },
   actor: string | null = null,
   authz?: Actor,
 ): Promise<BookingRow> {
   await assertPaymentScope(db, authz, eventId);
+  // Feature 081 (FR-024): an already-booked performer is refused, so nothing looks added that was not.
   const existing = await db.query.bookings.findFirst({
     where: and(eq(bookings.eventId, eventId), eq(bookings.performerId, input.performerId)),
   });
-  if (existing) return existing;
+  if (existing) {
+    throw errors.alreadyBooked({
+      bookingId: existing.id,
+      performerType: existing.performerType,
+    });
+  }
+  // Feature 081 (FR-023): the Add dialog's rate is the booked amount; without one, the standard rate.
   const booking = await createBooking(
     db,
     eventId,
-    { performerId: input.performerId, performerType: input.performerType },
+    {
+      performerId: input.performerId,
+      performerType: input.performerType,
+      ...(input.pay !== undefined ? { pay: input.pay } : {}),
+    },
     actor,
     null,
     undefined, // booking scope already asserted via performer_payment.write; bypass booking.write
@@ -416,4 +454,39 @@ export async function addSettlementPerformer(
     details: { bookingId: booking.id, eventId, performerId: input.performerId },
   });
   return booking;
+}
+
+/** Feature 081 (FR-023, research R12): a role the Add dialog offers, with its standard rate on the event date. */
+export type EventRole = { performerType: PerformerType; rate: number };
+
+const ROLE_ORDER: PerformerType[] = [
+  "caller",
+  "lead_musician",
+  "musician",
+  "sound_tech",
+  "instructor",
+  "open_band_musician",
+];
+
+/** The roles an event's series allows (no sound tech where it has none), each at its rate that day. */
+export async function listEventRoles(db: DbOrTx, eventId: string): Promise<EventRole[]> {
+  const event = await db.query.events.findFirst({ where: eq(events.id, eventId) });
+  if (!event) throw errors.eventNotFound();
+  const s = await db.query.series.findFirst({ where: eq(series.id, event.seriesId) });
+  const roles = ROLE_ORDER.filter((t) => t !== "sound_tech" || s?.hasSoundTech !== false);
+  return Promise.all(
+    roles.map(async (performerType) => {
+      const kind = PERFORMER_RULES[performerType].rateKind;
+      const cents =
+        kind && !isFreeByDefault(performerType)
+          ? await resolveParameterCents(db, {
+              category: "rate",
+              kind,
+              seriesId: event.seriesId,
+              onDate: event.eventDate,
+            })
+          : 0;
+      return { performerType, rate: centsToDollars(cents) };
+    }),
+  );
 }

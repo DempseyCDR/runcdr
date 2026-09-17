@@ -23,6 +23,9 @@ export async function parseBody<S extends z.ZodTypeAny>(
     const field = issue.path[issue.path.length - 1];
     if (field === "purposes") throw errors.purposesRequired();
     if (field === "consentTopics") throw errors.consentTopicsRequired();
+    // Feature 081 (FR-039): a malformed check number gets its own code, so the page can say what is allowed.
+    if (field === "checkNumber" && issue.code === "invalid_string")
+      throw errors.invalidCheckNumber();
     if (typeof field === "string" && field.startsWith("provider")) {
       throw errors.readOnlyField(field);
     }

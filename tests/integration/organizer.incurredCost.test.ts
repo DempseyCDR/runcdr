@@ -34,6 +34,7 @@ describe("organizer report — incurred-date performer cost (023)", () => {
     );
     // A delayed check recorded at B settles A's paid booking for $90 (a discrepancy vs the booked $100).
     await createPerformerPayment(db, {
+      method: "cash",
       eventId: eventB.id,
       payeePerformerId: pam.id,
       lines: [{ bookingId: bPaid.id, amount: 90 }],

@@ -9,6 +9,8 @@ import { actorCan } from "@/server/auth/can";
 export const GET = withAuth({ requires: "base" }, async (_req, ctx) => {
   return NextResponse.json({
     bookingWrite: actorCan(ctx.actor, "booking.write"),
+    // Feature 081 (FR-030): the payments page offers its entry controls and dialogs only to a payer.
+    performerPaymentWrite: actorCan(ctx.actor, "performer_payment.write"),
     eventWrite: actorCan(ctx.actor, "event.write"),
     // Feature 065: which contact archive/delete controls the editor should offer.
     contactWrite: actorCan(ctx.actor, "contact.write"),

@@ -16,4 +16,8 @@ describe("depositCents", () => {
   it("= gross cash − seed float − cash paid out", () => {
     expect(depositCents(20000, 1500, 2500)).toBe(16000);
   });
+  // Feature 081 (FR-033): cash paid to performers comes out of the takings too.
+  it("also takes off the cash paid to performers", () => {
+    expect(depositCents(30000, 1500, 2000, 3000)).toBe(23500);
+  });
 });

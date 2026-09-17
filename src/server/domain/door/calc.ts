@@ -10,13 +10,17 @@ export function posFeeCents(transactionCount: number, posGrossCents: number): nu
   return perTxn + pct;
 }
 
-/** Deposit = gross cash − seed float − cash paid out. */
+/**
+ * Deposit = gross cash − seed float − cash paid out. Feature 081 (FR-033): "cash paid out" is the gate's
+ * other payouts, and the cash paid to performers from the takings comes off as well.
+ */
 export function depositCents(
   grossCashCents: number,
   seedFloatCents: number,
   cashPaidOutCents: number,
+  performerCashCents = 0,
 ): number {
-  return grossCashCents - seedFloatCents - cashPaidOutCents;
+  return grossCashCents - seedFloatCents - cashPaidOutCents - performerCashCents;
 }
 
 /** The money/count fields of a door record that testify to real activity (seed float deliberately absent). */

@@ -9,15 +9,16 @@ describe("performer rules", () => {
       requiresCheck: true,
       publicDisplay: "full_bio",
     });
+    // Feature 081 (FR-009): free by default, but payable once given an amount.
     expect(PERFORMER_RULES.open_band_musician).toMatchObject({
       paid: false,
-      requiresCheck: false,
+      requiresCheck: true,
       publicDisplay: "open_band_label",
     });
     expect(PERFORMER_RULES.sound_tech).toMatchObject({ paid: true, publicDisplay: "hidden" });
     expect(PERFORMER_RULES.instructor).toMatchObject({
       paid: false,
-      requiresCheck: false,
+      requiresCheck: true,
       publicDisplay: "name_note",
     });
   });
@@ -37,5 +38,7 @@ describe("performer rules", () => {
     expect(bookingRequiresCheck("musician", 0)).toBe(false); // donated musician
     expect(bookingRequiresCheck("open_band_musician", 0)).toBe(false);
     expect(bookingRequiresCheck("instructor", 0)).toBe(false);
+    expect(bookingRequiresCheck("instructor", 5000)).toBe(true); // 081: an instructor given a pay
+    expect(bookingRequiresCheck("open_band_musician", 5000)).toBe(true);
   });
 });

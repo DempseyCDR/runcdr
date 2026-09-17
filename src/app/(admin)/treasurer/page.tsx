@@ -3,6 +3,7 @@ import { apiFetch } from "@/app/apiFetch";
 import { EventSelector } from "@/app/EventSelector";
 import AttendanceBreakdownView from "@/app/_components/AttendanceBreakdownView";
 import type { AttendanceBreakdown } from "@/server/domain/attendance/breakdownService";
+import type { PaymentReportLine, TreasurerReport } from "@/server/domain/treasurer/reportService";
 
 import { useCallback, useEffect, useState } from "react";
 
@@ -39,9 +40,32 @@ type Report = {
   compCount: number;
   giftCardRedemptionCount: number;
   attendance: AttendanceBreakdown;
-};
+} & Pick<TreasurerReport, "checks" | "cashPayments" | "otherCashPaidOut" | "paidElsewhere">;
 
 const money = (n: number) => `$${n.toFixed(2)}`;
+
+/**
+ * Feature 081 (FR-028): what a payment paid — each booking's booked and paid amounts where they differ, the
+ * event a booking was at when it was not this one, and Mary's note when there is a difference.
+ */
+function PaidLines({ payment }: { payment: PaymentReportLine }) {
+  const shown = payment.lines.filter((l) => l.paid !== l.booked || l.eventDate);
+  const differs = payment.lines.some((l) => l.paid !== l.booked);
+  if (shown.length === 0) return null;
+  return (
+    <div style={{ color: "#555", fontSize: "0.9em" }}>
+      {shown.map((l, i) => (
+        <div key={i}>
+          {l.paid !== l.booked
+            ? `${l.performer}: booked ${money(l.booked)} · paid ${money(l.paid)}`
+            : `${l.performer}: ${money(l.paid)}`}
+          {l.eventDate ? ` — for the ${l.eventDate} event` : ""}
+        </div>
+      ))}
+      {differs && payment.note && <div>{payment.note}</div>}
+    </div>
+  );
+}
 
 // Feature 028 (P5-R1): the treasurer report is now a single `/treasurer` page with the shared event selector
 // (in-page state — the event is no longer a `[eventId]` URL param; the old `/treasurer/latest` nav entry is
@@ -154,28 +178,57 @@ export default function TreasurerReportPage() {
               ))}
             </tbody>
           </table>
-
+          {/* Feature 081 (FR-027): every check — live and voided — in check-number order. */}
           <h2>Performer Payments</h2>
-          <table>
-            <thead>
-              <tr>
-                <th>Payee</th>
-                <th>Amount</th>
-                <th>Class</th>
-                <th>Check #</th>
-              </tr>
-            </thead>
-            <tbody>
-              {report.performerPayments.map((p, i) => (
-                <tr key={i}>
-                  <td>{p.payee}</td>
-                  <td>{money(p.amount)}</td>
-                  <td>{p.class}</td>
-                  <td>{p.checkNumber ?? "—"}</td>
-                </tr>
+          <ul aria-label="Checks">
+            {report.checks.map((c) => (
+              <li key={c.checkNumber}>
+                <strong>#{c.checkNumber}</strong> — {c.payee} — {money(c.amount)} ({c.class})
+                {c.voided && (
+                  <div style={{ color: "#a15c00" }}>
+                    {`Voided — ${c.voidReason ?? "no reason"}${c.replacedBy ? ` · replaced by #${c.replacedBy}` : ""}`}
+                  </div>
+                )}
+                <PaidLines payment={c} />
+              </li>
+            ))}
+            {report.checks.length === 0 && <li style={{ color: "#888" }}>No checks</li>}
+          </ul>
+          {report.paidElsewhere.length > 0 && (
+            <>
+              <h3>Paid at another event</h3>
+              <ul aria-label="Paid at another event">
+                {report.paidElsewhere.map((p, i) => (
+                  <li key={i}>
+                    {`${p.performer} — ${money(p.amount)} — paid at the ${p.eventDate} event`}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+
+          {/* Feature 081 (FR-033, FR-038): cash out of the takings — to performers, and everything else. */}
+          <section aria-label="Cash paid out">
+            <h2>Cash paid out</h2>
+            <ul>
+              {report.cashPayments.map((c, i) => (
+                <li key={i}>
+                  <span>{`${c.payee} — ${money(c.amount)}`}</span>
+                  <PaidLines payment={c} />
+                </li>
               ))}
-            </tbody>
-          </table>
+              {report.otherCashPaidOut.amount > 0 && (
+                <li>
+                  {`Other cash paid out: ${money(report.otherCashPaidOut.amount)}${
+                    report.otherCashPaidOut.reason ? ` — ${report.otherCashPaidOut.reason}` : ""
+                  }`}
+                </li>
+              )}
+              {report.cashPayments.length === 0 && report.otherCashPaidOut.amount === 0 && (
+                <li style={{ color: "#888" }}>None</li>
+              )}
+            </ul>
+          </section>
 
           <h2>Deposit</h2>
           <p>{money(report.deposit.amount)} → ESL Checking</p>
