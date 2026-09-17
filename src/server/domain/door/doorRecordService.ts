@@ -1,11 +1,20 @@
-import { eq, getTableColumns, sql } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, isNull, sql } from "drizzle-orm";
 import type { Db, DbOrTx } from "@/server/db/client";
-import { contacts, doorRecordAudit, doorRecords, events, gateSales } from "@/server/db/schema";
+import {
+  contacts,
+  doorRecordAudit,
+  doorRecords,
+  events,
+  gateSales,
+  performerPayments,
+  performers,
+} from "@/server/db/schema";
 import type { DoorRecordRow, GateSaleRow } from "@/server/db/schema";
 import { errors } from "@/server/lib/apiError";
 import { assertEventScope } from "@/server/auth/can";
 import type { Actor } from "@/server/auth/actor";
 import { writeAudit } from "@/server/lib/audit";
+import { logger } from "@/server/lib/logger";
 import { dollarsToCents, centsToDollars } from "@/server/lib/money";
 import { recordDuesPayment } from "@/server/domain/membership/accountService";
 import { resolveParameterCentsOrNull } from "@/server/domain/parameters/seriesParameterService";
@@ -61,9 +70,76 @@ export type DoorRecordView = {
   giftCardRedemptionCount: number;
   compCount: number;
   openBandCount: number; // feature 017 (B36): open-band comps; FS sees it read-only on /gate
+  /** Feature 081 (FR-033): cash paid to performers from these takings — `cashPaidOut` is everything else. */
+  performerCash: PerformerCashLine[];
 };
 
-function toView(row: DoorRecordRow): DoorRecordView {
+/** Feature 081: one live cash payment to a performer, recorded at the event. */
+export type PerformerCashLine = { paymentId: string; payee: string; amount: number };
+
+type PerformerCashRow = { paymentId: string; payee: string; amountCents: number };
+
+/** Feature 081 (R7): the live cash payments to performers recorded at an event, oldest first. */
+async function performerCashRows(db: DbOrTx, eventId: string): Promise<PerformerCashRow[]> {
+  return db
+    .select({
+      paymentId: performerPayments.id,
+      payee: performers.displayName,
+      amountCents: performerPayments.amountCents,
+    })
+    .from(performerPayments)
+    .innerJoin(performers, eq(performers.id, performerPayments.payeePerformerId))
+    .where(
+      and(
+        eq(performerPayments.eventId, eventId),
+        eq(performerPayments.method, "cash"),
+        isNull(performerPayments.voidedAt),
+      ),
+    )
+    .orderBy(asc(performerPayments.createdAt));
+}
+
+export async function performerCashFor(db: DbOrTx, eventId: string): Promise<PerformerCashLine[]> {
+  return (await performerCashRows(db, eventId)).map((r) => ({
+    paymentId: r.paymentId,
+    payee: r.payee,
+    amount: centsToDollars(r.amountCents),
+  }));
+}
+
+/**
+ * Feature 081 (FR-033, R7): recompute and store an event's deposit — gross cash less the float, the gate's
+ * other payouts and the cash paid to performers. Called in the same transaction as any write that changes
+ * one of them, so every reader of the stored deposit (gate, treasurer and organizer reports) stays right.
+ * A no-op for an event with no door record.
+ */
+export async function refreshDeposit(tx: DbOrTx, eventId: string): Promise<void> {
+  const door = await tx.query.doorRecords.findFirst({ where: eq(doorRecords.eventId, eventId) });
+  if (!door) return;
+  const cash = (await performerCashRows(tx, eventId)).reduce((a, r) => a + r.amountCents, 0);
+  const deposit = depositCents(
+    door.grossCashCents,
+    door.seedFloatCents,
+    door.cashPaidOutCents,
+    cash,
+  );
+  if (deposit === door.depositCents) return;
+  await tx
+    .update(doorRecords)
+    .set({ depositCents: deposit, updatedAt: new Date() })
+    .where(eq(doorRecords.id, door.id));
+  logger.info(
+    {
+      event: "door_record.deposit_refreshed",
+      eventId,
+      depositCents: deposit,
+      performerCashCents: cash,
+    },
+    "deposit refreshed",
+  );
+}
+
+function toView(row: DoorRecordRow, performerCash: PerformerCashLine[] = []): DoorRecordView {
   return {
     id: row.id,
     eventId: row.eventId,
@@ -77,6 +153,7 @@ function toView(row: DoorRecordRow): DoorRecordView {
     giftCardRedemptionCount: row.giftCardRedemptionCount,
     compCount: row.compCount,
     openBandCount: row.openBandCount,
+    performerCash,
   };
 }
 
@@ -173,9 +250,15 @@ export async function updateDoorRecord(
     input.seedFloat !== undefined ? dollarsToCents(input.seedFloat) : current.seedFloatCents;
   const posTransactionCount = input.posTransactionCount ?? current.posTransactionCount;
 
-  // Fee from card txns + PC gross; deposit = gross cash − seed float − cash paid out.
+  // Fee from card txns + PC gross; deposit = gross cash − seed float − cash paid out − performers' cash (081).
   const fee = posFeeCents(posTransactionCount, pcGrossCents);
-  const deposit = depositCents(grossCashCents, seedFloatCents, cashPaidOutCents);
+  const performerCash = await performerCashFor(db, current.eventId);
+  const deposit = depositCents(
+    grossCashCents,
+    seedFloatCents,
+    cashPaidOutCents,
+    dollarsToCents(performerCash.reduce((a, c) => a + c.amount, 0)),
+  );
 
   const [row] = await db
     .update(doorRecords)
@@ -207,7 +290,7 @@ export async function updateDoorRecord(
     actor,
     details: { doorRecordId: id, posFeeCents: row.posFeeCents, depositCents: row.depositCents },
   });
-  return toView(row);
+  return toView(row, performerCash);
 }
 
 export async function putGateSales(
@@ -312,5 +395,5 @@ export async function getDoorRecord(
     .from(gateSales)
     .leftJoin(contacts, eq(contacts.id, gateSales.contactId))
     .where(eq(gateSales.doorRecordId, id));
-  return { doorRecord: toView(row), gateSales: sales };
+  return { doorRecord: toView(row, await performerCashFor(db, row.eventId)), gateSales: sales };
 }

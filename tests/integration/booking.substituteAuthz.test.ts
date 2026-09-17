@@ -75,6 +75,7 @@ describe("POST /api/bookings/:id/substitute — either-capability authz (043)", 
     const { evt, orig, sub, b } = await seedBooking();
     // make the booking live-paid so the discriminator branch (keep no-show + fresh booking) fires
     await createPerformerPayment(db, {
+      method: "cash",
       eventId: evt.id,
       payeePerformerId: orig.id,
       lines: [{ bookingId: b.id, amount: 100 }],

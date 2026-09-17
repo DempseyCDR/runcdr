@@ -26,6 +26,7 @@ describe("performer payment voids (023)", () => {
       "t",
     );
     const pay = await createPerformerPayment(db, {
+      method: "check",
       eventId: evt.id,
       payeePerformerId: p.id,
       checkNumber: "1",
@@ -41,12 +42,12 @@ describe("performer payment voids (023)", () => {
     // A voided check settles nothing.
     expect((await settledCentsByBookingForEvent(db, evt.id)).get(b.id) ?? 0).toBe(0);
 
-    // A reissue is a new live check linked to the voided one.
+    // A reissue is a new live check; feature 081 (R8) links it to the voided one without being asked.
     const reissue = await createPerformerPayment(db, {
+      method: "check",
       eventId: evt.id,
       payeePerformerId: p.id,
       checkNumber: "2",
-      replacesPaymentId: pay.id,
       lines: [{ bookingId: b.id, amount: 130 }],
     });
     expect(reissue.replacesPaymentId).toBe(pay.id);

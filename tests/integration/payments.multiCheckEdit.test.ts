@@ -30,8 +30,11 @@ describe("PATCH /api/performer-payments/:id — multi-line check-number-only edi
       performerType: "lead_musician",
       pay: 50,
     });
-    // one check to Clara covering both bookings, saved with NO check number (the D3 case)
+    // one check to Clara covering both bookings. (043's D3 case was a number-less check; since 081 a check
+    // always has a number, so the case is now correcting the number.)
     const payment = await createPerformerPayment(db, {
+      method: "check",
+      checkNumber: "1791",
       eventId: evt.id,
       payeePerformerId: clara.id,
       lines: [
@@ -39,7 +42,7 @@ describe("PATCH /api/performer-payments/:id — multi-line check-number-only edi
         { bookingId: b2.id, amount: 50 },
       ],
     });
-    expect(payment.checkNumber).toBeNull();
+    expect(payment.checkNumber).toBe("1791");
 
     // check-number-only PATCH — NO `lines`
     const res = await PATCH_PAYMENT(

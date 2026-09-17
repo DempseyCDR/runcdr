@@ -58,7 +58,35 @@ export type ApiErrorCode =
   | "CONTENT_SLUG_TAKEN"
   | "CAMPAIGN_NOT_FOUND"
   | "CONTACT_HAS_REFERENCES"
-  | "EMAIL_ACTIVE_ELSEWHERE";
+  | "EMAIL_ACTIVE_ELSEWHERE"
+  // Feature 081: performer payment integrity.
+  | "BOOKING_ALREADY_PAID"
+  | "CHECK_NUMBER_TAKEN"
+  | "INVALID_CHECK_NUMBER"
+  | "SECOND_PAYMENT_TO_PAYEE"
+  | "CASH_SINGLE_BOOKING"
+  | "CASH_NOT_VOIDABLE"
+  | "ALREADY_VOIDED"
+  | "ALREADY_BOOKED";
+
+/** Feature 081: the payment a refusal points at, so the page can offer the right choice. */
+export type PaymentRef = {
+  paymentId: string;
+  checkNumber: string | null;
+  method: "check" | "cash";
+};
+export type BookingAlreadyPaidDetails = PaymentRef & { bookingId: string };
+export type CheckNumberTakenDetails = {
+  paymentId: string;
+  eventId: string;
+  eventDate: string;
+  payee: string;
+  voided: boolean;
+  /** The holder was recorded at the event being paid from, so the booking may join it. */
+  sameEvent: boolean;
+};
+export type SecondPaymentDetails = PaymentRef & { amount: number };
+export type AlreadyBookedDetails = { bookingId: string; performerType: string };
 
 export class ApiError extends Error {
   readonly code: ApiErrorCode;
@@ -265,6 +293,62 @@ export const errors = {
   sameContact: () =>
     new ApiError("SAME_CONTACT", 422, "Canonical and merged contacts must differ."),
   validation: (message: string) => new ApiError("VALIDATION_ERROR", 422, message),
+  // Feature 081 (contracts/payments.md): refusals the payments page turns into choices carry `details`.
+  bookingAlreadyPaid: (details: BookingAlreadyPaidDetails) =>
+    new ApiError(
+      "BOOKING_ALREADY_PAID",
+      409,
+      details.method === "cash"
+        ? "This booking is already paid in cash."
+        : `This booking is already paid by check #${details.checkNumber}.`,
+      undefined,
+      { details },
+    ),
+  checkNumberTaken: (number: string, details: CheckNumberTakenDetails) =>
+    new ApiError(
+      "CHECK_NUMBER_TAKEN",
+      409,
+      `Check #${number} is already used (${details.payee}, ${details.eventDate}${details.voided ? ", voided" : ""}).`,
+      undefined,
+      { details },
+    ),
+  invalidCheckNumber: () =>
+    new ApiError(
+      "INVALID_CHECK_NUMBER",
+      422,
+      "A check number is digits, optionally followed by one letter — e.g. 1500 or 1500A.",
+    ),
+  secondPaymentToPayee: (payee: string, details: SecondPaymentDetails) =>
+    new ApiError(
+      "SECOND_PAYMENT_TO_PAYEE",
+      409,
+      details.method === "cash"
+        ? `${payee} was already paid in cash tonight.`
+        : `${payee} already has check #${details.checkNumber} tonight.`,
+      undefined,
+      { details },
+    ),
+  cashSingleBooking: () =>
+    new ApiError(
+      "CASH_SINGLE_BOOKING",
+      422,
+      "A cash payment settles one booking — write a check to pay several.",
+    ),
+  cashNotVoidable: () =>
+    new ApiError(
+      "CASH_NOT_VOIDABLE",
+      422,
+      "A cash payment cannot be voided — correct it or delete it.",
+    ),
+  alreadyVoided: () => new ApiError("ALREADY_VOIDED", 409, "This check has already been voided."),
+  alreadyBooked: (details: AlreadyBookedDetails) =>
+    new ApiError(
+      "ALREADY_BOOKED",
+      409,
+      `This performer is already booked on this event as ${details.performerType.replace(/_/g, " ")}.`,
+      undefined,
+      { details },
+    ),
   /**
    * FR-005a: President / VP / Treasurer are mutually exclusive — separation of authority from money.
    * A cross-ROW invariant on the contact, so it cannot be a row CHECK; enforced in grantService and

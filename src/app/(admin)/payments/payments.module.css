@@ -1,0 +1,212 @@
+/* Feature 081 (FR-001): performer payments, mobile-first — the event and summary on top, one card-like row per
+   performer beneath, dialogs for the less common tasks. Follows the door check-in page (079). */
+
+.page {
+  box-sizing: border-box;
+  margin: 0 auto;
+  max-width: 40rem;
+  padding: var(--space-2) var(--space-3) var(--space-5);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.row {
+  border-bottom: 1px solid var(--hairline);
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
+}
+
+.rowHead {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  justify-content: space-between;
+}
+
+.name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.meta,
+.quiet {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+.quiet {
+  margin: 0;
+}
+
+.paid {
+  margin: 0;
+}
+
+.note {
+  font-size: var(--fs-sm);
+  font-style: italic;
+  margin: 0;
+}
+
+.entry {
+  display: grid;
+  gap: var(--space-2);
+  grid-template-columns: 1fr 1fr;
+}
+
+.entry label {
+  display: grid;
+  font-size: var(--fs-sm);
+  gap: 2px;
+}
+
+.wide {
+  grid-column: 1 / -1;
+}
+
+.methods {
+  border: none;
+  display: flex;
+  gap: var(--space-3);
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 0;
+}
+
+.methods label {
+  align-items: center;
+  display: flex;
+  font-size: 1rem;
+  gap: var(--space-1);
+  min-height: 2.75rem;
+}
+
+.input {
+  box-sizing: border-box;
+  font-size: 1rem; /* 16px or more stops iOS zooming into the field */
+  min-height: 2.75rem;
+  padding: var(--space-1) var(--space-2);
+  width: 100%;
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.button,
+.primaryButton {
+  font-size: 0.95rem;
+  min-height: 2.75rem;
+  padding: var(--space-1) var(--space-3);
+}
+
+.primaryButton {
+  font-weight: 600;
+}
+
+.actions {
+  display: grid;
+  gap: var(--space-2);
+  grid-template-columns: 1fr 1fr;
+  margin-top: var(--space-4);
+}
+
+.error {
+  color: #b00020;
+  font-size: var(--fs-sm);
+  margin: 0;
+}
+
+.explain {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  margin: 0;
+}
+
+.sectionHeading {
+  font-size: 1rem;
+  margin: var(--space-4) 0 var(--space-1);
+}
+
+/* Dialogs: a backdrop and a panel that scrolls within the viewport. */
+.backdrop {
+  background: rgba(0, 0, 0, 0.45);
+  inset: 0;
+  overflow-y: auto;
+  padding: var(--space-2);
+  position: fixed;
+  z-index: 50;
+}
+
+.panel {
+  background: var(--surface, #fff);
+  border-radius: 8px;
+  box-sizing: border-box;
+  display: grid;
+  gap: var(--space-2);
+  margin: 0 auto;
+  max-height: calc(100dvh - 2 * var(--space-2));
+  max-width: 40rem;
+  overflow-y: auto;
+  padding: var(--space-3);
+}
+
+.dialogHeading {
+  font-size: 1.15rem;
+  margin: 0;
+}
+
+.picks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pick {
+  align-items: center;
+  border-bottom: 1px solid var(--hairline);
+  display: flex;
+  gap: var(--space-2);
+  justify-content: space-between;
+  min-height: 2.75rem;
+}
+
+@media (max-width: 22.5rem) {
+  .entry,
+  .actions {
+    grid-template-columns: 1fr;
+  }
+}
+
+.visuallyHidden {
+  clip: rect(0 0 0 0);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+.stack {
+  border: none;
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+}
+
+.stack label {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  min-height: 2.75rem;
+}

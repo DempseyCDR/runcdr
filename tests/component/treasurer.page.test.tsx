@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import TreasurerReportPage from "@/app/(admin)/treasurer/page";
 import { BREAKDOWN } from "./fixtures/attendanceBreakdown";
@@ -20,7 +20,7 @@ const EVENTS = [
 ];
 const SERIES = [{ id: "s1", key: "tnc", name: "TNC" }];
 
-function report(eventId: string) {
+function report(eventId: string, over: Record<string, unknown> = {}) {
   return {
     event: {
       id: eventId,
@@ -34,6 +34,12 @@ function report(eventId: string) {
     },
     namedCustomerReceipts: [],
     performerPayments: [],
+    // Feature 081: every check by number, cash payments, other payouts, bookings paid at another event.
+    checks: [],
+    cashPayments: [],
+    otherCashPaidOut: { amount: 0, reason: null },
+    paidElsewhere: [],
+    ...over,
     // Feature 040 (P6-R8): the rent bill (vendor = landlord, class, amount; no check line).
     bills: [{ vendor: "Faith Lutheran Church", class: "TNC", amount: 250 }],
     deposit: { amount: 0 },
@@ -46,14 +52,14 @@ function report(eventId: string) {
   };
 }
 
-function stub() {
+function stub(over: Record<string, unknown> = {}) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
       const u = String(url);
       const json = async () => {
         const m = /\/events\/([^/]+)\/treasurer-report/.exec(u);
-        if (m) return report(m[1]!);
+        if (m) return report(m[1]!, over);
         if (u.includes("/api/series")) return { items: SERIES };
         if (u.includes("/api/events")) return { items: EVENTS };
         return { items: [] };
@@ -126,5 +132,83 @@ describe("TreasurerReportPage — /treasurer single page + selector (028)", () =
     expect(
       breakdown.compareDocumentPosition(sales) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+  });
+});
+
+/** Feature 081 US6 (FR-027, FR-028, FR-038): what Mike needs to enter the evening's pay. */
+describe("TreasurerReportPage — checks and cash (081)", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("lists every check with its voids and differences, cash apart, and bookings paid elsewhere", async () => {
+    stub({
+      checks: [
+        {
+          checkNumber: "1500",
+          payee: "Ben Fiddle",
+          amount: 100,
+          class: "TNC",
+          voided: true,
+          voidReason: "wrong amount",
+          replacedBy: "1501",
+          note: null,
+          lines: [{ performer: "Ben Fiddle", booked: 100, paid: 100, eventDate: null }],
+        },
+        {
+          checkNumber: "1501",
+          payee: "Ann Caller",
+          amount: 100,
+          class: "TNC",
+          voided: false,
+          voidReason: null,
+          replacedBy: null,
+          note: "left early",
+          lines: [{ performer: "Ann Caller", booked: 120, paid: 100, eventDate: null }],
+        },
+        {
+          checkNumber: "1502",
+          payee: "Cy Sound",
+          amount: 60,
+          class: "TNC",
+          voided: false,
+          voidReason: null,
+          replacedBy: null,
+          note: null,
+          lines: [{ performer: "Cy Sound", booked: 60, paid: 60, eventDate: "2020-06-01" }],
+        },
+      ],
+      cashPayments: [
+        {
+          payee: "Dee Cash",
+          amount: 80,
+          note: null,
+          lines: [{ performer: "Dee Cash", booked: 80, paid: 80, eventDate: null }],
+        },
+      ],
+      otherCashPaidOut: { amount: 20, reason: "ice" },
+      paidElsewhere: [{ performer: "Eve Later", amount: 90, eventDate: "2020-06-22" }],
+    });
+    render(<TreasurerReportPage />);
+
+    const checks = within(await screen.findByRole("list", { name: "Checks" }));
+    const items = checks.getAllByRole("listitem");
+    expect(items.map((li) => li.textContent)).toEqual([
+      expect.stringContaining("#1500"),
+      expect.stringContaining("#1501"),
+      expect.stringContaining("#1502"),
+    ]);
+    expect(items[0]).toHaveTextContent("Voided — wrong amount · replaced by #1501");
+    expect(items[1]).toHaveTextContent("Ann Caller: booked $120.00 · paid $100.00");
+    expect(items[1]).toHaveTextContent("left early");
+    expect(items[2]).not.toHaveTextContent(/booked/);
+    expect(items[2]).toHaveTextContent("for the 2020-06-01 event");
+
+    const cash = within(screen.getByRole("region", { name: "Cash paid out" }));
+    expect(cash.getByText("Dee Cash — $80.00")).toBeInTheDocument();
+    expect(cash.getByText("Other cash paid out: $20.00 — ice")).toBeInTheDocument();
+
+    const elsewhere = within(screen.getByRole("list", { name: "Paid at another event" }));
+    expect(
+      elsewhere.getByText("Eve Later — $90.00 — paid at the 2020-06-22 event"),
+    ).toBeInTheDocument();
   });
 });

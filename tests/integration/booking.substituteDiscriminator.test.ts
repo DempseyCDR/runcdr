@@ -42,6 +42,7 @@ describe("written-check discriminator + substitute", () => {
     amount = 125,
   ) {
     return createPerformerPayment(db, {
+      method: "check",
       eventId,
       payeePerformerId,
       checkNumber: "1001",
@@ -143,5 +144,41 @@ describe("written-check discriminator + substitute", () => {
       const row = await db.query.bookings.findFirst({ where: eq(bookings.id, m.id) });
       expect(row?.status).toBe("proposed");
     }
+  });
+
+  // Feature 081 (FR-025, research R13): the substitute steps into the slot at its booked amount.
+  it("keeps the booked amount on an unpaid substitution", async () => {
+    const { b } = await bookOne(150);
+    const sub = await makePerformer("Sub Sue");
+    const { booking } = await substitutePerformer(db, b.id, sub.id);
+    expect(booking).toMatchObject({ payCents: 15000, isOverridden: true, requiresCheck: true });
+  });
+
+  it("books the substitute at the paid no-show's booked amount", async () => {
+    const { evt, p, b } = await bookOne(150);
+    await payLive(evt.id, p.id, b.id, 150);
+    const sub = await makePerformer("Sub Sue");
+    const { booking } = await substitutePerformer(db, b.id, sub.id);
+    expect(booking).toMatchObject({ payCents: 15000, isOverridden: true, requiresCheck: true });
+  });
+
+  it("books a donated slot's substitute at $0, not donated", async () => {
+    const evt = await makeEvent();
+    const p = await makePerformer("Dee Donor");
+    const b = await createBooking(db, evt.id, {
+      performerId: p.id,
+      performerType: "caller",
+      isDonated: true,
+    });
+    const sub = await makePerformer("Sub Sue");
+    const { booking } = await substitutePerformer(db, b.id, sub.id);
+    expect(booking).toMatchObject({ payCents: 0, isDonated: false, requiresCheck: false });
+  });
+
+  it("leaves the Booker's own re-point resetting to the standard rate", async () => {
+    const { b } = await bookOne(150);
+    const sub = await makePerformer("Sub Sue");
+    const repointed = await patchBooking(db, b.id, { performerId: sub.id });
+    expect(repointed).toMatchObject({ payCents: 0, isOverridden: false }); // no musician rate configured
   });
 });

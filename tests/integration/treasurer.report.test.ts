@@ -47,6 +47,7 @@ describe("GET /api/events/:id/treasurer-report", () => {
     });
     // Feature 019 US2: the report now derives performer lines from ACTUAL payments, not booked pay.
     await createPerformerPayment(db, {
+      method: "cash",
       eventId: evt.id,
       payeePerformerId: caller.id,
       lines: [{ bookingId: callerBooking.id, amount: 150 }],

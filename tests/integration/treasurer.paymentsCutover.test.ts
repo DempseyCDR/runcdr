@@ -25,6 +25,7 @@ describe("treasurer report — performer payments cutover parity", () => {
     });
     // The backfill's shape: payee = booked performer, same amount + check, linked to its one booking.
     await createPerformerPayment(db, {
+      method: "check",
       eventId: evt.id,
       payeePerformerId: caller.id,
       checkNumber: "1042",

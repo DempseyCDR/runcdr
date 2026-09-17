@@ -2,7 +2,7 @@
 import { apiFetch } from "@/app/apiFetch";
 import type { EventRow } from "@/app/EventSelector";
 import ContactName from "@/app/_components/ContactName";
-import EventConfirm from "./EventConfirm";
+import EventConfirm from "@/app/_components/EventConfirm";
 import AddContactDialog, { type CheckInResult } from "./AddContactDialog";
 import CheckedInDialog from "./CheckedInDialog";
 import styles from "./checkin.module.css";

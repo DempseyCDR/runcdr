@@ -3,6 +3,9 @@ import { apiFetch } from "@/app/apiFetch";
 import { EventSelector } from "@/app/EventSelector";
 import AttendanceBreakdownView from "@/app/_components/AttendanceBreakdownView";
 import type { AttendanceBreakdown } from "@/server/domain/attendance/breakdownService";
+import PaymentSummaryView from "@/app/_components/PaymentSummaryView";
+import type { PaymentSummary } from "@/server/domain/payments/paymentSummary";
+import type { PerformerCashLine } from "@/server/domain/door/doorRecordService";
 import type { MembershipLevel } from "@/server/db/schema/enums";
 import { MEMBERSHIP_LEVELS, MEMBERSHIP_LEVEL_LABELS } from "@/app/membershipLevels";
 
@@ -81,6 +84,10 @@ export default function GatePage() {
   const [deposit, setDeposit] = useState<number | null>(null);
   // Feature 079 (FR-027): the evening's attendance breakdown — the FS wants to see who came.
   const [breakdown, setBreakdown] = useState<AttendanceBreakdown | null>(null);
+  // Feature 081 (FR-005, FR-033): what the performers are owed, and the cash already paid to them tonight —
+  // entered on /payments, counted in the deposit, so the gate's own payout field is for other payouts only.
+  const [payments, setPayments] = useState<PaymentSummary | null>(null);
+  const [performerCash, setPerformerCash] = useState<PerformerCashLine[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   // contact search for adding a named line
   const [search, setSearch] = useState("");
@@ -94,6 +101,12 @@ export default function GatePage() {
       .then((d) => setCandidates(d.items ?? []));
   }, [search]);
 
+  async function loadPayments(forEventId: string) {
+    if (!forEventId) return setPayments(null);
+    const res = await apiFetch(`/api/events/${forEventId}/payment-summary`);
+    setPayments(res.ok ? ((await res.json()) as PaymentSummary) : null);
+  }
+
   async function loadBreakdown(forEventId: string) {
     if (!forEventId) return setBreakdown(null);
     const res = await apiFetch(`/api/events/${forEventId}/attendance-breakdown`);
@@ -105,6 +118,8 @@ export default function GatePage() {
     setDoorRecordId("");
     setDeposit(null);
     void loadBreakdown(selectedEventId);
+    void loadPayments(selectedEventId);
+    setPerformerCash([]);
     setMessage(null);
     setAnon(JSON.parse(JSON.stringify(emptyAnon)));
     setAnonNote("");
@@ -134,6 +149,7 @@ export default function GatePage() {
     setPosTxns(money(dr.posTransactionCount ?? 0));
     setCashPaidOut(money(dr.cashPaidOut ?? 0));
     setCashPaidOutReason(dr.cashPaidOutReason ?? "");
+    setPerformerCash(dr.performerCash ?? []);
     // D2: rebuild the anon + named sale lines from the persisted gate sales, so a re-save round-trips them
     // instead of wiping them (putGateSales is replace-all).
     const anonNext: AnonAmounts = JSON.parse(JSON.stringify(emptyAnon));
@@ -285,6 +301,8 @@ export default function GatePage() {
     const body = await res.json();
     setDeposit(body.deposit); // fee intentionally not returned
     void loadBreakdown(eventId); // comps and gift cards may have just changed
+    void loadPayments(eventId);
+    setPerformerCash(body.performerCash ?? performerCash);
     if (enrolled.length > 0) {
       setMessage(`Saved. Membership recorded: ${enrolledText(enrolled)}`);
     } else {
@@ -307,6 +325,7 @@ export default function GatePage() {
         <p style={{ color: "#666" }}>Door record open ({doorRecordId.slice(0, 8)}…)</p>
       )}
       {breakdown && <AttendanceBreakdownView breakdown={breakdown} />}
+      {payments && <PaymentSummaryView summary={payments} />}
 
       <h2>Anonymous gate sales</h2>
       <table>
@@ -477,9 +496,20 @@ export default function GatePage() {
         <label>
           Seed float <input value={seedFloat} onChange={(e) => setSeedFloat(e.target.value)} />
         </label>
+        {performerCash.length > 0 && (
+          <p style={{ margin: "4px 0" }}>
+            {`Paid to performers in cash: ${performerCash
+              .map((c) => `${c.payee} $${c.amount.toFixed(2)}`)
+              .join(", ")}`}
+          </p>
+        )}
         <label>
-          Cash paid out{" "}
-          <input value={cashPaidOut} onChange={(e) => setCashPaidOut(e.target.value)} />
+          Other cash paid out{" "}
+          <input
+            aria-label="Other cash paid out"
+            value={cashPaidOut}
+            onChange={(e) => setCashPaidOut(e.target.value)}
+          />
         </label>
         <label>
           Payout reason{" "}

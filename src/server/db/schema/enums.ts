@@ -46,6 +46,9 @@ export const gateCategoryEnum = pgEnum("gate_category", [
 
 export const paymentMethodEnum = pgEnum("payment_method", ["cash", "card"]);
 
+// Feature 081 (research R1): how a performer was paid — a numbered check, or cash from the evening's takings.
+export const performerPaymentMethodEnum = pgEnum("performer_payment_method", ["check", "cash"]);
+
 export const performerTypeEnum = pgEnum("performer_type", [
   "caller",
   "lead_musician",
@@ -75,6 +78,7 @@ export type EventStatus = (typeof eventStatusEnum.enumValues)[number];
 
 export type GateCategory = (typeof gateCategoryEnum.enumValues)[number];
 export type PaymentMethod = (typeof paymentMethodEnum.enumValues)[number];
+export type PerformerPaymentMethod = (typeof performerPaymentMethodEnum.enumValues)[number];
 
 export type EmailPurpose = (typeof emailPurposeEnum.enumValues)[number];
 export type EmailStatus = (typeof emailStatusEnum.enumValues)[number];

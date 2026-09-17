@@ -2,6 +2,8 @@ import { beforeAll, beforeEach, afterAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { ensureSchema, resetDb, closeDb, db } from "./helpers/db";
 import { makeContactWithEmail } from "./helpers/factories";
+import { jsonReq, ctx } from "./helpers/http";
+import { GET as PARKED } from "@/app/api/membership-captures/parked/route";
 import {
   createCapture,
   processNotification,
@@ -104,6 +106,11 @@ describe("online membership (capture + webhook)", () => {
     const parked = await listParkedNotifications(db);
     expect(parked).toHaveLength(1);
     expect(await db.select().from(membershipAccounts)).toHaveLength(0);
+
+    // Feature 081 (FR-029): gone from /payments, the worklist is still served for its future home (B52).
+    const res = await PARKED(jsonReq("GET", "/api/membership-captures/parked"), ctx());
+    expect(res.status).toBe(200);
+    expect((await res.json()).parked).toHaveLength(1);
   });
 
   it("an admin can link a parked notification to a contact → membership identical to auto-matched", async () => {

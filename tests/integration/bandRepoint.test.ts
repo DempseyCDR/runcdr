@@ -71,6 +71,7 @@ describe("band re-point", () => {
         .where(and(eq(bookings.eventId, evt.id), eq(bookings.performerId, aLead.id)))
     )[0]!;
     await createPerformerPayment(db, {
+      method: "check",
       eventId: evt.id,
       payeePerformerId: aLead.id,
       checkNumber: "2001",

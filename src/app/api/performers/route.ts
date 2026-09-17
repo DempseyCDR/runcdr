@@ -11,8 +11,11 @@ import {
 
 // Feature 020 US2: `?q=` narrows to matching performers (typeahead); omitted → the full list.
 export const GET = withAuth({ requires: "base" }, async (req) => {
-  const q = new URL(req.url).searchParams.get("q");
-  const items = q !== null ? await searchPerformers(db, q) : await listPerformers(db);
+  const params = new URL(req.url).searchParams;
+  const q = params.get("q");
+  // Feature 081: `&eventId=` marks who is already booked on that event (the Add dialog).
+  const eventId = params.get("eventId") ?? undefined;
+  const items = q !== null ? await searchPerformers(db, q, 20, eventId) : await listPerformers(db);
   return NextResponse.json({ items });
 });
 

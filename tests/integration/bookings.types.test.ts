@@ -23,17 +23,20 @@ describe("booking type rules", () => {
     return res;
   }
 
-  it("forces Instructor and Open Band to $0 / no check", async () => {
+  // Feature 081 (FR-009): no longer forced to $0 — free unless given a pay, then payable.
+  it("books Instructor and Open Band free by default, and payable when given a pay", async () => {
     const evt = await makeEvent();
-    const instr = await book(evt.id, "instructor", { pay: 100 });
-    const ib = await instr.json();
-    expect(ib.payCents).toBe(0);
-    expect(ib.requiresCheck).toBe(false);
+    const free = await (await book(evt.id, "instructor", {})).json();
+    expect(free.payCents).toBe(0);
+    expect(free.requiresCheck).toBe(false);
 
-    const open = await book(evt.id, "open_band_musician", { pay: 50 });
-    const ob = await open.json();
-    expect(ob.payCents).toBe(0);
-    expect(ob.requiresCheck).toBe(false);
+    const instr = await (await book(evt.id, "instructor", { pay: 100 })).json();
+    expect(instr.payCents).toBe(10000);
+    expect(instr.requiresCheck).toBe(true);
+
+    const open = await (await book(evt.id, "open_band_musician", { pay: 50 })).json();
+    expect(open.payCents).toBe(5000);
+    expect(open.requiresCheck).toBe(true);
   });
 
   it("makes a paid Caller require a check", async () => {
