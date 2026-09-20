@@ -2,72 +2,280 @@
 import { apiFetch } from "@/app/apiFetch";
 import { EventSelector } from "@/app/EventSelector";
 import AttendanceBreakdownView from "@/app/_components/AttendanceBreakdownView";
-import type { AttendanceBreakdown } from "@/server/domain/attendance/breakdownService";
-import type { PaymentReportLine, TreasurerReport } from "@/server/domain/treasurer/reportService";
+import { to12Hour } from "@/app/_components/EventConfirm";
+import type { TreasurerReport } from "@/server/domain/treasurer/reportService";
+import styles from "./treasurer.module.css";
 
 import { useCallback, useEffect, useState } from "react";
 
-type Line = {
-  category: string;
-  class: string;
-  cash: number;
-  card: number;
-  total: number;
-};
-type Report = {
-  event: { id: string; date: string; seriesKey: string };
-  gateSalesSummary: {
-    customer: string;
-    posVerification: { gross: number; fee: number };
-    lines: Line[];
-  };
-  namedCustomerReceipts: {
-    kind: string;
-    contact: string;
-    contactId: string | null;
-    class: string;
-    amount: number;
-  }[];
-  bills: { vendor: string; class: string; amount: number }[];
-  performerPayments: {
-    payee: string;
-    amount: number;
-    class: string;
-    checkNumber: string | null;
-  }[];
-  deposit: { amount: number };
-  fees: { doorFee: number; onlineFee: number; total: number };
-  compCount: number;
-  giftCardRedemptionCount: number;
-  attendance: AttendanceBreakdown;
-} & Pick<TreasurerReport, "checks" | "cashPayments" | "otherCashPaidOut" | "paidElsewhere">;
+type Report = Pick<
+  TreasurerReport,
+  | "header"
+  | "attendance"
+  | "recordedBy"
+  | "receipts"
+  | "expenses"
+  | "card"
+  | "deposits"
+  | "eveningNote"
+  | "paidElsewhere"
+  | "paidTonightForEarlier"
+>;
 
-const money = (n: number) => `$${n.toFixed(2)}`;
+/** Dollars as the report reads them; a shortfall is "−$15.00". */
+const money = (n: number) => `${n < 0 ? "−" : ""}$${Math.abs(n).toFixed(2)}`;
+/** A column's figure, or nothing — the paper report leaves an unused column blank. */
+const cell = (n: number) => (n ? money(n) : "");
+
+const CATEGORY_LABEL: Record<string, string> = {
+  admission: "Admission",
+  merchandise: "Merchandise",
+  gift_card: "Gift cards sold",
+  misc_sales: "Other items",
+  donation: "Donation",
+  future_event: "Future event",
+  membership: "Membership",
+};
+
+const ROLE_LABEL: Record<string, string> = {
+  caller: "Caller",
+  lead_musician: "Lead musician",
+  musician: "Musician",
+  open_band_musician: "Open band",
+  sound_tech: "Sound tech",
+  instructor: "Instructor",
+};
+
+/** Feature 082 (FR-032): what a deposit is made of, in the words of the slip. */
+function makeUpOf(m: Extract<Report["deposits"][number], { kind: "main" }>["makeUp"]): string {
+  return [
+    `counted cash ${money(m.countedCash)}`,
+    `less cash box seed ${money(m.seedFloat)}`,
+    ...(m.otherPaidOut ? [`less paid out ${money(m.otherPaidOut)}`] : []),
+    ...(m.performerCash ? [`less performers ${money(m.performerCash)}`] : []),
+    ...(m.checks ? [`plus checks ${money(m.checks)}`] : []),
+  ].join(", ");
+}
 
 /**
- * Feature 081 (FR-028): what a payment paid — each booking's booked and paid amounts where they differ, the
- * event a booking was at when it was not this one, and Mary's note when there is a difference.
+ * A note beneath its line (research R18). `indent` leaves that many columns empty first, so a receipt's
+ * note starts where the name does; the note itself runs to the end of the row.
  */
-function PaidLines({ payment }: { payment: PaymentReportLine }) {
-  const shown = payment.lines.filter((l) => l.paid !== l.booked || l.eventDate);
-  const differs = payment.lines.some((l) => l.paid !== l.booked);
-  if (shown.length === 0) return null;
-  return (
-    <div style={{ color: "#555", fontSize: "0.9em" }}>
-      {shown.map((l, i) => (
-        <div key={i}>
-          {l.paid !== l.booked
-            ? `${l.performer}: booked ${money(l.booked)} · paid ${money(l.paid)}`
-            : `${l.performer}: ${money(l.paid)}`}
-          {l.eventDate ? ` — for the ${l.eventDate} event` : ""}
-        </div>
+function NoteRows({ notes, span, indent = 0 }: { notes: string[]; span: number; indent?: number }) {
+  return notes.map((n, i) => (
+    <tr key={i} className={styles.noteRow}>
+      {Array.from({ length: indent }, (_, c) => (
+        <td key={c} />
       ))}
-      {differs && payment.note && <div>{payment.note}</div>}
+      <td colSpan={span - indent}>{n}</td>
+    </tr>
+  ));
+}
+
+/** Line 1: the evening and whose it was. Line 2: who recorded it and who came. */
+function Heading({ report }: { report: Report }) {
+  const h = report.header;
+  const first = [
+    [h.date, to12Hour(h.startTime)].filter(Boolean).join(" "),
+    h.title,
+    h.venue,
+    h.band ?? (h.musicians.join(", ") || null),
+    h.caller && `caller ${h.caller}`,
+    h.soundTech && `sound ${h.soundTech}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const { gateMoney, performerPayments } = report.recordedBy;
+  const recorded =
+    gateMoney === performerPayments || !performerPayments
+      ? (gateMoney ?? "no one yet")
+      : `${gateMoney ?? "no one"} (money) · ${performerPayments} (payments)`;
+  return (
+    <div role="group" aria-label="The evening" className={styles.heading}>
+      <p className={styles.headLine}>{first}</p>
+      <div className={styles.headLine}>
+        <span>Recorded by {recorded}</span>
+        <AttendanceBreakdownView breakdown={report.attendance} />
+        <span>Total {report.attendance.attendance}</span>
+      </div>
     </div>
   );
 }
 
-// Feature 028 (P5-R1): the treasurer report is now a single `/treasurer` page with the shared event selector
+function Receipts({ receipts }: { receipts: Report["receipts"] }) {
+  return (
+    <section aria-labelledby="report-receipts" className={styles.section}>
+      <h2 id="report-receipts">Receipts</h2>
+      <table aria-label="Receipts" className={styles.table}>
+        <thead>
+          <tr>
+            <th className={styles.qty}>Qty</th>
+            <th>Name</th>
+            <th className={styles.amount}>Cash</th>
+            <th className={styles.amount}>Check</th>
+            <th className={styles.amount}>Card</th>
+          </tr>
+        </thead>
+        <tbody>
+          {receipts.lines.map((l, i) => {
+            const what = `${CATEGORY_LABEL[l.category] ?? l.category}${l.level ? ` (${l.level})` : ""}`;
+            // Who else a membership covers, read from the payer's account (the quickstart walk, §3.3).
+            const withWhom =
+              l.members.length > 0
+                ? `, with ${l.members.slice(0, -1).join(", ")}${l.members.length > 1 ? " and " : ""}${l.members.at(-1)}`
+                : "";
+            return [
+              <tr key={i}>
+                <td className={styles.qty}>{l.quantity ?? ""}</td>
+                <td>{`${what}${l.name ? ` — ${l.name}` : ""}${withWhom}${l.for ? `, for ${l.for}` : ""}`}</td>
+                <td className={styles.amount}>{cell(l.cash)}</td>
+                <td className={styles.amount}>{cell(l.check)}</td>
+                <td className={styles.amount}>{cell(l.card)}</td>
+              </tr>,
+              <NoteRows key={`${i}n`} notes={l.notes} span={5} indent={1} />,
+            ];
+          })}
+          <tr>
+            <td />
+            <td>Admission</td>
+            <td className={styles.amount}>{cell(receipts.admission.cash)}</td>
+            <td />
+            <td className={styles.amount}>{cell(receipts.admission.card)}</td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <th colSpan={2}>Totals</th>
+            <td className={styles.amount}>{money(receipts.totals.cash)}</td>
+            <td className={styles.amount}>{money(receipts.totals.check)}</td>
+            <td className={styles.amount}>{money(receipts.totals.card)}</td>
+          </tr>
+          <tr>
+            <th colSpan={2}>Total receipts</th>
+            <td colSpan={3} className={styles.amount}>
+              {money(receipts.totals.total)}
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+    </section>
+  );
+}
+
+function Expenses({ expenses }: { expenses: Report["expenses"] }) {
+  const { payments, otherPaidOut, totals, rent } = expenses;
+  const empty = payments.length === 0 && otherPaidOut.amount === 0 && rent.amount === 0;
+  return (
+    <section aria-labelledby="report-expenses" className={styles.section}>
+      <h2 id="report-expenses">Expenses</h2>
+      {empty ? (
+        <p className={styles.quiet}>None</p>
+      ) : (
+        <table aria-label="Expenses" className={styles.table}>
+          <thead>
+            <tr>
+              <th>Role</th>
+              <th>Name</th>
+              <th>Check #</th>
+              <th className={styles.amount}>Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {payments.map((p, i) => [
+              <tr key={i} className={p.voided ? styles.voided : undefined}>
+                <td>{p.role ? ROLE_LABEL[p.role] : ""}</td>
+                <td>{p.payee}</td>
+                <td>{p.cash ? "cash" : p.checkNumber}</td>
+                <td className={styles.amount}>{money(p.amount)}</td>
+              </tr>,
+              <NoteRows key={`${i}n`} notes={p.notes} span={4} />,
+            ])}
+            {otherPaidOut.amount > 0 && (
+              <>
+                <tr>
+                  <td />
+                  <td>Other cash paid out</td>
+                  <td>cash</td>
+                  <td className={styles.amount}>{money(otherPaidOut.amount)}</td>
+                </tr>
+                <NoteRows notes={otherPaidOut.reason ? [otherPaidOut.reason] : []} span={4} />
+              </>
+            )}
+          </tbody>
+          <tfoot>
+            <tr>
+              <th>Totals</th>
+              <td colSpan={2}>{`checks ${money(totals.check)} · cash ${money(totals.cash)}`}</td>
+              <td className={styles.amount}>{money(totals.total)}</td>
+            </tr>
+            {/* Rent is owed, not paid at the gate, so it stands outside the totals (B54). */}
+            {rent.amount > 0 && (
+              <tr>
+                <td>Rent</td>
+                <td>{rent.vendor}</td>
+                <td>unpaid</td>
+                <td className={styles.amount}>{money(rent.amount)}</td>
+              </tr>
+            )}
+          </tfoot>
+        </table>
+      )}
+    </section>
+  );
+}
+
+function Deposits({ report }: { report: Report }) {
+  const { card } = report;
+  return (
+    <section aria-labelledby="report-deposits" className={styles.section}>
+      <h2 id="report-deposits">Deposits</h2>
+      <ul className={styles.list}>
+        {report.deposits.map((d, i) =>
+          d.kind === "main" ? (
+            <li key={i} aria-label="Main deposit">
+              <strong>Main deposit</strong> — {money(d.amount)} → ESL Checking
+              <div className={styles.quiet}>{makeUpOf(d.makeUp)}</div>
+            </li>
+          ) : (
+            <li key={i} aria-label={`Check from ${d.writer}`}>
+              <strong>Check from {d.writer}</strong> — {money(d.amount)} → ESL Checking, deposited
+              on its own
+            </li>
+          ),
+        )}
+      </ul>
+      <p>{`Card: gross ${money(card.gross)} · ${card.transactions} transactions · fee ${money(card.fee)}`}</p>
+    </section>
+  );
+}
+
+function Notes({ report }: { report: Report }) {
+  const { eveningNote, paidElsewhere, paidTonightForEarlier } = report;
+  const bookings = [
+    ...paidElsewhere.map(
+      (p) => `${p.performer} — ${money(p.amount)} — paid at the ${p.eventDate} event`,
+    ),
+    ...paidTonightForEarlier.map(
+      (p) => `${p.performer} — ${money(p.amount)} — for the ${p.eventDate} event, paid tonight`,
+    ),
+  ];
+  return (
+    <section aria-labelledby="report-notes" className={styles.section}>
+      <h2 id="report-notes">Notes</h2>
+      {eveningNote && <p className={styles.eveningNote}>{eveningNote}</p>}
+      {bookings.length > 0 && (
+        <ul aria-label="Bookings paid at another evening" className={styles.list}>
+          {bookings.map((b, i) => (
+            <li key={i}>{b}</li>
+          ))}
+        </ul>
+      )}
+      {!eveningNote && bookings.length === 0 && <p className={styles.quiet}>None</p>}
+    </section>
+  );
+}
+
+// Feature 028 (P5-R1): the treasurer report is a single `/treasurer` page with the shared event selector
 // (in-page state — the event is no longer a `[eventId]` URL param; the old `/treasurer/latest` nav entry is
 // fixed to point here). The selector defaults to the most recent event ≤ today; the report loads on select
 // and reloads when the selected event changes.
@@ -97,8 +305,10 @@ export default function TreasurerReportPage() {
   }, [load]);
 
   return (
-    <main style={{ padding: 24, maxWidth: 820 }}>
-      <h1>Treasurer Report</h1>
+    <main className={styles.page}>
+      {/* Feature 082 (FR-031, research R18, R19): the evening's gate report, laid out as the paper one —
+          receipts on the left, expenses on the right — for a laptop, and printed on landscape letter. */}
+      <h1>Gate report</h1>
       <EventSelector value={eventId} onSelect={(e) => setEventId(e.id)} />
 
       {error && <p role="alert">Error: {error}</p>}
@@ -106,140 +316,21 @@ export default function TreasurerReportPage() {
 
       {report && (
         <>
-          <h2>
-            {report.event.date} ({report.event.seriesKey})
-          </h2>
+          <article aria-label="Gate report" data-printable-report className={styles.report}>
+            <Heading report={report} />
+            <div className={styles.columns}>
+              <div role="group" aria-label="Receipts and deposits" data-column="left">
+                <Receipts receipts={report.receipts} />
+                <Deposits report={report} />
+              </div>
+              <div role="group" aria-label="Expenses and notes" data-column="right">
+                <Expenses expenses={report.expenses} />
+                <Notes report={report} />
+              </div>
+            </div>
+          </article>
 
-          {/* Feature 079 (FR-027): the evening's attendance breakdown — the same figures as the door and the
-              gate page. Its comps and gift cards are feature 040's reconciliation counts (P6-R9). */}
-          <AttendanceBreakdownView breakdown={report.attendance} />
-
-          {/* Feature 040 (P6-R8): sections read in QBO data-entry order — Sales Receipts → Bills →
-              Performer Payments → Deposit → Fees. */}
-          <h2>Sales Receipts</h2>
-
-          <h3>Gate Sales Summary — {report.gateSalesSummary.customer}</h3>
-          <p>
-            Card verification: gross {money(report.gateSalesSummary.posVerification.gross)} · fee{" "}
-            {money(report.gateSalesSummary.posVerification.fee)}
-          </p>
-          <table>
-            <thead>
-              <tr>
-                <th>Category</th>
-                <th>Class</th>
-                <th>Cash</th>
-                <th>Card</th>
-                <th>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {report.gateSalesSummary.lines.map((l) => (
-                <tr key={l.category}>
-                  <td>{l.category}</td>
-                  <td>{l.class}</td>
-                  <td>{money(l.cash)}</td>
-                  <td>{money(l.card)}</td>
-                  <td>{money(l.total)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <h3>Named-Customer Receipts</h3>
-          <ul>
-            {report.namedCustomerReceipts.map((r, i) => (
-              <li key={`${r.kind}:${r.contactId ?? i}`}>
-                {r.kind} — <strong>{r.contact}</strong> — {money(r.amount)} ({r.class})
-              </li>
-            ))}
-            {report.namedCustomerReceipts.length === 0 && <li style={{ color: "#888" }}>None</li>}
-          </ul>
-
-          <h2>Bills</h2>
-          <p style={{ color: "#888", marginTop: 0 }}>
-            To record in QBO — not paid through the Financial Secretary.
-          </p>
-          <table>
-            <thead>
-              <tr>
-                <th>Vendor</th>
-                <th>Class</th>
-                <th>Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {report.bills.map((b, i) => (
-                <tr key={i}>
-                  <td>{b.vendor}</td>
-                  <td>{b.class}</td>
-                  <td>{money(b.amount)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {/* Feature 081 (FR-027): every check — live and voided — in check-number order. */}
-          <h2>Performer Payments</h2>
-          <ul aria-label="Checks">
-            {report.checks.map((c) => (
-              <li key={c.checkNumber}>
-                <strong>#{c.checkNumber}</strong> — {c.payee} — {money(c.amount)} ({c.class})
-                {c.voided && (
-                  <div style={{ color: "#a15c00" }}>
-                    {`Voided — ${c.voidReason ?? "no reason"}${c.replacedBy ? ` · replaced by #${c.replacedBy}` : ""}`}
-                  </div>
-                )}
-                <PaidLines payment={c} />
-              </li>
-            ))}
-            {report.checks.length === 0 && <li style={{ color: "#888" }}>No checks</li>}
-          </ul>
-          {report.paidElsewhere.length > 0 && (
-            <>
-              <h3>Paid at another event</h3>
-              <ul aria-label="Paid at another event">
-                {report.paidElsewhere.map((p, i) => (
-                  <li key={i}>
-                    {`${p.performer} — ${money(p.amount)} — paid at the ${p.eventDate} event`}
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-
-          {/* Feature 081 (FR-033, FR-038): cash out of the takings — to performers, and everything else. */}
-          <section aria-label="Cash paid out">
-            <h2>Cash paid out</h2>
-            <ul>
-              {report.cashPayments.map((c, i) => (
-                <li key={i}>
-                  <span>{`${c.payee} — ${money(c.amount)}`}</span>
-                  <PaidLines payment={c} />
-                </li>
-              ))}
-              {report.otherCashPaidOut.amount > 0 && (
-                <li>
-                  {`Other cash paid out: ${money(report.otherCashPaidOut.amount)}${
-                    report.otherCashPaidOut.reason ? ` — ${report.otherCashPaidOut.reason}` : ""
-                  }`}
-                </li>
-              )}
-              {report.cashPayments.length === 0 && report.otherCashPaidOut.amount === 0 && (
-                <li style={{ color: "#888" }}>None</li>
-              )}
-            </ul>
-          </section>
-
-          <h2>Deposit</h2>
-          <p>{money(report.deposit.amount)} → ESL Checking</p>
-
-          <h2>Fees (informational)</h2>
-          <p>
-            Door {money(report.fees.doorFee)} · Online {money(report.fees.onlineFee)} · Total{" "}
-            {money(report.fees.total)}
-          </p>
-
-          <button onClick={() => window.print()} style={{ marginTop: 16 }}>
+          <button type="button" onClick={() => window.print()} className={styles.printButton}>
             Print
           </button>
         </>

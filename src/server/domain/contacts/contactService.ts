@@ -11,9 +11,12 @@ import {
   attendance,
   contactEmails,
   contacts,
+  doorRecords,
+  gateChecks,
   gateSales,
   membershipCaptures,
   officers,
+  performerPayments,
   performers,
   roleGrants,
   staffIdentities,
@@ -570,6 +573,39 @@ export const CONTACT_DELETE_BLOCKERS = [
     column: contacts.volunteerApprovedBy,
     always: true,
   },
+  // Feature 082 (FR-033): recording the gate money, a sale, a check or a payment is acting as staff.
+  {
+    category: "staff_history",
+    table: gateSales,
+    column: gateSales.recordedByContactId,
+    always: true,
+  },
+  {
+    category: "staff_history",
+    table: gateChecks,
+    column: gateChecks.recordedByContactId,
+    always: true,
+  },
+  {
+    category: "staff_history",
+    table: doorRecords,
+    column: doorRecords.moneyRecordedByContactId,
+    always: true,
+  },
+  {
+    category: "staff_history",
+    table: performerPayments,
+    column: performerPayments.recordedByContactId,
+    always: true,
+  },
+  // Feature 082 (FR-015, FR-038): a check's writer. `always` — the column is NOT NULL, and the books credit
+  // the check to that person for as long as the gate record is kept, so no delete may take it.
+  {
+    category: "check_writer",
+    table: gateChecks,
+    column: gateChecks.writerContactId,
+    always: true,
+  },
 ] as const;
 
 type Blocker = (typeof CONTACT_DELETE_BLOCKERS)[number];
@@ -594,6 +630,7 @@ const BLOCKER_LABELS: Record<string, string> = {
   membership_account: "a membership account",
   merged_contacts: "other contacts merged into it",
   staff_history: "a history of acting as staff",
+  check_writer: "checks they wrote at the door",
 };
 
 export const blockerLabel = (category: string): string => BLOCKER_LABELS[category] ?? category;

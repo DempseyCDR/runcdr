@@ -7,7 +7,7 @@ import styles from "./EventConfirm.module.css";
 type SeriesRow = { id: string; key: string; name: string };
 
 /** The DB `time` column round-trips as HH:MM:SS; feature 081 shows it on a 12-hour clock ("7:30 PM"). */
-function to12Hour(t: string | null): string {
+export function to12Hour(t: string | null): string {
   if (!t) return "";
   const m = /^(\d{2}):(\d{2})/.exec(t);
   if (!m) return t;

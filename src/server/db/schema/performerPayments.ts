@@ -3,6 +3,7 @@ import { boolean, integer, pgTable, primaryKey, text, timestamp, uuid } from "dr
 import { events } from "./events";
 import { performers } from "./performers";
 import { bookings } from "./bookings";
+import { contacts } from "./contacts";
 import { performerPaymentMethodEnum } from "./enums";
 
 /**
@@ -31,6 +32,10 @@ export const performerPayments = pgTable("performer_payments", {
   replacesPaymentId: uuid("replaces_payment_id").references(
     (): AnyPgColumn => performerPayments.id,
   ),
+  // Feature 082 (FR-033/FR-034): the last person to record or change this payment, so the gate report can
+  // name who filled the payments in. A column, not a scan of the audit trail — the report reads it in one
+  // query (research R7).
+  recordedByContactId: uuid("recorded_by_contact_id").references(() => contacts.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

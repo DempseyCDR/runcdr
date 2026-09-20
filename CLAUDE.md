@@ -1,7 +1,7 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at specs/081-payments-page-update/plan.md
+at specs/082-fs-gate-updates/plan.md
 <!-- SPECKIT END -->
 
 ## Development conventions

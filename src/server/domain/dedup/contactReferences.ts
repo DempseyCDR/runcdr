@@ -5,6 +5,8 @@ import {
   contactEmails,
   contacts,
   dedupRejections,
+  doorRecords,
+  gateChecks,
   gateSales,
   heldMerges,
   membershipAccounts,
@@ -12,6 +14,7 @@ import {
   membershipMembers,
   mergeAudit,
   officers,
+  performerPayments,
   performers,
   roleGrants,
   staffIdentities,
@@ -87,7 +90,7 @@ export type ContactReference =
   | (ContactReferenceBase & { disposition: "leave" | "structural"; pk?: never });
 
 export const CONTACT_REFERENCES: readonly ContactReference[] = [
-  // ---------------------------------------------------------------- move (11)
+  // ---------------------------------------------------------------- move (12)
   {
     table: "contact_emails",
     column: "contact_id",
@@ -150,6 +153,16 @@ export const CONTACT_REFERENCES: readonly ContactReference[] = [
       "from the performer mailing list, and let the open-band guard double-subtract them.",
   },
   {
+    table: "gate_checks",
+    column: "writer_contact_id",
+    disposition: "move",
+    col: gateChecks.writerContactId,
+    pk: [gateChecks.id],
+    why:
+      "Feature 082: a check they wrote at the door. The books credit it to its writer, so it is a " +
+      "receipt that belongs to the person, like a named gate sale.",
+  },
+  {
     table: "officers",
     column: "contact_id",
     disposition: "move",
@@ -188,7 +201,7 @@ export const CONTACT_REFERENCES: readonly ContactReference[] = [
       "record has it, it moves.",
   },
 
-  // --------------------------------------------------------------- leave (12)
+  // --------------------------------------------------------------- leave (16)
   {
     table: "status_change_audit",
     column: "contact_id",
@@ -276,6 +289,37 @@ export const CONTACT_REFERENCES: readonly ContactReference[] = [
     why:
       "Who granted the role — the other reference on this table, and the opposite disposition to " +
       "`role_grants.contact_id` above. This is why the classification is per column.",
+  },
+
+  // Feature 082 (FR-033, research R7): who recorded the gate money, a sale, a check or a payment. The
+  // gate report names them; the survivor did not record any of it.
+  {
+    table: "gate_sales",
+    column: "recorded_by_contact_id",
+    disposition: "leave",
+    col: gateSales.recordedByContactId,
+    why: "Who recorded the sale — the volunteer at the door or the gate, not the buyer.",
+  },
+  {
+    table: "gate_checks",
+    column: "recorded_by_contact_id",
+    disposition: "leave",
+    col: gateChecks.recordedByContactId,
+    why: "Who recorded the check — not its writer, which is the reference that moves.",
+  },
+  {
+    table: "door_records",
+    column: "money_recorded_by_contact_id",
+    disposition: "leave",
+    col: doorRecords.moneyRecordedByContactId,
+    why: "Who last saved the evening's money, as the gate report names them.",
+  },
+  {
+    table: "performer_payments",
+    column: "recorded_by_contact_id",
+    disposition: "leave",
+    col: performerPayments.recordedByContactId,
+    why: "Who recorded or last changed the payment, as the gate report names them.",
   },
 
   // ---------------------------------------------------------- structural (1)

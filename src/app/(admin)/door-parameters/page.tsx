@@ -7,7 +7,7 @@ type Series = { id: string; key: string; name: string };
 type Resolved = { seriesKey: string; amount: number; effectiveDate: string } | null;
 
 /**
- * Feature 019 US5 (FR-021): the per-series door seed float — the cash in the till before the doors open.
+ * Feature 019 US5 (FR-021): the per-series cash box seed — the cash in the till before the doors open.
  * Effective-dated and audited like rates/expenses; a new door record opens at the value in effect on the
  * event date (the FS can still override it per night). Unconfigured series fall back to the $15 default.
  */
@@ -53,13 +53,13 @@ export default function DoorParametersPage() {
       return;
     }
     setAmount("");
-    setMessage("Seed float saved");
+    setMessage("Cash box seed saved");
     void loadResolved();
   }
 
   return (
     <main style={{ padding: 24, maxWidth: 480 }}>
-      <h1>Door seed float</h1>
+      <h1>Door cash box seed</h1>
       <p style={{ color: "#666" }}>
         Effective-dated, per series; a new door record opens at the value in effect on the event
         date. The FS may still override it per night. Unset series use the $15 default.
@@ -77,7 +77,7 @@ export default function DoorParametersPage() {
           </select>
         </label>
         <input
-          placeholder="Seed float (dollars)"
+          placeholder="Cash box seed (dollars)"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
         />
@@ -86,18 +86,18 @@ export default function DoorParametersPage() {
           value={effectiveDate}
           onChange={(e) => setEffectiveDate(e.target.value)}
         />
-        <button type="submit">Save seed float</button>
+        <button type="submit">Save the cash box seed</button>
         {message && <p>{message}</p>}
       </form>
 
       <h2>Currently in effect (on {effectiveDate})</h2>
       {resolved ? (
         <p>
-          Seed float: <strong>${resolved.amount.toFixed(2)}</strong>
+          Cash box seed: <strong>${resolved.amount.toFixed(2)}</strong>
         </p>
       ) : (
         <p style={{ color: "#777" }}>
-          No seed float configured for this series/date — $15 default applies.
+          No cash box seed configured for this series/date — $15 default applies.
         </p>
       )}
     </main>

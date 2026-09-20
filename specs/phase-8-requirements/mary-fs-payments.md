@@ -17,7 +17,8 @@ is given. Earlier thinking on the payment model lives in `runcdr_Phase4_FS_Payme
    (`specs/080-fix-gate-membership-level/`).
 2. **`/payments`** — MARY-R3, R4, R6, R7, R9, R11–R14, R17–R19 and X-P1. **Delivered by feature 081**
    (`specs/081-payments-page-update/`), with R1 and R2 for `/payments` and R14 on both pages.
-3. **`/gate` and named sales** — MARY-R8, R15, R16 (and MEG-R11 at the door).
+3. **`/gate` and named sales** — MARY-R8, R15, R16, **R20** (checks received) and R21 (the treasurer page as
+   the gate report), with MEG-R11 at the door.
 
 Features 2 and 3 share MARY-R1 (mobile-first), R2 (the event confirmation) and R14 (the summary line).
 
@@ -101,6 +102,11 @@ Features 2 and 3 share MARY-R1 (mobile-first), R2 (the event confirmation) and R
     corrected and removed **one at a time** (from this dialog and from the named-sale list on
     `/gate`), and the gate's Save covers only the anonymous sales and the money totals.
   - A membership sale creates or renews the membership as soon as it is saved, as `/gate` does today.
+  - **Every named sale takes a note** _(resolved 2026-09-17)_. A free-text note on each named sale — and so on
+    each line of a check received (MARY-R20) — for what only the desk knows: **which future event** the payment
+    is for, **who else is on** a membership, **what a donation is for**. The note is shown wherever the sale is:
+    on `/gate`, in the sale's dialog and on the gate report. Today only the anonymous-sales section has a
+    comment, and a named line has none.
 
 - **MARY-R9 — One check per booking; a second check to the same performer needs confirming.**
   _(Raised 2026-09-15.)_
@@ -210,7 +216,8 @@ Features 2 and 3 share MARY-R1 (mobile-first), R2 (the event confirmation) and R
   cash". Nothing it holds is saved (feature 031).
   - **Q14 — Denominations** _(resolved 2026-09-16)_. Keep today's bills; coins as one dollar total, as today;
     add $2 bills only if the club sees them.
-  - **Q15 — Checks from dancers** _(resolved 2026-09-16: YAGNI for now)_. Checks stay one dollar total, as
+  - **Q15 — Checks from dancers** _(resolved 2026-09-16: YAGNI for now — **reversed 2026-09-17, see
+    MARY-R20**; the helper counts bills and coins only)_. Checks stay one dollar total, as
     today, rather than listed one by one. The club's bank (ESL FCU) takes a deposit slip with **only a cash
     total and the checks**, whose amounts Mary copies from the checks themselves, and passes **only the
     deposit total** to QBO — so nothing downstream needs the checks or the bills listed in the app.
@@ -236,6 +243,55 @@ Features 2 and 3 share MARY-R1 (mobile-first), R2 (the event confirmation) and R
   at the event may be paid at a later one. From the later event's page, Mary pays the earlier booking;
   the payment belongs to the evening the money comes from, and the earlier event shows the booking
   "Paid at {date}". Today the server allows it but no screen does.
+
+- **MARY-R20 — Checks received at the gate, recorded one by one.** _(Raised 2026-09-16, after the
+  Treasurer's answer; resolved 2026-09-17.)_ Michael (Treasurer) wrote that each check **must** be recorded on
+  the gate report: whose check it is and what it pays for. One check often pays for several things — admission
+  for several people, or a T-shirt and admission. In QBO a check is credited to its writer while cash goes to the
+  gate customer ("Contra Gate Admission"); both go to undeposited funds, and a third entry moves them to the
+  bank to match the actual deposit. The deposit slip cannot say who paid for what, so the gate report does, and
+  he goes back to it — usually within two years — to correct the books. He prefers large or unusual checks
+  deposited separately.
+  - **The writer.** A check records who wrote it, as a **contact**; someone not yet a contact is **added to the
+    contacts** first.
+  - **What it pays for.** One or more lines, each with its amount: **admission** (with the number of people it
+    covers), a membership (whose, at which level), a donation or future event (whose), and the other sales
+    (merchandise, gift cards, misc). A named sale paid by check is a line on that check — the named-sale dialog
+    (MARY-R8) and the check entry are one dialog.
+  - **Out of the cash count.** Checks are no longer part of gross cash; the counting helper (MARY-R16) counts
+    bills and coins. Admission is cash admission (derived, as today) plus admission paid by check plus card.
+  - **Who enters them.** Meg may record a check as a named sale as it is handed over, or leave it to Mary; Mary
+    reviews and completes the checks on `/gate`.
+  - **Deposits.** Mary sees a **deposit separately** tick on each check. Both `/gate` and `/treasurer` list
+    **each deposit**: the evening's main deposit (cash and the other checks) and one per check deposited
+    separately.
+  - **Notes.** Each check has a free-text note, and the evening has one, replacing the paper report's freehand
+    notes.
+  - **Kept.** Gate records, checks included, are kept — never purged.
+  - **No check number** _(resolved 2026-09-17)_. A received check's number is not recorded: the bank does not
+    show the check images, and Mary takes the deposits to the bank, so the Treasurer never sees the physical
+    checks (unless he fills in for her).
+
+- **MARY-R22 — Paying an unconfirmed performer confirms the booking.** _(Resolved 2026-09-17.)_ Confirming
+  performers is the Booker's job, but a performer who turns up and plays has plainly confirmed: when Mary
+  records a payment for a booking that is still **proposed, requested or tentative**, the booking becomes
+  **confirmed**. It is a settlement fact, not a lifecycle step, so it applies however the payment is recorded
+  and does not need the Booker. A **declined** booking stays declined even when a live check settles it — that
+  is the no-show kept when someone substituted (feature 024), and they did not play. Voiding or deleting the
+  payment afterwards does not put the status back.
+
+- **MARY-R21 — The treasurer page is the new gate report.** _(Raised 2026-09-17.)_ `/treasurer` becomes the
+  gate report transmitted to the Treasurer, replacing the paper report and its binder: the evening's money,
+  each check with its writer and lines (MARY-R20), cash to the gate customer, the performer payments, and each
+  deposit. It names **who recorded** the performer payments and the gate money, so Mike knows whom to ask. (Today
+  the audit trail does not say who: the door record's history rows and the payment log lines carry a placeholder
+  actor ("door", "admin") because the pages never send one, and only a payment deletion (feature 081) records
+  the signed-in person. The gate feature records the signed-in person on every gate save and payment write, in
+  the audit table, and the report reads it from there.)
+  - **Layout** _(resolved 2026-09-17)_. Unlike Mary's pages, the gate report is **laptop-first**, with a print
+    layout for **landscape letter** paper. A phone layout — **844 × 390** (a phone held sideways) and smaller
+    type — is a nice-to-have. `/payments` and `/gate` stay separate pages for Mary — they record different things, and she writes
+  the performers' checks early in the evening and counts the cash late.
 
 ## 3. Open considerations
 

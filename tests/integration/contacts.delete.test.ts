@@ -112,10 +112,12 @@ describe("contact delete (feature 065)", () => {
   });
 
   it("the guard checks exactly the enumerated categories (list-parity, C15)", () => {
-    // Unique categories: one category may span several columns (staff_history covers five actor references).
+    // Unique categories: one category may span several columns (staff_history covers nine actor references).
     expect([...new Set(CONTACT_DELETE_BLOCKERS.map((b) => b.category))].sort()).toEqual(
       [
         "attendance",
+        // Feature 082: a check's writer — NOT NULL, and the books credit the check to them.
+        "check_writer",
         "gate_sale",
         "membership",
         "membership_account",

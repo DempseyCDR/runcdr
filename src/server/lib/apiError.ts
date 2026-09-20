@@ -34,7 +34,6 @@ export type ApiErrorCode =
   | "DOOR_RECORD_NOT_FOUND"
   | "ATTENDANCE_NOT_FOUND"
   | "ALREADY_CHECKED_IN"
-  | "CASH_PAYOUT_REASON_REQUIRED"
   | "PERFORMER_NOT_FOUND"
   | "BOOKING_NOT_FOUND"
   | "SOUND_TECH_NOT_ALLOWED"
@@ -67,7 +66,11 @@ export type ApiErrorCode =
   | "CASH_SINGLE_BOOKING"
   | "CASH_NOT_VOIDABLE"
   | "ALREADY_VOIDED"
-  | "ALREADY_BOOKED";
+  | "ALREADY_BOOKED"
+  // Feature 082 (contracts/gate.md): checks received at the gate, and who may correct an entry.
+  | "CHECK_NEEDS_LINES"
+  | "ADMISSION_NEEDS_CHECK"
+  | "NOT_YOUR_ENTRY";
 
 /** Feature 081: the payment a refusal points at, so the page can offer the right choice. */
 export type PaymentRef = {
@@ -350,6 +353,37 @@ export const errors = {
       { details },
     ),
   /**
+   * Feature 082 (contracts/gate.md): a check's amount is the sum of its lines, so a check with none has
+   * no amount and says nothing about what it paid for — which is the whole point of recording it.
+   * Removing a check's last line removes the check rather than raising this.
+   */
+  checkNeedsLines: () =>
+    new ApiError(
+      "CHECK_NEEDS_LINES",
+      422,
+      "A check needs at least one line — what does it pay for?",
+    ),
+  /**
+   * FR-020: admission in cash and by card is DERIVED from the evening's takings, as it always has been.
+   * Only a check states admission as a line, because only a check says who paid it.
+   */
+  admissionNeedsCheck: () =>
+    new ApiError(
+      "ADMISSION_NEEDS_CHECK",
+      422,
+      "Admission is worked out from the evening's takings — record it as a check's line, not a sale.",
+    ),
+  /**
+   * Feature 082 (research R6): the door records the fact of a sale and may correct ITS OWN; the evening's
+   * money, and anyone else's lines, stay with whoever may record gate money.
+   */
+  notYourEntry: () =>
+    new ApiError(
+      "NOT_YOUR_ENTRY",
+      403,
+      "Someone else recorded this — ask the Financial Secretary.",
+    ),
+  /**
    * FR-005a: President / VP / Treasurer are mutually exclusive — separation of authority from money.
    * A cross-ROW invariant on the contact, so it cannot be a row CHECK; enforced in grantService and
    * on every path including the CLI (FR-033). Names the conflicting role held.
@@ -409,8 +443,6 @@ export const errors = {
     new ApiError("ATTENDANCE_NOT_FOUND", 404, "Attendance record not found."),
   alreadyCheckedIn: () =>
     new ApiError("ALREADY_CHECKED_IN", 409, "This contact is already recorded for this event."),
-  cashPayoutReasonRequired: () =>
-    new ApiError("CASH_PAYOUT_REASON_REQUIRED", 422, "A reason is required for cash paid out."),
   performerNotFound: () => new ApiError("PERFORMER_NOT_FOUND", 404, "Performer not found."),
   bookingNotFound: () => new ApiError("BOOKING_NOT_FOUND", 404, "Booking not found."),
   performerPaymentNotFound: () =>

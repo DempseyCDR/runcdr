@@ -17,7 +17,7 @@ import type {
 import { errors } from "@/server/lib/apiError";
 import { assertEventScope } from "@/server/auth/can";
 import type { Actor } from "@/server/auth/actor";
-import { recordAudit, writeAudit } from "@/server/lib/audit";
+import { recordAudit } from "@/server/lib/audit";
 import { dollarsToCents, centsToDollars } from "@/server/lib/money";
 import type {
   PaymentLineAddInput,
@@ -182,6 +182,29 @@ async function assertNoOtherPaymentToPayee(
 async function explainConflict(err: unknown, recheck: () => Promise<void>): Promise<never> {
   if ((err as { code?: string }).code === UNIQUE_VIOLATION) await recheck();
   throw err;
+}
+
+/**
+ * Feature 082 (FR-039, FR-040, research R12, MARY-R22): someone who played and was paid has plainly
+ * confirmed. Every booking a payment settles that is still proposed, requested or tentative becomes
+ * confirmed, in the payment's own transaction. A direct update, not a lifecycle transition — `proposed →
+ * confirmed` is not an ordinary step, and this is a fact about settlement, not the Booker's decision. A
+ * declined booking is left alone (a no-show kept when someone substituted), and nothing here runs on a
+ * void or a delete, so a confirmation stays. Returns the bookings it confirmed, for the audit row.
+ */
+async function confirmPaidBookings(tx: DbOrTx, bookingIds: string[]): Promise<string[]> {
+  if (bookingIds.length === 0) return [];
+  const confirmed = await tx
+    .update(bookings)
+    .set({ status: "confirmed", updatedAt: new Date() })
+    .where(
+      and(
+        inArray(bookings.id, bookingIds),
+        inArray(bookings.status, ["proposed", "requested", "tentative"]),
+      ),
+    )
+    .returning({ id: bookings.id });
+  return confirmed.map((b) => b.id);
 }
 
 /**
@@ -355,6 +378,8 @@ export async function createPerformerPayment(
           checkNumber,
           overrideReason: input.overrideReason ?? null,
           replacesPaymentId,
+          // Feature 082 (FR-033): who recorded it, so the gate report can name them.
+          recordedByContactId: authz?.staff.contactId ?? null,
         })
         .returning();
       if (!row) throw new Error("performer payment insert failed");
@@ -366,14 +391,21 @@ export async function createPerformerPayment(
         })),
       );
       if (row.method === "cash") await syncCash(tx, row.eventId);
+      const confirmedBookingIds = await confirmPaidBookings(tx, bookingIds);
+      await recordAudit(tx, {
+        kind: "performer_payment.created",
+        actorContactId: authz?.staff.contactId ?? null,
+        details: {
+          paymentId: row.id,
+          eventId: input.eventId,
+          lines: lineCents.length,
+          actor,
+          confirmedBookingIds,
+        },
+      });
       return row;
     })
     .catch((err: unknown) => explainConflict(err, () => checks(db)));
-  writeAudit({
-    kind: "performer_payment.created",
-    actor,
-    details: { paymentId: created.id, eventId: input.eventId, lines: lineCents.length },
-  });
   return toView(db, created);
 }
 
@@ -439,6 +471,8 @@ export async function patchPerformerPayment(
           payeePerformerId: payee,
           overrideReason:
             input.overrideReason !== undefined ? input.overrideReason : current.overrideReason,
+          // Feature 082 (research R7): whoever last changed a payment is who the report names.
+          recordedByContactId: authz?.staff.contactId ?? current.recordedByContactId,
           updatedAt: new Date(),
         })
         .where(eq(performerPayments.id, id))
@@ -455,14 +489,20 @@ export async function patchPerformerPayment(
         );
       }
       if (row.method === "cash" || current.method === "cash") await syncCash(tx, row.eventId);
+      const confirmedBookingIds = lineCents
+        ? await confirmPaidBookings(
+            tx,
+            lineCents.map((l) => l.bookingId),
+          )
+        : [];
+      await recordAudit(tx, {
+        kind: "performer_payment.updated",
+        actorContactId: authz?.staff.contactId ?? null,
+        details: { paymentId: id, fields: Object.keys(input), actor, confirmedBookingIds },
+      });
       return row;
     })
     .catch((err: unknown) => explainConflict(err, () => checks(db)));
-  writeAudit({
-    kind: "performer_payment.updated",
-    actor,
-    details: { paymentId: id, fields: Object.keys(input) },
-  });
   return toView(db, updated);
 }
 
@@ -502,18 +542,29 @@ export async function addPaymentLine(
         .values({ paymentId: id, bookingId: input.bookingId, amountCents });
       const [row] = await tx
         .update(performerPayments)
-        .set({ amountCents: current.amountCents + amountCents, updatedAt: new Date() })
+        .set({
+          amountCents: current.amountCents + amountCents,
+          recordedByContactId: authz?.staff.contactId ?? current.recordedByContactId,
+          updatedAt: new Date(),
+        })
         .where(eq(performerPayments.id, id))
         .returning();
       if (!row) throw errors.performerPaymentNotFound();
+      const confirmedBookingIds = await confirmPaidBookings(tx, [input.bookingId]);
+      await recordAudit(tx, {
+        kind: "performer_payment.line_added",
+        actorContactId: authz?.staff.contactId ?? null,
+        details: {
+          paymentId: id,
+          bookingId: input.bookingId,
+          amountCents,
+          actor,
+          confirmedBookingIds,
+        },
+      });
       return row;
     })
     .catch((err: unknown) => explainConflict(err, () => checks(db)));
-  writeAudit({
-    kind: "performer_payment.line_added",
-    actor,
-    details: { paymentId: id, bookingId: input.bookingId, amountCents },
-  });
   return toView(db, updated);
 }
 
@@ -537,15 +588,24 @@ export async function voidPerformerPayment(
   const row = await db.transaction(async (tx) => {
     const [voided] = await tx
       .update(performerPayments)
-      .set({ voidedAt: new Date(), voidReason: reason.trim(), updatedAt: new Date() })
+      .set({
+        voidedAt: new Date(),
+        voidReason: reason.trim(),
+        recordedByContactId: authz?.staff.contactId ?? current.recordedByContactId,
+        updatedAt: new Date(),
+      })
       .where(and(eq(performerPayments.id, id), isNull(performerPayments.voidedAt)))
       .returning();
     if (!voided) throw errors.alreadyVoided();
     // Feature 081 (R2): a voided check settles nothing, so its lines stop counting as live.
     await tx.update(paymentBookings).set({ live: false }).where(eq(paymentBookings.paymentId, id));
+    await recordAudit(tx, {
+      kind: "performer_payment.voided",
+      actorContactId: authz?.staff.contactId ?? null,
+      details: { paymentId: id, reason, actor },
+    });
     return voided;
   });
-  writeAudit({ kind: "performer_payment.voided", actor, details: { paymentId: id, reason } });
   return toView(db, row);
 }
 

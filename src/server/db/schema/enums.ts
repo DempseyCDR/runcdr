@@ -44,7 +44,9 @@ export const gateCategoryEnum = pgEnum("gate_category", [
   "misc_sales",
 ]);
 
-export const paymentMethodEnum = pgEnum("payment_method", ["cash", "card"]);
+// Feature 082 (research R1/R2): a check received at the gate joins cash and card. A check's lines are
+// gate sales carrying `check_id`; the enum value is added alone in migration 0052.
+export const paymentMethodEnum = pgEnum("payment_method", ["cash", "card", "check"]);
 
 // Feature 081 (research R1): how a performer was paid — a numbered check, or cash from the evening's takings.
 export const performerPaymentMethodEnum = pgEnum("performer_payment_method", ["check", "cash"]);

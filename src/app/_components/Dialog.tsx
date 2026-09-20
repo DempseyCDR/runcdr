@@ -1,10 +1,13 @@
 "use client";
 import { useEffect, useRef, type ReactNode } from "react";
-import styles from "./payments.module.css";
+import styles from "./Dialog.module.css";
 
 /**
  * Feature 081: the shell every payments dialog uses — a labelled modal panel over a backdrop that scrolls
  * within a phone's viewport, closed with Escape. Focus moves into the panel when it opens.
+ *
+ * Feature 082: moved here from `/payments` once the gate's counting dialog and the shared sale-or-check
+ * dialog needed it too.
  */
 export default function Dialog({
   label,
@@ -31,7 +34,7 @@ export default function Dialog({
           if (e.key === "Escape") onClose();
         }}
       >
-        <h2 className={styles.dialogHeading}>{label}</h2>
+        <h2 className={styles.heading}>{label}</h2>
         {children}
       </div>
     </div>

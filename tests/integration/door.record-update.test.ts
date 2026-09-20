@@ -12,7 +12,9 @@ describe("PATCH /api/door-records/:id", () => {
   beforeEach(resetDb);
   afterAll(closeDb);
 
-  it("computes deposit from derived gross cash, persists gift-card count, and OMITS the POS fee", async () => {
+  // Feature 082 (MARY-R15 Q10): the card fee is now shown to whoever may record gate money, as they type.
+  // It is still never given to the door volunteer (feature 002 FR-007) — see door.payload.test.ts.
+  it("computes deposit from derived gross cash, persists gift-card count, and returns the card fee", async () => {
     const evt = await makeEvent();
     const id = await makeDoorRecord(evt.id);
     const res = await PATCH_DR(
@@ -31,23 +33,12 @@ describe("PATCH /api/door-records/:id", () => {
     const body = await res.json();
     expect(body.deposit).toBe(160); // 200 − 15 − 25
     expect(body.giftCardRedemptionCount).toBe(3);
-    // No fee-bearing field is exposed (FR-007).
-    const feeKeys = Object.keys(body).filter((k) => k.toLowerCase().includes("fee"));
-    expect(feeKeys).toEqual([]);
+    expect(body.cardFee).toBe(3.19);
 
     // fee stored server-side: 10 txns (90c) + 2.29% of PC gross $100 (229c) = 319c
     const row = await db.query.doorRecords.findFirst({ where: eq(doorRecords.id, id) });
     expect(row?.posFeeCents).toBe(319);
   });
-
-  it("requires a reason when cash is paid out (422)", async () => {
-    const evt = await makeEvent();
-    const id = await makeDoorRecord(evt.id);
-    const res = await PATCH_DR(
-      jsonReq("PATCH", `/api/door-records/${id}`, { cashPaidOut: 20 }),
-      ctx({ id }),
-    );
-    expect(res.status).toBe(422);
-    expect((await res.json()).error.code).toBe("CASH_PAYOUT_REASON_REQUIRED");
-  });
+  // Feature 082 (FR-007): cash paid out with no reason is now a WARNING that never blocks the save, not a
+  // 422 — see door.warnings.test.ts.
 });

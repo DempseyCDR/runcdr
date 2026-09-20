@@ -26,6 +26,9 @@ export async function parseBody<S extends z.ZodTypeAny>(
     // Feature 081 (FR-039): a malformed check number gets its own code, so the page can say what is allowed.
     if (field === "checkNumber" && issue.code === "invalid_string")
       throw errors.invalidCheckNumber();
+    // Feature 082 (contracts/gate.md): a check with no lines gets its own code — the page says why, where
+    // the check was being recorded.
+    if (field === "lines" && issue.code === "too_small") throw errors.checkNeedsLines();
     if (typeof field === "string" && field.startsWith("provider")) {
       throw errors.readOnlyField(field);
     }

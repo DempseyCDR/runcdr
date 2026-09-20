@@ -1,6 +1,6 @@
 "use client";
 import { useRef, useState } from "react";
-import Dialog from "./Dialog";
+import Dialog from "@/app/_components/Dialog";
 import { money, ROLE_LABEL, send } from "./savePayment";
 import type { Booking, Payment, RefusalHandler, SentBody } from "./types";
 import styles from "./payments.module.css";

@@ -3,10 +3,10 @@ import { ensureSchema, resetDb, closeDb, db } from "./helpers/db";
 import { makeEvent, makeContactWithEmail } from "./helpers/factories";
 import {
   ensureDoorRecord,
-  putGateSales,
   updateDoorRecord,
   getDoorRecord,
 } from "@/server/domain/door/doorRecordService";
+import { createGateSale } from "@/server/domain/door/gateSaleService";
 
 // D2 (gate data-loss fix): getDoorRecord must return everything the gate form needs to REDISPLAY a saved
 // record — the money scalars (already there) and the gate-sale lines WITH the contact name for named sales,
@@ -25,17 +25,14 @@ describe("getDoorRecord — full reload payload", () => {
     });
     const dr = await ensureDoorRecord(db, evt.id, "t");
 
-    await putGateSales(db, dr.id, {
-      sales: [
-        { category: "merchandise", paymentMethod: "cash", amount: 12 },
-        {
-          category: "membership",
-          paymentMethod: "card",
-          amount: 40,
-          contactId,
-          membershipLevel: "family",
-        },
-      ],
+    // Feature 082 (research R16): every sale is recorded on its own.
+    await createGateSale(db, dr.id, { category: "merchandise", paymentMethod: "cash", amount: 12 });
+    await createGateSale(db, dr.id, {
+      category: "membership",
+      paymentMethod: "card",
+      amount: 40,
+      contactId,
+      membershipLevel: "family",
     });
     await updateDoorRecord(db, dr.id, { grossCash: 344, pcGross: 223, posTransactionCount: 16 });
 

@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import Dialog from "./Dialog";
+import Dialog from "@/app/_components/Dialog";
 import { money, send } from "./savePayment";
 import type { Payment } from "./types";
 import styles from "./payments.module.css";

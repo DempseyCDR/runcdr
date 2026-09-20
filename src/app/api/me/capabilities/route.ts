@@ -8,9 +8,16 @@ import { actorCan } from "@/server/auth/can";
 // itself is still scope-checked server-side, so this never grants anything.
 export const GET = withAuth({ requires: "base" }, async (_req, ctx) => {
   return NextResponse.json({
+    // Feature 082 (FR-027): who is asking, so a page can tell the viewer's own entries — the door may
+    // correct what it recorded itself. The server still decides every write.
+    contactId: ctx.staff.contactId,
     bookingWrite: actorCan(ctx.actor, "booking.write"),
     // Feature 081 (FR-030): the payments page offers its entry controls and dialogs only to a payer.
     performerPaymentWrite: actorCan(ctx.actor, "performer_payment.write"),
+    // Feature 082 (FR-027): the gate page offers the money, its Save and "deposit separately" only to
+    // someone who may record gate money; the door (attendance) may still record a sale or a check.
+    gateWrite: actorCan(ctx.actor, "gate.write"),
+    attendanceWrite: actorCan(ctx.actor, "attendance.write"),
     eventWrite: actorCan(ctx.actor, "event.write"),
     // Feature 065: which contact archive/delete controls the editor should offer.
     contactWrite: actorCan(ctx.actor, "contact.write"),
