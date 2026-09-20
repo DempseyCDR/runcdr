@@ -27,3 +27,30 @@ describe("GET /api/me/capabilities — performer payments (081)", () => {
     expect(await capabilities(base.token)).toMatchObject({ performerPaymentWrite: false });
   });
 });
+
+/**
+ * Feature 082 (FR-027, edge case "someone without gate authority"): the gate page offers the money and its
+ * Save only to someone who may record gate money; the door may still record a sale or a check.
+ */
+describe("GET /api/me/capabilities — the gate and the door (082)", () => {
+  it("tells the gate from the door", async () => {
+    const fs = await makeActor({
+      email: "fs@example.com",
+      grants: [{ role: "financial_secretary" }],
+    });
+    const meg = await makeActor({ email: "meg@example.com", grants: [{ role: "door_attendant" }] });
+    const base = await makeBaseActor("base@example.com");
+
+    expect(await capabilities(fs.token)).toMatchObject({ gateWrite: true, attendanceWrite: true });
+    // FR-027: the door corrects its own entries, so the page must know whose they are.
+    expect((await capabilities(meg.token)).contactId).toBe(meg.contactId);
+    expect(await capabilities(meg.token)).toMatchObject({
+      gateWrite: false,
+      attendanceWrite: true,
+    });
+    expect(await capabilities(base.token)).toMatchObject({
+      gateWrite: false,
+      attendanceWrite: false,
+    });
+  });
+});

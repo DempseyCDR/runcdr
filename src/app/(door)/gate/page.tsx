@@ -1,545 +1,382 @@
 "use client";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/app/apiFetch";
-import { EventSelector } from "@/app/EventSelector";
-import AttendanceBreakdownView from "@/app/_components/AttendanceBreakdownView";
-import type { AttendanceBreakdown } from "@/server/domain/attendance/breakdownService";
+import type { EventRow } from "@/app/EventSelector";
+import EventConfirm from "@/app/_components/EventConfirm";
 import PaymentSummaryView from "@/app/_components/PaymentSummaryView";
+import type { AttendanceBreakdown } from "@/server/domain/attendance/breakdownService";
 import type { PaymentSummary } from "@/server/domain/payments/paymentSummary";
-import type { PerformerCashLine } from "@/server/domain/door/doorRecordService";
-import type { MembershipLevel } from "@/server/db/schema/enums";
-import { MEMBERSHIP_LEVELS, MEMBERSHIP_LEVEL_LABELS } from "@/app/membershipLevels";
+import CardSection from "./CardSection";
+import CashSection from "./CashSection";
+import CheckList from "./CheckList";
+import CountDialog, { type CashCount } from "./CountDialog";
+import DepositList from "./DepositList";
+import SaleOrCheckDialog from "@/app/_components/SaleOrCheckDialog";
+import DoorCounts from "./DoorCounts";
+import MoneyPreview from "./MoneyPreview";
+import SaleList from "./SaleList";
+import { formFrom, previewMoney } from "./preview";
+import { send, toNumber } from "./save";
+import {
+  CATEGORY_LABEL,
+  type DoorRecord,
+  type GateCheck,
+  type GateSale,
+  type MoneyForm,
+  type Warning,
+} from "./types";
+import styles from "./gate.module.css";
 
-import { useEffect, useState } from "react";
+type SeriesRow = { id: string; key: string; name: string };
+type Loaded = { record: DoorRecord; sales: GateSale[]; checks: GateCheck[] };
+type Payload = { doorRecord: DoorRecord; gateSales: GateSale[]; checks: GateCheck[] };
 
-type Candidate = { id: string; displayName: string };
+const UNSAVED = "You have entries that are not saved. Leave them?";
 
-const ANON_CATEGORIES = ["merchandise", "gift_card", "misc_sales"] as const;
-const NAMED_CATEGORIES = ["donation", "future_event", "membership"] as const;
-// Feature 031 (P5-R4): the denomination helper's bill faces, largest first.
-const BILLS = [100, 50, 20, 10, 5, 1] as const;
-type PaymentMethod = "cash" | "card";
-
-type AnonAmounts = Record<string, { cash: string; card: string }>;
-const emptyAnon: AnonAmounts = Object.fromEntries(
-  ANON_CATEGORIES.map((c) => [c, { cash: "", card: "" }]),
-);
-
-type NamedLine = {
-  category: (typeof NAMED_CATEGORIES)[number];
-  contactId: string;
-  contactName: string;
-  amount: string;
-  paymentMethod: PaymentMethod;
-  // Feature 080 (MARY-R5): what a membership line bought — "" until chosen, and always "" on other lines.
-  membershipLevel: MembershipLevel | "";
-  // Set by a save refused for want of a level; kept on the line so removing another line cannot move it.
-  levelMissing: boolean;
-};
-
-type Enrollment = { displayName: string; expiryDate: string };
-const enrolledText = (enrolled: Enrollment[]) =>
-  enrolled.map((e) => `${e.displayName} (through ${e.expiryDate})`).join(", ");
-
-/** Feature 080 (FR-007): the server's own reason for a refusal, or its status when the body says nothing. */
-async function reasonOf(res: Response): Promise<string> {
-  const body = await res.json().catch(() => null);
-  return body?.error?.message ?? `the server refused it (${res.status})`;
-}
-
-const UNREACHABLE = "Could not reach the server";
-
-/** A request that never reached the server resolves to null, so the caller can say what was not saved. */
-async function send(url: string, init: RequestInit): Promise<Response | null> {
-  try {
-    return await apiFetch(url, init);
-  } catch {
-    return null;
-  }
-}
-
+/**
+ * Feature 082 (MARY-R1, R2, R8, R15, R16, R20; FR-001–FR-009, FR-030): the evening's money, on a phone.
+ *
+ * The event is confirmed at the top, then what the performers are owed and the money so far — deposit
+ * included — then short sections in the order Mary works. The figures follow her typing; anything that
+ * looks wrong is pointed out when she saves, never while she types. The Save owns the money figures only:
+ * every sale and check is recorded one at a time, so nothing the door records is ever replaced by it
+ * (research R16).
+ */
 export default function GatePage() {
-  const [eventId, setEventId] = useState("");
-  const [doorRecordId, setDoorRecordId] = useState("");
-  const [anon, setAnon] = useState<AnonAmounts>(emptyAnon);
-  // Feature 031 (P5-R4): one free-text comment for the whole anonymous-sales section ("3 CDs, 2 shirts").
-  const [anonNote, setAnonNote] = useState("");
-  const [named, setNamed] = useState<NamedLine[]>([]);
-  // Feature 031 (P5-R4): the OPTIONAL, TRANSIENT denomination helper — bill counts + coins + checks → a grand
-  // cash total the FS can push into gross cash. Not persisted (Q8); the direct gross-cash entry always exists.
-  const [billCounts, setBillCounts] = useState<Record<number, string>>({});
-  const [coins, setCoins] = useState("");
-  const [checks, setChecks] = useState("");
-  const [posTxns, setPosTxns] = useState("");
-  const [grossCash, setGrossCash] = useState("");
-  const [pcGross, setPcGross] = useState("");
-  // Feature 019 US5: initialised empty; pre-filled from the door record's configured seed float on load.
-  const [seedFloat, setSeedFloat] = useState("");
-  const [cashPaidOut, setCashPaidOut] = useState("");
-  const [cashPaidOutReason, setCashPaidOutReason] = useState("");
-  const [compCount, setCompCount] = useState("");
-  // Feature 017 (B29/B36): counts the Door Attendant captured at check-in; the FS confirms comp/gift
-  // (editable) and sees the open-band comp count (read-only).
-  const [giftCount, setGiftCount] = useState("");
-  const [openBandCount, setOpenBandCount] = useState(0);
-  const [deposit, setDeposit] = useState<number | null>(null);
-  // Feature 079 (FR-027): the evening's attendance breakdown — the FS wants to see who came.
-  const [breakdown, setBreakdown] = useState<AttendanceBreakdown | null>(null);
-  // Feature 081 (FR-005, FR-033): what the performers are owed, and the cash already paid to them tonight —
-  // entered on /payments, counted in the deposit, so the gate's own payout field is for other payouts only.
+  const [series, setSeries] = useState<SeriesRow[]>([]);
+  const [event, setEvent] = useState<EventRow | null>(null);
+  const [canWrite, setCanWrite] = useState(false);
+  const [loaded, setLoaded] = useState<Loaded | null>(null);
+  const [form, setForm] = useState<MoneyForm | null>(null);
+  const [baseline, setBaseline] = useState<string>("");
   const [payments, setPayments] = useState<PaymentSummary | null>(null);
-  const [performerCash, setPerformerCash] = useState<PerformerCashLine[]>([]);
-  const [message, setMessage] = useState<string | null>(null);
-  // contact search for adding a named line
-  const [search, setSearch] = useState("");
-  const [candidates, setCandidates] = useState<Candidate[]>([]);
-  const [newCategory, setNewCategory] = useState<(typeof NAMED_CATEGORIES)[number]>("membership");
+  const [breakdown, setBreakdown] = useState<AttendanceBreakdown | null>(null);
+  const [warnings, setWarnings] = useState<Warning[]>([]);
+  const [status, setStatus] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  // Feature 082 (FR-012): the count in progress. Kept on the server as Mary moves through it, not part
+  // of the form — it is scratch work, and the saved gross cash is the record.
+  const [count, setCount] = useState<CashCount>({});
+  const [counting, setCounting] = useState(false);
+  // Feature 082 (FR-023, FR-026): a sale or a check is recorded, corrected and removed on its own, in the
+  // shared dialog.
+  const [dialog, setDialog] = useState<{ editing?: GateCheck | GateSale } | null>(null);
 
   useEffect(() => {
-    if (!search.trim()) return setCandidates([]);
-    void apiFetch(`/api/attendance/search?q=${encodeURIComponent(search)}`)
+    void apiFetch("/api/series")
       .then((r) => r.json())
-      .then((d) => setCandidates(d.items ?? []));
-  }, [search]);
+      .then((d) => setSeries(d.items ?? []));
+    void apiFetch("/api/me/capabilities")
+      .then((r) => r.json())
+      .then((d) => setCanWrite(d.gateWrite === true));
+  }, []);
 
-  async function loadPayments(forEventId: string) {
-    if (!forEventId) return setPayments(null);
-    const res = await apiFetch(`/api/events/${forEventId}/payment-summary`);
-    setPayments(res.ok ? ((await res.json()) as PaymentSummary) : null);
-  }
+  const dirty = form !== null && JSON.stringify(form) !== baseline;
 
-  async function loadBreakdown(forEventId: string) {
-    if (!forEventId) return setBreakdown(null);
-    const res = await apiFetch(`/api/events/${forEventId}/attendance-breakdown`);
-    setBreakdown(res.ok ? ((await res.json()) as AttendanceBreakdown) : null);
-  }
+  // FR-008: leaving with unsaved entries asks first.
+  useEffect(() => {
+    if (!dirty) return;
+    const guard = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", guard);
+    return () => window.removeEventListener("beforeunload", guard);
+  }, [dirty]);
 
-  async function openDoorRecord(selectedEventId: string) {
-    setEventId(selectedEventId);
-    setDoorRecordId("");
-    setDeposit(null);
-    void loadBreakdown(selectedEventId);
-    void loadPayments(selectedEventId);
-    setPerformerCash([]);
-    setMessage(null);
-    setAnon(JSON.parse(JSON.stringify(emptyAnon)));
-    setAnonNote("");
-    setBillCounts({});
-    setCoins("");
-    setChecks("");
-    setNamed([]);
-    if (!selectedEventId) return;
-    const res = await apiFetch(`/api/events/${selectedEventId}/door-record`, { method: "POST" });
-    if (!res.ok) return setMessage("Could not open door record");
-    const data = await res.json();
-    const dr = data.doorRecord;
-    setDoorRecordId(dr.id);
-    // Feature 019 US5: the seed float now comes from the door record (seeded from the series parameter,
-    // FR-022), not a hard-coded 15. The FS can still override it for this record.
-    setSeedFloat(String(dr.seedFloat ?? 15));
-    // Pre-fill the counts the Door Attendant captured at check-in, for the FS to confirm (FR-015).
-    setCompCount(String(dr.compCount ?? 0));
-    setGiftCount(String(dr.giftCardRedemptionCount ?? 0));
-    setOpenBandCount(dr.openBandCount ?? 0);
-    // D2 (data-loss fix): reload the money the FS already entered — previously these stayed blank on a return
-    // visit, and the next Save wrote the blanks (0 / replace-all) over the saved record. Show a stored value,
-    // blank when zero/unset so the placeholders stay clean.
-    const money = (v: number) => (v ? String(v) : "");
-    setGrossCash(money(dr.grossCash ?? 0));
-    setPcGross(money(dr.pcGross ?? 0));
-    setPosTxns(money(dr.posTransactionCount ?? 0));
-    setCashPaidOut(money(dr.cashPaidOut ?? 0));
-    setCashPaidOutReason(dr.cashPaidOutReason ?? "");
-    setPerformerCash(dr.performerCash ?? []);
-    // D2: rebuild the anon + named sale lines from the persisted gate sales, so a re-save round-trips them
-    // instead of wiping them (putGateSales is replace-all).
-    const anonNext: AnonAmounts = JSON.parse(JSON.stringify(emptyAnon));
-    const namedNext: NamedLine[] = [];
-    let firstAnonNote: string | null = null;
-    for (const s of (data.gateSales ?? []) as {
-      category: string;
-      paymentMethod: PaymentMethod;
-      amountCents: number;
-      contactId: string | null;
-      contactName: string | null;
-      note: string | null;
-      membershipLevel: MembershipLevel | null;
-    }[]) {
-      const amount = String(s.amountCents / 100);
-      if ((ANON_CATEGORIES as readonly string[]).includes(s.category)) {
-        anonNext[s.category]![s.paymentMethod] = amount;
-        // Feature 031: one comment for the section — take the first anon line that carries one (R3).
-        if (firstAnonNote === null && s.note) firstAnonNote = s.note;
-      } else if ((NAMED_CATEGORIES as readonly string[]).includes(s.category) && s.contactId) {
-        namedNext.push({
-          category: s.category as (typeof NAMED_CATEGORIES)[number],
-          contactId: s.contactId,
-          contactName: s.contactName ?? "(unknown)",
-          amount,
-          paymentMethod: s.paymentMethod,
-          // Feature 080 (FR-005): the save is replace-all, so the stored level must ride along again.
-          membershipLevel: s.category === "membership" ? (s.membershipLevel ?? "") : "",
-          levelMissing: false,
-        });
-      }
-    }
-    setAnon(anonNext);
-    setAnonNote(firstAnonNote ?? "");
-    setNamed(namedNext);
-  }
-
-  function setAnonAmt(cat: string, method: PaymentMethod, v: string) {
-    setAnon((a) => ({ ...a, [cat]: { ...a[cat]!, [method]: v } }));
-  }
-
-  function addNamedLine(c: Candidate) {
-    setNamed((lines) => [
-      ...lines,
-      {
-        category: newCategory,
-        contactId: c.id,
-        contactName: c.displayName,
-        amount: "",
-        paymentMethod: "card",
-        membershipLevel: "",
-        levelMissing: false,
-      },
+  const refreshSummaries = useCallback(async (eventId: string) => {
+    const [p, b] = await Promise.all([
+      apiFetch(`/api/events/${eventId}/payment-summary`),
+      apiFetch(`/api/events/${eventId}/attendance-breakdown`),
     ]);
-    setSearch("");
-    setCandidates([]);
+    setPayments(p.ok ? ((await p.json()) as PaymentSummary) : null);
+    setBreakdown(b.ok ? ((await b.json()) as AttendanceBreakdown) : null);
+  }, []);
+
+  const show = useCallback((data: Payload) => {
+    const next = formFrom(data.doorRecord);
+    setLoaded({ record: data.doorRecord, sales: data.gateSales, checks: data.checks });
+    setCount(data.doorRecord.cashCount ?? {});
+    setForm(next);
+    setBaseline(JSON.stringify(next));
+  }, []);
+
+  /**
+   * After a sale or check is written on its own, bring back what was recorded — the sales, the checks, the
+   * performers' cash — WITHOUT touching the form: whatever Mary has typed but not saved stays typed.
+   */
+  const reload = useCallback(async (recordId: string) => {
+    const res = await apiFetch(`/api/door-records/${recordId}`);
+    if (!res.ok) return;
+    const data = (await res.json()) as Payload;
+    setLoaded({ record: data.doorRecord, sales: data.gateSales, checks: data.checks });
+  }, []);
+
+  async function removeSale(sale: GateSale) {
+    if (!loaded) return;
+    const what = `${CATEGORY_LABEL[sale.category] ?? sale.category}${sale.contactName ? ` to ${sale.contactName}` : ""}`;
+    if (!window.confirm(`Remove the sale of ${what} for $${sale.amount.toFixed(2)}?`)) return;
+    const done = await send(`/api/gate-sales/${sale.id}`, "DELETE");
+    if (!done.ok) return setStatus(`The sale was not removed: ${done.message}`);
+    await reload(loaded.record.id);
   }
 
-  function setNamedField(i: number, patch: Partial<NamedLine>) {
-    setNamed((lines) => lines.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
+  async function removeCheck(check: GateCheck) {
+    if (!loaded) return;
+    if (!window.confirm(`Remove the check from ${check.writer} for $${check.amount.toFixed(2)}?`))
+      return;
+    const done = await send(`/api/gate-checks/${check.id}`, "DELETE");
+    if (!done.ok) return setStatus(`The check was not removed: ${done.message}`);
+    await reload(loaded.record.id);
+  }
+
+  const open = useCallback(
+    async (next: EventRow) => {
+      setEvent(next);
+      setLoaded(null);
+      setForm(null);
+      setWarnings([]);
+      setStatus(null);
+      void refreshSummaries(next.id);
+      const res = await apiFetch(`/api/events/${next.id}/door-record`, { method: "POST" });
+      if (!res.ok) return setStatus("Could not open the evening's record.");
+      show(await res.json());
+    },
+    [refreshSummaries, show],
+  );
+
+  // FR-008: changing the event with unsaved entries asks first; declining keeps everything as it was.
+  const choose = useCallback(
+    (next: EventRow) => {
+      if (next.id === event?.id) return;
+      if (dirty && !window.confirm(UNSAVED)) return;
+      void open(next);
+    },
+    [dirty, event?.id, open],
+  );
+
+  const change = (patch: Partial<MoneyForm>) => {
+    setForm((f) => (f ? { ...f, ...patch } : f));
+    setStatus(null);
+  };
+
+  const figures = useMemo(
+    () => (form && loaded ? previewMoney(form, loaded.record, loaded.sales, loaded.checks) : null),
+    [form, loaded],
+  );
+
+  function keepCount(next: CashCount) {
+    setCount(next);
+    if (loaded) void send(`/api/door-records/${loaded.record.id}`, "PATCH", { cashCount: next });
   }
 
   async function save() {
-    setMessage(null);
-    // Feature 080 (FR-006): a membership line the save would send must say what was bought — check before
-    // anything is sent, so a refusal can never leave half the evening saved.
-    const unlevelled = named.filter(
-      (l) => l.category === "membership" && Number(l.amount) > 0 && !l.membershipLevel,
+    if (!form || !loaded) return;
+    setSaving(true);
+    setStatus(null);
+    setWarnings([]);
+    const saved = await send<DoorRecord & { warnings: Warning[] }>(
+      `/api/door-records/${loaded.record.id}`,
+      "PATCH",
+      {
+        grossCash: toNumber(form.grossCash),
+        seedFloat: toNumber(form.seedFloat),
+        cashPaidOut: toNumber(form.cashPaidOut),
+        // An emptied box clears a reason saved earlier (null), rather than leaving it in place.
+        cashPaidOutReason: form.cashPaidOutReason.trim() || null,
+        pcGross: toNumber(form.pcGross),
+        posTransactionCount: toNumber(form.posTransactionCount),
+        compCount: toNumber(form.compCount),
+        giftCardRedemptionCount: toNumber(form.giftCardRedemptionCount),
+        eveningNote: form.eveningNote,
+      },
     );
-    if (unlevelled.length > 0) {
-      setNamed((lines) => lines.map((l) => ({ ...l, levelMissing: unlevelled.includes(l) })));
-      const names = unlevelled.map((l) => l.contactName);
-      return setMessage(
-        names.length === 1
-          ? `Choose a level for ${names[0]}'s membership. Nothing was saved.`
-          : `Choose a level for each membership: ${names.join(", ")}. Nothing was saved.`,
-      );
-    }
-    const note = anonNote.trim();
-    const sales = [
-      ...ANON_CATEGORIES.flatMap((c) =>
-        (["cash", "card"] as const).flatMap((m) => {
-          const v = Number(anon[c]![m]);
-          // Feature 031: the section comment rides on the anon line(s) (R3).
-          return v > 0
-            ? [{ category: c, paymentMethod: m, amount: v, ...(note ? { note } : {}) }]
-            : [];
-        }),
-      ),
-      ...named.flatMap((l) => {
-        const v = Number(l.amount);
-        return v > 0
-          ? [
-              {
-                category: l.category,
-                paymentMethod: l.paymentMethod,
-                amount: v,
-                contactId: l.contactId,
-                ...(l.category === "membership" && l.membershipLevel
-                  ? { membershipLevel: l.membershipLevel }
-                  : {}),
-              },
-            ]
-          : [];
-      }),
-    ];
-    const gsRes = await send(`/api/door-records/${doorRecordId}/gate-sales`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sales }),
-    });
-    // Gate money is the Financial Secretary's to write (FR-020). A Door Attendant reaches this page and
-    // reads it — money is not secret — but a save is refused server-side. Surface that plainly rather
-    // than as a generic failure. (Proactively disabling the control belongs with US5's role-aware UI.)
-    // Feature 080 (FR-007, FR-008): the sales are one transaction, so a refusal here saved nothing at all.
-    if (!gsRes) return setMessage(`Nothing was saved: ${UNREACHABLE}`);
-    if (gsRes.status === 403) {
-      return setMessage("Only the Financial Secretary may record gate money for this event.");
-    }
-    if (!gsRes.ok) return setMessage(`Nothing was saved: ${await reasonOf(gsRes)}`);
-    // Feature 019 (B31): show which named contacts got a membership created/renewed by this save.
-    const gsBody = await gsRes.json().catch(() => null);
-    const enrolled: Enrollment[] = gsBody?.enrolled ?? [];
-    const moneyRefused = (reason: string) =>
-      setMessage(
-        `Sales saved, but the money figures were not: ${reason}` +
-          (enrolled.length > 0 ? `. Membership recorded: ${enrolledText(enrolled)}` : ""),
-      );
+    setSaving(false);
+    if (!saved.ok) return setStatus(`Nothing was saved: ${saved.message}`);
 
-    const res = await send(`/api/door-records/${doorRecordId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        posTransactionCount: Number(posTxns) || 0,
-        grossCash: Number(grossCash) || 0,
-        pcGross: Number(pcGross) || 0,
-        seedFloat: Number(seedFloat) || 0,
-        cashPaidOut: Number(cashPaidOut) || 0,
-        compCount: Number(compCount) || 0,
-        giftCardRedemptionCount: Number(giftCount) || 0,
-        ...(cashPaidOutReason ? { cashPaidOutReason } : {}),
-      }),
-    });
-    if (!res) return moneyRefused(UNREACHABLE);
-    if (res.status === 403) {
-      return setMessage("Only the Financial Secretary may record gate money for this event.");
-    }
-    if (!res.ok) return moneyRefused(await reasonOf(res));
-    const body = await res.json();
-    setDeposit(body.deposit); // fee intentionally not returned
-    void loadBreakdown(eventId); // comps and gift cards may have just changed
-    void loadPayments(eventId);
-    setPerformerCash(body.performerCash ?? performerCash);
-    if (enrolled.length > 0) {
-      setMessage(`Saved. Membership recorded: ${enrolledText(enrolled)}`);
-    } else {
-      setMessage("Saved");
-    }
+    const { warnings: found, ...record } = saved.data;
+    setCount(record.cashCount ?? {}); // the Save drops the count (FR-012)
+    // The form now matches what was kept, so nothing is unsaved — even where the server tidied a figure.
+    setLoaded((l) => (l ? { ...l, record } : l));
+    setBaseline(JSON.stringify(form));
+    setWarnings(found ?? []);
+    setStatus("Saved");
+    if (event) void refreshSummaries(event.id);
   }
 
-  // Feature 031 (P5-R4): the denomination helper's grand cash total = Σ(bill count × face) + coins + checks
-  // (checks fold into gross cash — Q9). Transient; the FS pushes it into gross cash with the button below.
-  const denomTotal =
-    BILLS.reduce((a, f) => a + f * (Number(billCounts[f]) || 0), 0) +
-    (Number(coins) || 0) +
-    (Number(checks) || 0);
-
   return (
-    <main style={{ padding: 24, maxWidth: 680 }}>
-      <h1>Gate money</h1>
-      <EventSelector value={eventId} onSelect={(e) => void openDoorRecord(e.id)} />
-      {doorRecordId && (
-        <p style={{ color: "#666" }}>Door record open ({doorRecordId.slice(0, 8)}…)</p>
-      )}
-      {breakdown && <AttendanceBreakdownView breakdown={breakdown} />}
+    <main className={styles.page}>
+      <EventConfirm event={event} series={series} onSelect={choose} />
       {payments && <PaymentSummaryView summary={payments} />}
+      {figures && <MoneyPreview figures={figures} showFee={canWrite} />}
 
-      <h2>Anonymous gate sales</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Category</th>
-            <th>Cash</th>
-            <th>Card</th>
-          </tr>
-        </thead>
-        <tbody>
-          {ANON_CATEGORIES.map((c) => (
-            <tr key={c}>
-              <td>{c}</td>
-              <td>
-                <input
-                  value={anon[c]!.cash}
-                  onChange={(e) => setAnonAmt(c, "cash", e.target.value)}
-                />
-              </td>
-              <td>
-                <input
-                  value={anon[c]!.card}
-                  onChange={(e) => setAnonAmt(c, "card", e.target.value)}
-                />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <label style={{ display: "block", marginTop: 6, maxWidth: 460 }}>
-        <small>Comment (what sold, e.g. &quot;3 CDs, 2 shirts&quot;)</small>
-        <textarea
-          aria-label="Anonymous sales comment"
-          value={anonNote}
-          onChange={(e) => setAnonNote(e.target.value)}
-          rows={2}
-          style={{ width: "100%" }}
-        />
-      </label>
-
-      <h2>Named-customer sales (donation / future event / membership)</h2>
-      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-        <select
-          value={newCategory}
-          onChange={(e) => setNewCategory(e.target.value as typeof newCategory)}
-        >
-          {NAMED_CATEGORIES.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
-        <input
-          placeholder="Find contact…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-      </div>
-      {candidates.length > 0 && (
-        <ul>
-          {candidates.map((c) => (
-            <li key={c.id}>
-              {c.displayName} <button onClick={() => addNamedLine(c)}>add</button>
-            </li>
-          ))}
-        </ul>
-      )}
-      <ul style={{ listStyle: "none", padding: 0 }}>
-        {named.map((l, i) => (
-          <li key={i} style={{ marginBottom: 4 }}>
-            {l.category} — {l.contactName}{" "}
-            <input
-              placeholder="amount"
-              value={l.amount}
-              onChange={(e) => setNamedField(i, { amount: e.target.value })}
-              style={{ width: 80 }}
-            />{" "}
-            {l.category === "membership" && (
-              <>
-                <select
-                  aria-label={`Level for ${l.contactName}`}
-                  aria-invalid={l.levelMissing || undefined}
-                  value={l.membershipLevel}
-                  onChange={(e) =>
-                    setNamedField(i, {
-                      membershipLevel: e.target.value as MembershipLevel | "",
-                      levelMissing: false,
-                    })
-                  }
-                  style={l.levelMissing ? { outline: "2px solid #b00020" } : undefined}
-                >
-                  <option value="">Level…</option>
-                  {MEMBERSHIP_LEVELS.map((level) => (
-                    <option key={level} value={level}>
-                      {MEMBERSHIP_LEVEL_LABELS[level]}
-                    </option>
-                  ))}
-                </select>{" "}
-              </>
+      {form && loaded && (
+        <>
+          <DoorCounts
+            form={form}
+            record={loaded.record}
+            breakdown={breakdown}
+            disabled={!canWrite}
+            onChange={change}
+          />
+          <CashSection
+            form={form}
+            record={loaded.record}
+            disabled={!canWrite}
+            onChange={change}
+            countButton={
+              canWrite && (
+                <button type="button" className={styles.button} onClick={() => setCounting(true)}>
+                  Count
+                </button>
+              )
+            }
+          />
+          {counting && (
+            <CountDialog
+              initial={count}
+              onKeep={keepCount}
+              onUse={(total) => {
+                change({ grossCash: total.toFixed(2) });
+                setCounting(false);
+              }}
+              onClose={() => setCounting(false)}
+            />
+          )}
+          <CardSection
+            form={form}
+            feeCents={canWrite && figures ? figures.cardFeeCents : null}
+            disabled={!canWrite}
+            onChange={change}
+          />
+          <section aria-labelledby="gate-sales" className={styles.section}>
+            <h2 id="gate-sales" className={styles.sectionHeading}>
+              Sales
+            </h2>
+            <SaleList
+              sales={loaded.sales}
+              actions={
+                canWrite
+                  ? (sale) => (
+                      <div className={styles.buttons}>
+                        <button
+                          type="button"
+                          className={styles.button}
+                          onClick={() => setDialog({ editing: sale })}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          className={styles.button}
+                          onClick={() => void removeSale(sale)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    )
+                  : undefined
+              }
+            />
+            {canWrite && (
+              <button type="button" className={styles.button} onClick={() => setDialog({})}>
+                Add a sale
+              </button>
             )}
-            <select
-              value={l.paymentMethod}
-              onChange={(e) => setNamedField(i, { paymentMethod: e.target.value as PaymentMethod })}
-            >
-              <option value="cash">cash</option>
-              <option value="card">card</option>
-            </select>{" "}
-            <button onClick={() => setNamed((lines) => lines.filter((_, idx) => idx !== i))}>
-              remove
-            </button>
-          </li>
-        ))}
-      </ul>
+          </section>
 
-      <h2>Cash &amp; card reconciliation</h2>
-      <p style={{ color: "#666" }}>
-        Admission is derived: gross cash − seed float − non-admission cash, and Card gross −
-        non-admission card.
-      </p>
-      <details style={{ maxWidth: 360, marginBottom: 8 }}>
-        <summary>Count cash by denomination (optional)</summary>
-        <div style={{ display: "grid", gap: 4, marginTop: 6 }}>
-          {BILLS.map((f) => (
-            <label key={f}>
-              ${f} bills{" "}
-              <input
-                aria-label={`$${f} bills`}
-                inputMode="numeric"
-                value={billCounts[f] ?? ""}
-                onChange={(e) => setBillCounts((m) => ({ ...m, [f]: e.target.value }))}
-                style={{ width: 60 }}
+          <section aria-labelledby="gate-checks" className={styles.section}>
+            <h2 id="gate-checks" className={styles.sectionHeading}>
+              Checks
+            </h2>
+            <CheckList
+              checks={loaded.checks}
+              actions={
+                canWrite
+                  ? (c) => (
+                      <div className={styles.buttons}>
+                        <button
+                          type="button"
+                          className={styles.button}
+                          onClick={() => setDialog({ editing: c })}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          className={styles.button}
+                          onClick={() => void removeCheck(c)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    )
+                  : undefined
+              }
+            />
+          </section>
+
+          {figures && (
+            <DepositList
+              figures={figures}
+              form={form}
+              performerCash={loaded.record.performerCash.reduce((a, p) => a + p.amount, 0)}
+              checks={loaded.checks}
+            />
+          )}
+          {dialog && (
+            <SaleOrCheckDialog
+              doorRecordId={loaded.record.id}
+              canMark={canWrite}
+              editing={dialog.editing}
+              onSaved={() => {
+                setDialog(null);
+                void reload(loaded.record.id);
+              }}
+              onClose={() => setDialog(null)}
+            />
+          )}
+
+          <section aria-labelledby="gate-note" className={styles.section}>
+            <h2 id="gate-note" className={styles.sectionHeading}>
+              Notes
+            </h2>
+            <label className={styles.field}>
+              The evening&apos;s note
+              <textarea
+                className={styles.input}
+                rows={3}
+                value={form.eveningNote}
+                disabled={!canWrite}
+                onChange={(e) => change({ eveningNote: e.target.value })}
               />
             </label>
-          ))}
-          <label>
-            Coins ($){" "}
-            <input aria-label="Coins" value={coins} onChange={(e) => setCoins(e.target.value)} />
-          </label>
-          <label>
-            Checks ($){" "}
-            <input aria-label="Checks" value={checks} onChange={(e) => setChecks(e.target.value)} />
-          </label>
-          <p style={{ margin: "4px 0" }}>
-            Grand cash total: <strong>${denomTotal.toFixed(2)}</strong>
-          </p>
-          <button type="button" onClick={() => setGrossCash(denomTotal.toFixed(2))}>
-            Use as gross cash
-          </button>
-        </div>
-      </details>
-      <div style={{ display: "grid", gap: 6, maxWidth: 360 }}>
-        <label>
-          Gross cash (total counted){" "}
-          <input
-            aria-label="Gross cash"
-            value={grossCash}
-            onChange={(e) => setGrossCash(e.target.value)}
-          />
-        </label>
-        <label>
-          Card gross (total card){" "}
-          <input value={pcGross} onChange={(e) => setPcGross(e.target.value)} />
-        </label>
-        <label>
-          Card transactions <input value={posTxns} onChange={(e) => setPosTxns(e.target.value)} />
-        </label>
-        <label>
-          Seed float <input value={seedFloat} onChange={(e) => setSeedFloat(e.target.value)} />
-        </label>
-        {performerCash.length > 0 && (
-          <p style={{ margin: "4px 0" }}>
-            {`Paid to performers in cash: ${performerCash
-              .map((c) => `${c.payee} $${c.amount.toFixed(2)}`)
-              .join(", ")}`}
-          </p>
-        )}
-        <label>
-          Other cash paid out{" "}
-          <input
-            aria-label="Other cash paid out"
-            value={cashPaidOut}
-            onChange={(e) => setCashPaidOut(e.target.value)}
-          />
-        </label>
-        <label>
-          Payout reason{" "}
-          <input value={cashPaidOutReason} onChange={(e) => setCashPaidOutReason(e.target.value)} />
-        </label>
-        <label>
-          Comps (admitted free){" "}
-          <input value={compCount} onChange={(e) => setCompCount(e.target.value)} />
-        </label>
-        <label>
-          Gift cards redeemed{" "}
-          <input value={giftCount} onChange={(e) => setGiftCount(e.target.value)} />
-        </label>
-        <p style={{ margin: "4px 0", color: "#555" }}>
-          <small>
-            Open-band comps (from check-in, read-only): <strong>{openBandCount}</strong> — added to
-            comps when deriving paying dancers.
-          </small>
-        </p>
-        <button onClick={save} disabled={!doorRecordId}>
-          Save
-        </button>
-      </div>
+          </section>
 
-      {deposit !== null && (
-        <p>
-          <strong>Deposit:</strong> ${deposit.toFixed(2)}
-        </p>
+          <div className={styles.save}>
+            {canWrite && (
+              <button
+                type="button"
+                className={styles.primaryButton}
+                onClick={() => void save()}
+                disabled={saving}
+              >
+                Save
+              </button>
+            )}
+            {warnings.length > 0 && (
+              <ul aria-label="Warnings" className={styles.warnings}>
+                {warnings.map((w) => (
+                  <li key={w.code}>{w.message}</li>
+                ))}
+              </ul>
+            )}
+            <p role="status" className={styles.quiet}>
+              {status}
+            </p>
+          </div>
+        </>
       )}
-      {message && <p>{message}</p>}
     </main>
   );
 }

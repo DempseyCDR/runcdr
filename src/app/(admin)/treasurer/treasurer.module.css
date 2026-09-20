@@ -1,0 +1,198 @@
+/* Feature 082 (FR-035, research R18, R19): the gate report, laid out as the paper one — a two-line
+   heading, then receipts and deposits on the left, expenses and notes on the right. On a laptop and in
+   print the two columns sit side by side; on a phone they stack. Printed, only the report region prints,
+   on landscape letter, black on white, with no section split across two sheets (SC-007). Follows the
+   printable calendar (feature 058). */
+
+.page {
+  box-sizing: border-box;
+  margin: 0 auto;
+  max-width: 64rem;
+  padding: var(--space-3) var(--space-4) var(--space-5);
+}
+
+.heading {
+  border-bottom: 1px solid var(--hairline);
+  padding-bottom: var(--space-2);
+}
+
+.headLine {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  margin: 0 0 var(--space-1);
+}
+
+.headLine:first-child {
+  font-weight: 600;
+}
+
+.columns {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.report h2 {
+  font-size: 1.15rem;
+  margin: var(--space-4) 0 var(--space-1);
+}
+
+.report h3 {
+  font-size: 1rem;
+  margin: var(--space-3) 0 var(--space-1);
+}
+
+.table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.table th,
+.table td {
+  border-bottom: 1px solid var(--hairline);
+  padding: 4px var(--space-2);
+  text-align: left;
+}
+
+.table .amount {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.table .qty {
+  text-align: right;
+  width: 2.5rem;
+}
+
+.table tfoot th {
+  text-align: left;
+}
+
+/* A note sits directly beneath its line, indented, with no rule between them. */
+.table tr:has(+ .noteRow) td,
+.table .noteRow:has(+ .noteRow) td {
+  border-bottom: none;
+}
+
+.noteRow td {
+  font-style: italic;
+}
+
+/* An expenses note runs the whole row, so it is indented by hand; a receipts note already starts in the
+   name's column, after an empty one. */
+.noteRow td:only-child {
+  padding-left: var(--space-5);
+}
+
+.voided td:not(:first-child) {
+  text-decoration: line-through;
+}
+
+.section {
+  margin: 0;
+}
+
+.list {
+  margin: 0;
+  padding-left: var(--space-4);
+}
+
+.eveningNote {
+  white-space: pre-wrap;
+}
+
+.quiet {
+  color: var(--text-muted);
+}
+
+.printButton {
+  font-size: 0.95rem;
+  margin-top: var(--space-3);
+  min-height: 2.75rem;
+  padding: var(--space-1) var(--space-3);
+}
+
+/* ── Print: the report alone, landscape letter, black on white. ── */
+@media print {
+  @page {
+    size: letter landscape;
+    margin: 0.4in;
+  }
+
+  /* Hide everything, then reveal the report and pin it to the top — the site and volunteer navigation,
+     the event selector and the Print button all drop away. `:global(...)` because CSS Modules reject bare
+     element and attribute selectors. */
+  :global(body *) {
+    visibility: hidden !important;
+  }
+
+  :global([data-printable-report]),
+  :global([data-printable-report] *) {
+    visibility: visible !important;
+  }
+
+  :global([data-printable-report]) {
+    background: #fff;
+    color: #000;
+    font-size: 10pt;
+    left: 0;
+    position: absolute;
+    top: 0;
+    width: 100%;
+  }
+
+  /* SC-007: a section is kept to one sheet where it fits, and a row never splits. */
+  .section,
+  .table tr {
+    break-inside: avoid;
+  }
+
+  .report h2,
+  .report h3 {
+    break-after: avoid;
+  }
+
+  .quiet {
+    color: #333;
+  }
+
+  .table th {
+    border-bottom-color: #000;
+  }
+
+  .table td {
+    border-bottom-color: #999;
+  }
+}
+
+/* Feature 082 (FR-037, US7 — nice to have): the report on a phone held sideways, 844 × 390 and narrower.
+   The columns stack; smaller type; a table too wide for the screen scrolls within itself, so the page
+   never scrolls sideways. Screen only — print keeps the landscape-letter rules above. */
+@media screen and (max-width: 52.75rem) {
+  .page {
+    font-size: 0.875rem;
+    padding: var(--space-2) var(--space-3) var(--space-4);
+  }
+
+  .columns {
+    gap: var(--space-2);
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  .table th,
+  .table td {
+    padding: 2px var(--space-1);
+  }
+
+  .list {
+    padding-left: var(--space-3);
+  }
+}

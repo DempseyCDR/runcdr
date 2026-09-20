@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/app/apiFetch";
-import Dialog from "./Dialog";
+import Dialog from "@/app/_components/Dialog";
 import PerformerPicker, { type PickedPerformer } from "./PerformerPicker";
 import { ROLE_LABEL, send } from "./savePayment";
 import styles from "./payments.module.css";

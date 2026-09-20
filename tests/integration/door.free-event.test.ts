@@ -6,7 +6,7 @@ import { makeEvent, contactRow } from "./helpers/factories";
 import { contacts, doorRecords, gateSales } from "@/server/db/schema";
 import { POST as ATTEND } from "@/app/api/events/[id]/attendance/route";
 import { POST as CREATE_DR } from "@/app/api/door-records/route";
-import { PUT as PUT_GATE } from "@/app/api/door-records/[id]/gate-sales/route";
+import { POST as CREATE_SALE } from "@/app/api/door-records/[id]/sales/route";
 
 // FR-010 — free events: attendance with no door record; donations create one.
 describe("free events", () => {
@@ -30,13 +30,17 @@ describe("free events", () => {
     const drRes = await CREATE_DR(jsonReq("POST", "/api/door-records", { eventId: evt.id }), ctx());
     const drId = (await drRes.json()).id as string;
     const [donor] = await db.insert(contacts).values(contactRow("Donor")).returning();
-    const res = await PUT_GATE(
-      jsonReq("PUT", `/api/door-records/${drId}/gate-sales`, {
-        sales: [{ category: "donation", paymentMethod: "cash", amount: 40, contactId: donor!.id }],
+    // Feature 082 (research R5): a named sale is recorded on its own, not through the gate's Save.
+    const res = await CREATE_SALE(
+      jsonReq("POST", `/api/door-records/${drId}/sales`, {
+        category: "donation",
+        paymentMethod: "cash",
+        amount: 40,
+        contactId: donor!.id,
       }),
       ctx({ id: drId }),
     );
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(201);
     const sales = await db.select().from(gateSales).where(eq(gateSales.doorRecordId, drId));
     expect(sales).toHaveLength(1);
     expect(sales[0]?.category).toBe("donation");

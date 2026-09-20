@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import Dialog from "./Dialog";
+import Dialog from "@/app/_components/Dialog";
 import PerformerPicker, { type PickedPerformer } from "./PerformerPicker";
 import { money, ROLE_LABEL, send } from "./savePayment";
 import type { Booking } from "./types";

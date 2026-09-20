@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { db } from "./db";
 import { createEvent } from "@/server/domain/events/eventService";
 import { createPerformer } from "@/server/domain/performers/performerService";
-import { createDoorRecord, putGateSales } from "@/server/domain/door/doorRecordService";
+import { createDoorRecord } from "@/server/domain/door/doorRecordService";
 import { deriveContactNames } from "@/server/domain/contacts/normalize";
 import {
   membershipAccounts,
@@ -11,6 +11,7 @@ import {
   contactEmails,
   contacts,
   events,
+  gateSales,
   roleGrants,
   staffIdentities,
 } from "@/server/db/schema";
@@ -155,18 +156,36 @@ export async function makeVolunteerContact(opts: {
   return { contactId, emailId };
 }
 
-/** Create a door record for an event and optionally set gate sales (dollar amounts). */
+/**
+ * Create a door record for an event and optionally seed gate sales (dollar amounts).
+ *
+ * Feature 082 (research R16): every sale is its own line, written through its own route. A test that only
+ * needs a sale to EXIST should not have to drive a route for it, so they are inserted directly here. A
+ * test of the sale routes themselves must of course call them (`tests/integration/gate.sales.test.ts`).
+ */
 export async function makeDoorRecord(
   eventId: string,
   sales: {
     category: Exclude<GateCategory, "admission">;
-    paymentMethod: PaymentMethod;
+    paymentMethod: Exclude<PaymentMethod, "check">;
     amount: number;
     contactId?: string;
+    membershipLevel?: MembershipLevel;
   }[] = [],
 ): Promise<string> {
   const dr = await createDoorRecord(db, eventId, "test");
-  if (sales.length) await putGateSales(db, dr.id, { sales });
+  if (sales.length) {
+    await db.insert(gateSales).values(
+      sales.map((s) => ({
+        doorRecordId: dr.id,
+        category: s.category,
+        paymentMethod: s.paymentMethod,
+        amountCents: Math.round(s.amount * 100),
+        contactId: s.contactId ?? null,
+        membershipLevel: s.membershipLevel ?? null,
+      })),
+    );
+  }
   return dr.id;
 }
 

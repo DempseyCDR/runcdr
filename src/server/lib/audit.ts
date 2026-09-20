@@ -50,6 +50,14 @@ export type AuditEvent = {
     | "email.created"
     | "door_record.created"
     | "door_record.updated"
+    // Feature 082 (FR-034): gate sales and checks received, each written on its own and naming the
+    // signed-in volunteer who recorded or corrected it.
+    | "gate_sale.created"
+    | "gate_sale.updated"
+    | "gate_sale.deleted"
+    | "gate_check.created"
+    | "gate_check.updated"
+    | "gate_check.deleted"
     | "attendance.purge"
     | "attendance.updated"
     | "attendance.deleted"

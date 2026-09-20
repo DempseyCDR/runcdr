@@ -1,0 +1,28 @@
+/* Feature 081, shared by 082: a backdrop and a panel that scrolls within a phone's viewport. */
+
+.backdrop {
+  background: rgba(0, 0, 0, 0.45);
+  inset: 0;
+  overflow-y: auto;
+  padding: var(--space-2);
+  position: fixed;
+  z-index: 50;
+}
+
+.panel {
+  background: var(--surface, #fff);
+  border-radius: 8px;
+  box-sizing: border-box;
+  display: grid;
+  gap: var(--space-2);
+  margin: 0 auto;
+  max-height: calc(100dvh - 2 * var(--space-2));
+  max-width: 40rem;
+  overflow-y: auto;
+  padding: var(--space-3);
+}
+
+.heading {
+  font-size: 1.15rem;
+  margin: 0;
+}

@@ -9,7 +9,7 @@ import { orderBookings } from "@/server/domain/payments/order";
 import AddPerformerDialog from "./AddPerformerDialog";
 import ConfirmDialog, { CHOICE_CODES, type Choice } from "./ConfirmDialog";
 import DeleteDialog from "./DeleteDialog";
-import Dialog from "./Dialog";
+import Dialog from "@/app/_components/Dialog";
 import EarlierBookingDialog from "./EarlierBookingDialog";
 import EditPaymentDialog from "./EditPaymentDialog";
 import PerformerRow from "./PerformerRow";

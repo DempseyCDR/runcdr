@@ -63,8 +63,8 @@ describe("recordDuesPayment — transactional (feature 068)", () => {
   /**
    * Feature 068 supersedes the old `source_gate_sale_id` partial unique index. A DURABLE account cannot
    * carry a key per payment — many payments, one row — and the index was never the door's real guard
-   * anyway: `putGateSales` deletes and re-inserts gate-sale rows on every save, so their ids were never
-   * stable enough to key on. The actual protection is the renewal no-op, asserted here (research R2).
+   * anyway: the gate's old replace-all Save deleted and re-inserted gate-sale rows on every save, so their
+   * ids were never stable enough to key on. The actual protection is the renewal no-op, asserted here (research R2).
    */
   it("recording the same dues twice does not double-extend the account (idempotency, R5)", async () => {
     const { contactId } = await makeContactWithEmail({

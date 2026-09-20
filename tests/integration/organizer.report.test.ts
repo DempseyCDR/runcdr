@@ -9,6 +9,7 @@ import { createContact } from "@/server/domain/contacts/contactService";
 import { recordAttendance } from "@/server/domain/attendance/attendanceService";
 import { purgeOldAttendance } from "@/server/domain/attendance/retentionService";
 import { assembleOrganizerReport } from "@/server/domain/organizer/reportService";
+import { createGateCheck } from "@/server/domain/door/gateCheckService";
 import { getAttendanceBreakdown } from "@/server/domain/attendance/breakdownService";
 
 const year = 2026;
@@ -49,6 +50,28 @@ describe("organizer report", () => {
 
   // Feature 041 (P6-R11): the band field shows the booked BAND's name (not the joined member names) when a
   // named band plays; ad-hoc / open-band / no-musicians fall back exactly as before; no computed figure moves.
+  // Feature 082 (research R3, FR-020): admission gains a third source — admission a check paid for — and
+  // the organizer report reads the same `computeEventGate`, so its gross gate follows without change.
+  it("counts admission paid by check in the gross gate", async () => {
+    const evt = await makeEvent({ seriesKey: "tnc", eventDate: "2026-06-18" });
+    const drId = await makeDoorRecord(evt.id);
+    await updateDoorRecord(db, drId, { grossCash: 300, seedFloat: 0 });
+    const writer = await createContact(db, { firstName: "Chuck", lastName: "Writer" });
+    await createGateCheck(db, drId, {
+      writerContactId: writer.id,
+      lines: [
+        { category: "admission", amount: 30, quantity: 2 },
+        // A check's T-shirt is merchandise, not admission, and never comes off the cash.
+        { category: "merchandise", amount: 25 },
+      ],
+    });
+
+    const report = await assembleOrganizerReport(db, "tnc", year);
+    const row = report.perDanceRows[0] as Record<string, unknown>;
+    expect(row.grossGate).toBe(300 + 30);
+    expect(row.merchandise).toBe(25);
+  });
+
   it("shows the band's name for a named band, with figures unchanged (FR-001/FR-005)", async () => {
     const evt = await makeEvent({ seriesKey: "tnc", eventDate: "2026-06-18" });
     const drId = await makeDoorRecord(evt.id);
