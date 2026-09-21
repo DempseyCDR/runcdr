@@ -12,9 +12,12 @@ import VolunteerNav from "@/app/VolunteerNav";
  *
  * ⚠️ Presentation, not a control — the routes enforce authorization regardless. Omitting a link never
  * grants or denies anything; it just declines to invite someone somewhere they would be refused.
+ *
+ * Feature 083 (B53): it also hands the presenter the signed-in volunteer's name, for the sign-out control
+ * to stand beside. The name is resolved here, on the server, so the presenter still loads nothing.
  */
 export default async function Nav() {
   const actor = await getActor();
   if (!actor) return null;
-  return <VolunteerNav items={navItemsFor(actor)} />;
+  return <VolunteerNav items={navItemsFor(actor)} signedInAs={actor.staff.displayName} />;
 }

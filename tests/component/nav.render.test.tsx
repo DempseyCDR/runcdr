@@ -6,12 +6,21 @@ import { render, screen } from "@testing-library/react";
 // return null for anonymous visitors (FR-005) and render the role-filtered presenter when signed in.
 // The presenter (VolunteerNav, already tested) and the grants loader are stubbed here.
 vi.mock("@/server/auth/currentStaff", () => ({ getActor: vi.fn() }));
-vi.mock("@/server/auth/nav", () => ({ navItemsFor: vi.fn(() => [{ href: "/gate", label: "Gate money" }]) }));
+vi.mock("@/server/auth/nav", () => ({
+  navItemsFor: vi.fn(() => [{ href: "/gate", label: "Gate money" }]),
+}));
 vi.mock("@/app/VolunteerNav", () => ({
-  default: ({ items }: { items: { href: string }[] }) => (
-    <nav data-testid="vnav">{items.length} items</nav>
+  default: ({ items, signedInAs }: { items: { href: string }[]; signedInAs: string }) => (
+    <nav data-testid="vnav">
+      {items.length} items for {signedInAs}
+    </nav>
   ),
 }));
+
+/** An actor as `getActor` resolves one: the signed-in person, plus their grants (feature 016). */
+const ACTOR = { staff: { displayName: "Meg Door" }, grants: [] } as unknown as NonNullable<
+  Awaited<ReturnType<typeof getActor>>
+>;
 
 import Nav from "@/app/Nav";
 import { getActor } from "@/server/auth/currentStaff";
@@ -29,8 +38,16 @@ describe("Nav — root-layout server loader", () => {
   });
 
   it("renders the volunteer presenter with role-filtered items when signed in", async () => {
-    mockActor.mockResolvedValue({} as Awaited<ReturnType<typeof getActor>>);
+    mockActor.mockResolvedValue(ACTOR);
     render(await Nav());
     expect(screen.getByTestId("vnav")).toHaveTextContent("1 items");
+  });
+
+  // Feature 083 (FR-005): the presenter shows whose session it is; the name comes from the server, so
+  // the menu still makes no authorization decision and loads nothing itself.
+  it("passes the signed-in volunteer's display name to the presenter", async () => {
+    mockActor.mockResolvedValue(ACTOR);
+    render(await Nav());
+    expect(screen.getByTestId("vnav")).toHaveTextContent("for Meg Door");
   });
 });
