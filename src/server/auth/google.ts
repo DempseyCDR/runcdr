@@ -27,11 +27,19 @@ const SCOPES = ["openid", "email"];
 
 export type Authorization = { url: URL; state: string; codeVerifier: string };
 
-/** Start the authorization-code flow. Caller must persist `state` + `codeVerifier` in cookies. */
+/**
+ * Start the authorization-code flow. Caller must persist `state` + `codeVerifier` in cookies.
+ *
+ * Feature 083 (B53): `prompt=select_account` makes Google ASK which account to use. Without it Google
+ * silently returns whichever account it still holds a session for — our sign-out ends the club's session,
+ * not Google's — so the next volunteer at a shared door phone would be signed in as the last one, and
+ * nobody could sign in as a different role to check what that role sees.
+ */
 export function beginAuthorization(): Authorization {
   const state = generateState();
   const codeVerifier = generateCodeVerifier();
   const url = googleClient().createAuthorizationURL(state, codeVerifier, SCOPES);
+  url.searchParams.set("prompt", "select_account");
   return { url, state, codeVerifier };
 }
 

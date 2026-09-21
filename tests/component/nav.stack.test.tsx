@@ -31,7 +31,7 @@ describe("public + volunteer nav stack (US3)", () => {
     render(
       <>
         <PublicNav />
-        <VolunteerNav items={[{ href: "/gate", label: "Gate" }]} />
+        <VolunteerNav items={[{ href: "/gate", label: "Gate" }]} signedInAs="Meg Door" />
       </>,
     );
     expect(screen.getByRole("navigation", { name: "Site" })).toBeInTheDocument();
