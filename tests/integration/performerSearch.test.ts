@@ -46,6 +46,32 @@ describe("searchPerformers", () => {
     expect(plain.items.every((i: object) => !("bookedAs" in i))).toBe(true);
   });
 
+  // Feature 084 US2 (FR-006, FR-007): the page needs to know when it is showing only part of the answer.
+  it("says when more matched than it returned", async () => {
+    for (let i = 0; i < 22; i++) await makePerformer(`Fiddler ${String(i).padStart(2, "0")}`);
+    const res = await SEARCH(jsonReq("GET", "/api/performers?q=fiddler"), ctx());
+    const { items, truncated } = await res.json();
+    expect(items).toHaveLength(20);
+    expect(truncated).toBe(true);
+    expect(items.map((i: { displayName: string }) => i.displayName)).toEqual(
+      [...items.map((i: { displayName: string }) => i.displayName)].sort(),
+    );
+
+    const few = await (await SEARCH(jsonReq("GET", "/api/performers?q=fiddler 0"), ctx())).json();
+    expect(few.truncated).toBe(false);
+  });
+
+  // Feature 084 (analysis F1): three pages — bookings, bands and the bookings report — fetch the roster
+  // with no query at all. FR-005 is a rule about the performers PAGE, not about this endpoint, so the
+  // browse must keep working. This guards it.
+  it("still browses the whole roster when no query is given", async () => {
+    await makePerformer("Zoe");
+    await makePerformer("Amy");
+    const res = await SEARCH(jsonReq("GET", "/api/performers"), ctx());
+    const { items } = await res.json();
+    expect(items.map((i: { displayName: string }) => i.displayName)).toEqual(["Amy", "Zoe"]);
+  });
+
   it("treats LIKE metacharacters as literals, not wildcards", async () => {
     await makePerformer("Bob Fabinski");
     // A bare '%' must not match everything (analyze L1).

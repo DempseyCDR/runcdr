@@ -93,11 +93,30 @@ export function EventModal({ mode, event, venues, onClose, onSaved }: Props) {
       label: label || null,
       description: description || null,
     };
+    // Feature 084 (FR-028): an edit carries only what changed, so two people editing different fields of
+    // one event do not overwrite each other — and an unchanged start time is never re-sent (which is what
+    // used to 422 on "HH:MM:SS"). Creating sends the lot.
+    const before = {
+      eventDate: event.eventDate,
+      startTime: toHHMM(event.startTime) || null,
+      venueId: event.venueId ?? null,
+      rentCents: event.rentCents,
+      label: event.label || null,
+      description: event.description || null,
+    };
+    const changed = Object.fromEntries(
+      Object.entries(body).filter(([k, v]) => v !== before[k as keyof typeof before]),
+    );
+    if (mode !== "create" && Object.keys(changed).length === 0) {
+      onSaved?.();
+      onClose();
+      return;
+    }
     const url = mode === "create" ? "/api/events" : `/api/events/${event.id}`;
     const res = await apiFetch(url, {
       method: mode === "create" ? "POST" : "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(mode === "create" ? { ...body, seriesKey: event.seriesKey } : body),
+      body: JSON.stringify(mode === "create" ? { ...body, seriesKey: event.seriesKey } : changed),
     });
     if (res.status === 403) return setError("Only the Booker may edit events.");
     if (!res.ok) return setError("Could not save event");

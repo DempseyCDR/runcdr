@@ -79,8 +79,17 @@ export type AuditEvent = {
     | "band.deleted"
     | "band.booked"
     | "venue.created"
+    // Feature 084 (FR-010, FR-012): retiring a record and putting it back. Named for what they do —
+    // `band.deleted` keeps its older name rather than rewriting history's vocabulary.
+    | "venue.archived"
+    | "venue.restored"
+    | "performer.archived"
+    | "performer.restored"
+    | "band.restored"
     | "venue.updated"
     | "venue_rent.created"
+    // Feature 084 (FR-030): removing a rent nothing has used yet.
+    | "venue_rent.deleted"
     | "event.rent_set"
     | "event.deleted"
     | "event.generated"

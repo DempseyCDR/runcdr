@@ -3,8 +3,10 @@ import { apiFetch } from "@/app/apiFetch";
 
 import { useCallback, useEffect, useState } from "react";
 import { formatWallClock } from "@/server/domain/public/wallClock";
+import { EventModal } from "@/app/(admin)/_modals/EventModal";
 
 type Series = { id: string; key: string; name: string };
+type VenueLite = { id: string; name: string; shortName: string | null };
 type Group = { id: string; name: string; kind: string | null };
 type EventRow = {
   id: string;
@@ -38,8 +40,11 @@ export default function EventsPage() {
   const [error, setError] = useState<string | null>(null);
   // Feature 018: manage an existing event (reschedule / cancel / delete / advertised price).
   const [manageId, setManageId] = useState("");
-  const [manageDate, setManageDate] = useState("");
   const [managePrice, setManagePrice] = useState("");
+  // Feature 084 (FR-001): the event form — label, description, start time, venue and rent were collected
+  // on creation and then unreachable, because nothing on this page opened the modal that edits them.
+  const [venues, setVenues] = useState<VenueLite[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
   // Feature 018 (B26): recurring generation.
   const [recSeriesKey, setRecSeriesKey] = useState("");
   const [recFirst, setRecFirst] = useState("");
@@ -152,6 +157,10 @@ export default function EventsPage() {
       });
     void loadGroups();
     void loadEvents();
+    // The event form offers a venue picker (feature 084).
+    void apiFetch("/api/venues")
+      .then((r) => r.json())
+      .then((d) => setVenues(d.items ?? []));
   }, [loadEvents, loadGroups]);
 
   const seriesKeyById = (id: string) => series.find((s) => s.id === id)?.key ?? id;
@@ -232,7 +241,6 @@ export default function EventsPage() {
           onChange={(e) => {
             setManageId(e.target.value);
             const ev = events.find((x) => x.id === e.target.value);
-            setManageDate(ev?.eventDate ?? "");
             setManagePrice(
               ev?.advertisedPriceCents != null ? (ev.advertisedPriceCents / 100).toFixed(2) : "",
             );
@@ -248,17 +256,9 @@ export default function EventsPage() {
         </select>
         {manageId && (
           <>
-            <label>
-              Reschedule to{" "}
-              <input
-                type="date"
-                value={manageDate}
-                onChange={(e) => setManageDate(e.target.value)}
-              />{" "}
-              <button onClick={() => patchEvent(manageId, { eventDate: manageDate })}>
-                Save date
-              </button>
-            </label>
+            <button type="button" onClick={() => setEditingId(manageId)}>
+              Edit event
+            </button>
             <label>
               Advertised price ($, public){" "}
               <input
@@ -427,6 +427,32 @@ export default function EventsPage() {
           </button>
         </div>
       </div>
+      {editingId &&
+        (() => {
+          const ev = events.find((x) => x.id === editingId);
+          if (!ev) return null;
+          return (
+            <EventModal
+              mode="edit"
+              event={{
+                id: ev.id,
+                seriesKey: seriesKeyById(ev.seriesId),
+                eventDate: ev.eventDate,
+                startTime: ev.startTime,
+                venueId: null,
+                rentCents: ev.rentCents,
+                label: ev.label,
+                description: ev.description,
+              }}
+              venues={venues}
+              onClose={() => setEditingId(null)}
+              onSaved={() => {
+                setEditingId(null);
+                void loadEvents();
+              }}
+            />
+          );
+        })()}
     </main>
   );
 }

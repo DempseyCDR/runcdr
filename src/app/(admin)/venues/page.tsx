@@ -1,134 +1,39 @@
 "use client";
 import { apiFetch } from "@/app/apiFetch";
+import VenueForm, { type Venue } from "./VenueForm";
 
 import { useCallback, useEffect, useState } from "react";
 
-type Venue = {
-  id: string;
-  name: string;
-  shortName: string | null;
-  address: string;
-  landlordContactId: string | null;
-  // Feature 052 (P7-R8): opt-in public exposure + public directions note.
-  isPublic: boolean;
-  directions: string | null;
-};
 type EventRow = { id: string; eventDate: string; venueId: string | null };
-type Contact = { id: string; displayName: string };
 
+/**
+ * Venues (feature 084 US1).
+ *
+ * One form creates and edits a venue — the page this replaced collected a name, an address and a short
+ * name on creation and then offered a scatter of single-field controls, so a venue could never simply be
+ * corrected. The list opens the form; the form owns every field the record holds (FR-001, FR-002).
+ */
 export default function VenuesPage() {
   const [venues, setVenues] = useState<Venue[]>([]);
   const [events, setEvents] = useState<EventRow[]>([]);
-  const [name, setName] = useState("");
-  const [address, setAddress] = useState("");
-  const [shortName, setShortName] = useState(""); // Feature 020 US5: optional; defaults to initials
+  const [editing, setEditing] = useState<{ venue?: Venue } | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
   const [eventId, setEventId] = useState("");
   const [venueId, setVenueId] = useState("");
-  const [message, setMessage] = useState<string | null>(null);
-  // Feature 018 (B22): venue landlord contact (search picker, B39 convention).
-  const [landlordVenueId, setLandlordVenueId] = useState("");
-  const [lq, setLq] = useState("");
-  const [lresults, setLresults] = useState<Contact[]>([]);
-
-  useEffect(() => {
-    if (!lq.trim()) {
-      setLresults([]);
-      return;
-    }
-    void apiFetch(`/api/contacts?q=${encodeURIComponent(lq)}`)
-      .then((r) => r.json())
-      .then((d) => setLresults(d.items ?? []));
-  }, [lq]);
-
-  async function setLandlord(venue: string, landlordContactId: string | null) {
-    const res = await apiFetch(`/api/venues/${venue}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ landlordContactId }),
-    });
-    if (!res.ok) {
-      setMessage((await res.json().catch(() => null))?.error?.message ?? "Failed to set landlord");
-      return;
-    }
-    setLq("");
-    setLresults([]);
-    setMessage(landlordContactId ? "Landlord set." : "Landlord cleared.");
-    void load();
-  }
 
   const load = useCallback(async () => {
     const [v, e] = await Promise.all([
-      apiFetch("/api/venues").then((r) => r.json()),
+      apiFetch(`/api/venues${showArchived ? "?archived=1" : ""}`).then((r) => r.json()),
       apiFetch("/api/events").then((r) => r.json()),
     ]);
     setVenues(v.items ?? []);
     setEvents(e.items ?? []);
-  }, []);
+  }, [showArchived]);
 
   useEffect(() => {
     void load();
   }, [load]);
-
-  async function createVenue(e: React.FormEvent) {
-    e.preventDefault();
-    setMessage(null);
-    const res = await apiFetch("/api/venues", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, address, ...(shortName ? { shortName } : {}) }),
-    });
-    if (!res.ok) {
-      setMessage("Failed to create venue (name + address required)");
-      return;
-    }
-    setName("");
-    setAddress("");
-    setShortName("");
-    void load();
-  }
-
-  // Feature 020 US5: edit an existing venue's short name (display-only, non-unique).
-  async function saveShortName(id: string, value: string) {
-    setMessage(null);
-    const res = await apiFetch(`/api/venues/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ shortName: value }),
-    });
-    if (!res.ok) return setMessage("Failed to update short name");
-    void load();
-  }
-
-  // Feature 052 (P7-R8): opt a venue into public exposure. The server rejects public-without-address (FR-007).
-  async function savePublic(id: string, isPublic: boolean) {
-    setMessage(null);
-    const res = await apiFetch(`/api/venues/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ isPublic }),
-    });
-    if (!res.ok) {
-      setMessage(
-        (await res.json().catch(() => null))?.error?.message ?? "Failed to update public flag",
-      );
-      void load(); // reload so the checkbox reflects the unchanged state
-      return;
-    }
-    setMessage(isPublic ? "Venue is now public." : "Venue is no longer public.");
-    void load();
-  }
-
-  // Feature 052 (P7-R8): edit a venue's public directions note.
-  async function saveDirections(id: string, value: string) {
-    setMessage(null);
-    const res = await apiFetch(`/api/venues/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ directions: value || null }),
-    });
-    if (!res.ok) return setMessage("Failed to update directions");
-    void load();
-  }
 
   async function assign() {
     if (!eventId) return;
@@ -149,93 +54,54 @@ export default function VenuesPage() {
   return (
     <main style={{ padding: 24, maxWidth: 640 }}>
       <h1>Venues</h1>
+
+      <button type="button" onClick={() => setEditing({})}>
+        Add a venue
+      </button>
+
+      {/* FR-012: how a hall retired by mistake is found again. */}
+      <label>
+        <input
+          type="checkbox"
+          checked={showArchived}
+          onChange={(e) => setShowArchived(e.target.checked)}
+        />
+        Include archived
+      </label>
+
       <ul>
         {venues.map((v) => (
           <li key={v.id} style={{ marginBottom: 10 }}>
             <strong>{v.shortName ?? "—"}</strong> · {v.name} — {v.address}
-            {v.landlordContactId ? " · landlord set" : ""}{" "}
-            <input
-              aria-label={`Short name for ${v.name}`}
-              defaultValue={v.shortName ?? ""}
-              style={{ width: 90 }}
-              onBlur={(e) => {
-                if (e.target.value !== (v.shortName ?? ""))
-                  void saveShortName(v.id, e.target.value);
-              }}
-            />
-            {/* Feature 052 (P7-R8): opt-in public exposure + directions note. */}
-            <label style={{ marginLeft: 8 }}>
-              <input
-                type="checkbox"
-                checked={v.isPublic}
-                onChange={(e) => void savePublic(v.id, e.target.checked)}
-                aria-label={`Public for ${v.name}`}
-              />{" "}
-              Public
-            </label>
-            <input
-              aria-label={`Directions for ${v.name}`}
-              defaultValue={v.directions ?? ""}
-              placeholder="Public directions / transit / parking"
-              style={{ display: "block", width: "100%", marginTop: 4 }}
-              onBlur={(e) => {
-                if (e.target.value !== (v.directions ?? ""))
-                  void saveDirections(v.id, e.target.value);
-              }}
-            />
+            {v.landlordContactId ? " · landlord set" : ""}
+            {v.isPublic ? " · public" : ""}
+            {v.archivedAt ? " · archived" : ""}{" "}
+            <button type="button" onClick={() => setEditing({ venue: v })}>
+              Edit
+            </button>
           </li>
         ))}
         {venues.length === 0 && <li style={{ color: "#888" }}>No venues</li>}
       </ul>
 
-      <h2 style={{ marginTop: 24 }}>Venue landlord</h2>
-      <div style={{ display: "grid", gap: 6, maxWidth: 420 }}>
-        <select value={landlordVenueId} onChange={(e) => setLandlordVenueId(e.target.value)}>
-          <option value="">— venue —</option>
-          {venues.map((v) => (
-            <option key={v.id} value={v.id}>
-              {v.name}
-              {v.landlordContactId ? " (has landlord)" : ""}
-            </option>
-          ))}
-        </select>
-        {landlordVenueId && (
-          <>
-            <input
-              placeholder="Search a contact…"
-              value={lq}
-              onChange={(e) => setLq(e.target.value)}
-            />
-            <ul>
-              {lresults.map((c) => (
-                <li key={c.id}>
-                  {c.displayName}{" "}
-                  <button onClick={() => setLandlord(landlordVenueId, c.id)}>
-                    Set as landlord
-                  </button>
-                </li>
-              ))}
-            </ul>
-            <button onClick={() => setLandlord(landlordVenueId, null)}>Clear landlord</button>
-          </>
-        )}
-      </div>
-
-      <h2>Add venue</h2>
-      <form onSubmit={createVenue} style={{ display: "grid", gap: 6, maxWidth: 420 }}>
-        <input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
-        <input placeholder="Address" value={address} onChange={(e) => setAddress(e.target.value)} />
-        <input
-          placeholder="Short name (optional — defaults to initials, e.g. GH)"
-          value={shortName}
-          onChange={(e) => setShortName(e.target.value)}
-        />
-        <button type="submit">Create venue</button>
-      </form>
+      {editing && (
+        <section aria-label={editing.venue ? `Edit ${editing.venue.name}` : "Add a venue"}>
+          <h2>{editing.venue ? editing.venue.name : "Add a venue"}</h2>
+          <VenueForm
+            venue={editing.venue}
+            onSaved={() => {
+              setEditing(null);
+              setMessage(editing.venue ? "Venue saved." : "Venue created.");
+              void load();
+            }}
+            onClose={() => setEditing(null)}
+          />
+        </section>
+      )}
 
       <h2 style={{ marginTop: 24 }}>Assign a venue to an event</h2>
       <div style={{ display: "grid", gap: 6, maxWidth: 420 }}>
-        <select value={eventId} onChange={(e) => setEventId(e.target.value)}>
+        <select aria-label="Event" value={eventId} onChange={(e) => setEventId(e.target.value)}>
           <option value="">— event —</option>
           {events.map((e) => (
             <option key={e.id} value={e.id}>
@@ -243,7 +109,7 @@ export default function VenuesPage() {
             </option>
           ))}
         </select>
-        <select value={venueId} onChange={(e) => setVenueId(e.target.value)}>
+        <select aria-label="Venue" value={venueId} onChange={(e) => setVenueId(e.target.value)}>
           <option value="">— (no venue) —</option>
           {venues.map((v) => (
             <option key={v.id} value={v.id}>

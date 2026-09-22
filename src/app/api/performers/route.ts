@@ -15,8 +15,22 @@ export const GET = withAuth({ requires: "base" }, async (req) => {
   const q = params.get("q");
   // Feature 081: `&eventId=` marks who is already booked on that event (the Add dialog).
   const eventId = params.get("eventId") ?? undefined;
-  const items = q !== null ? await searchPerformers(db, q, 20, eventId) : await listPerformers(db);
-  return NextResponse.json({ items });
+  // Feature 084 (FR-007): fetch one past the limit to tell the page it is seeing only part of the answer
+  // — the shape `searchContacts` has used since feature 062.
+  const LIMIT = 20;
+  // Feature 084 (FR-012): "include archived" is how a retired record is found again to restore it.
+  const includeArchived = params.get("archived") === "1";
+  if (q === null) {
+    // No query: the whole roster, ordered. `bookings`, `bands` and `bookings-report` all read this, so it
+    // stays (analysis F1); the performers PAGE is what must not browse (FR-005).
+    return NextResponse.json({
+      items: await listPerformers(db, includeArchived),
+      truncated: false,
+    });
+  }
+  const found = await searchPerformers(db, q, LIMIT + 1, eventId, includeArchived);
+  const truncated = found.length > LIMIT;
+  return NextResponse.json({ items: truncated ? found.slice(0, LIMIT) : found, truncated });
 });
 
 export const POST = withAuth({ requires: "performer.write" }, async (req) => {

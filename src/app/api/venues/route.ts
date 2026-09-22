@@ -5,8 +5,11 @@ import { parseBody } from "@/server/lib/parseBody";
 import { venueCreateSchema } from "@/server/validation/venues";
 import { createVenue, listVenues } from "@/server/domain/venues/venueService";
 
-export const GET = withAuth({ requires: "base" }, async () => {
-  const items = await listVenues(db);
+export const GET = withAuth({ requires: "base" }, async (req) => {
+  // Feature 084 (FR-012): "include archived" is how a hall retired by mistake is found again and put
+  // back — without it, archiving would be a one-way door.
+  const includeArchived = new URL(req.url).searchParams.get("archived") === "1";
+  const items = await listVenues(db, includeArchived);
   return NextResponse.json({ items });
 });
 

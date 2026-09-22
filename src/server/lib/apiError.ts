@@ -60,6 +60,7 @@ export type ApiErrorCode =
   | "EMAIL_ACTIVE_ELSEWHERE"
   // Feature 081: performer payment integrity.
   | "BOOKING_ALREADY_PAID"
+  | "STILL_IN_USE"
   | "CHECK_NUMBER_TAKEN"
   | "INVALID_CHECK_NUMBER"
   | "SECOND_PAYMENT_TO_PAYEE"
@@ -296,6 +297,21 @@ export const errors = {
   sameContact: () =>
     new ApiError("SAME_CONTACT", 422, "Canonical and merged contacts must differ."),
   validation: (message: string) => new ApiError("VALIDATION_ERROR", 422, message),
+  /**
+   * Feature 084 (FR-014): archiving something with dates still to come is a WARNING, not a refusal — the
+   * form asks and sends `confirm`. The counts are here so the question can be specific: "3 events, the
+   * next on 8 Oct" rather than "this is in use".
+   */
+  stillInUse: (what: string, details: { futureCount: number; nextDate: string | null }) =>
+    new ApiError(
+      "STILL_IN_USE",
+      409,
+      `${what} still has ${details.futureCount} ${details.futureCount === 1 ? "date" : "dates"} to come${
+        details.nextDate ? `, the next on ${details.nextDate}` : ""
+      }. Archive anyway?`,
+      undefined,
+      { details },
+    ),
   // Feature 081 (contracts/payments.md): refusals the payments page turns into choices carry `details`.
   bookingAlreadyPaid: (details: BookingAlreadyPaidDetails) =>
     new ApiError(

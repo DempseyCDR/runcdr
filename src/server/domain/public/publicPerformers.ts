@@ -36,8 +36,10 @@ export function isBandPublic(b: Pick<BandRow, "isPublic" | "archivedAt">): boole
 }
 
 /** A performer is a public caller iff it is marked public AND designated a caller. */
-export function isCallerPublic(p: Pick<PerformerRow, "isPublic" | "isCaller">): boolean {
-  return p.isPublic && p.isCaller;
+export function isCallerPublic(
+  p: Pick<PerformerRow, "isPublic" | "isCaller" | "archivedAt">,
+): boolean {
+  return p.isPublic && p.isCaller && p.archivedAt === null;
 }
 
 async function loadPublicMembers(db: Db, bandId: string): Promise<PublicBandMember[]> {
@@ -76,7 +78,13 @@ export async function listPublicBands(db: Db, style?: string): Promise<PublicBan
 
 /** Every public caller (name-ordered); optional style filter. */
 export async function listPublicCallers(db: Db, style?: string): Promise<PublicCaller[]> {
-  const where = and(eq(performers.isPublic, true), eq(performers.isCaller, true));
+  // Feature 084 (FR-031): archived is never public, whatever `is_public` says — the rule `isBandPublic`
+  // has always applied to bands. The flag is left alone, so restoring restores the listing.
+  const where = and(
+    eq(performers.isPublic, true),
+    eq(performers.isCaller, true),
+    isNull(performers.archivedAt),
+  );
   const rows = await db.select().from(performers).where(where).orderBy(asc(performers.displayName));
   const filtered = style && isStyleTag(style) ? rows.filter((p) => p.styles.includes(style)) : rows;
   return filtered.map((p) => ({

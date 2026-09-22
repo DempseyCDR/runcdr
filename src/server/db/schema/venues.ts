@@ -18,6 +18,9 @@ export const venues = pgTable("venues", {
   landlordContactId: uuid("landlord_contact_id").references(() => contacts.id, {
     onDelete: "set null",
   }),
+  // Feature 084: retired without deleting — null means active, as on bands. Reads that OFFER a
+  // record gate on it; reads that REPORT one (history) deliberately do not.
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

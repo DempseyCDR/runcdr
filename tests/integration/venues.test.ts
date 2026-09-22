@@ -46,6 +46,32 @@ describe("venue CRUD + event assignment", () => {
     expect(row?.venueId).toBe(v.id);
   });
 
+  // Feature 084 (FR-001, FR-028): every field is changeable afterwards, and a PATCH carrying one field
+  // leaves the others exactly as they were — which is what lets two people edit one venue safely.
+  it("changes any single field, leaving the rest untouched", async () => {
+    const v = await createVenue();
+    await PATCH_VENUE(
+      jsonReq("PATCH", `/api/venues/${v.id}`, {
+        shortName: "GH",
+        directions: "Park behind the hall",
+        isPublic: true,
+      }),
+      ctx({ id: v.id }),
+    );
+
+    const res = await PATCH_VENUE(
+      jsonReq("PATCH", `/api/venues/${v.id}`, { name: "Grange Hall Annexe" }),
+      ctx({ id: v.id }),
+    );
+    expect(res.status).toBe(200);
+    const after = await res.json();
+    expect(after.name).toBe("Grange Hall Annexe");
+    expect(after.shortName).toBe("GH");
+    expect(after.directions).toBe("Park behind the hall");
+    expect(after.isPublic).toBe(true);
+    expect(after.address).toBe(v.address);
+  });
+
   it("404s VENUE_NOT_FOUND when assigning an unknown venue", async () => {
     const evt = await makeEvent();
     const res = await PATCH_EVENT(
