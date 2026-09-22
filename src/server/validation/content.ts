@@ -39,7 +39,6 @@ export const RESERVED_SLUGS: ReadonlySet<string> = new Set([
   "gate",
   "payments",
   "performers",
-  "qbo-mapping",
   "rate-parameters",
   "treasurer",
   "venue-rents",

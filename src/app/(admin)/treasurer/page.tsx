@@ -163,8 +163,9 @@ function Receipts({ receipts }: { receipts: Report["receipts"] }) {
 }
 
 function Expenses({ expenses }: { expenses: Report["expenses"] }) {
-  const { payments, otherPaidOut, totals, rent } = expenses;
-  const empty = payments.length === 0 && otherPaidOut.amount === 0 && rent.amount === 0;
+  const { payments, otherPaidOut, totals, rent, reconciliation } = expenses;
+  const booked = reconciliation.booked > 0 || reconciliation.paid > 0;
+  const empty = payments.length === 0 && otherPaidOut.amount === 0 && rent.amount === 0 && !booked;
   return (
     <section aria-labelledby="report-expenses" className={styles.section}>
       <h2 id="report-expenses">Expenses</h2>
@@ -215,6 +216,15 @@ function Expenses({ expenses }: { expenses: Report["expenses"] }) {
                 <td>{rent.vendor}</td>
                 <td>unpaid</td>
                 <td className={styles.amount}>{money(rent.amount)}</td>
+              </tr>
+            )}
+            {/* Feature 085 (FR-008): did we pay everyone? A zero is an answer, so it is still shown. */}
+            {booked && (
+              <tr>
+                <td>Performers</td>
+                <td>{`booked ${money(reconciliation.booked)} · paid ${money(reconciliation.paid)}`}</td>
+                <td>outstanding</td>
+                <td className={styles.amount}>{money(reconciliation.outstanding)}</td>
               </tr>
             )}
           </tfoot>

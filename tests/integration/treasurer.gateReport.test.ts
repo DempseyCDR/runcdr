@@ -96,73 +96,63 @@ async function evening(opts: { recorder?: string } = {}) {
   return { eventId: event.id, doorRecordId };
 }
 
+// Feature 085: a check used to be reported twice — once as a receipt to its writer and again inside the
+// QuickBooks-shaped summary. It is now reported once, among the receipts, and banked in the deposits.
 describe("checks received (FR-031)", () => {
-  it("shows each check as a receipt to its writer, with its lines, notes and class", async () => {
+  it("counts each of a check's lines exactly once, under its writer", async () => {
     const { eventId } = await evening();
-    const r = await report(eventId);
+    const { receipts } = await report(eventId);
 
-    expect(r.checksReceived).toHaveLength(2);
-    const chuck = r.checksReceived.find((c: { writer: string }) => c.writer === "Chuck Writer");
-    expect(chuck).toMatchObject({
-      writer: "Chuck Writer",
-      amount: 95,
-      note: "covers Jo too",
-      depositSeparately: false,
-    });
-    expect(typeof chuck.class).toBe("string");
-    expect(chuck.lines).toEqual(
-      expect.arrayContaining([
-        { category: "admission", amount: 30, quantity: 2, for: null, level: null, note: null },
-        {
-          category: "merchandise",
-          amount: 25,
-          quantity: null,
-          for: null,
-          level: null,
-          note: "T-shirt, L",
-        },
-        {
-          category: "donation",
-          amount: 40,
-          quantity: null,
-          for: "Dee Member",
-          level: null,
-          note: "for the sound fund",
-        },
-      ]),
-    );
-    const big = r.checksReceived.find((c: { writer: string }) => c.writer === "Big Donor");
-    expect(big.depositSeparately).toBe(true);
-  });
+    type Line = { category: string; name: string | null; check: number; cash: number };
+    const lines: Line[] = receipts.lines;
 
-  it("does not repeat a check's lines among the named cash and card receipts", async () => {
-    const { eventId } = await evening();
-    const r = await report(eventId);
-    // Jo's cash payment is a named receipt; the donations paid by check are on their checks.
-    expect(r.namedCustomerReceipts.map((n: { contact: string }) => n.contact)).toEqual([
-      "Jo Friend",
+    // Chuck's three lines are his, and his alone.
+    expect(
+      lines.filter((l) => l.name === "Chuck Writer").map((l) => [l.category, l.check]),
+    ).toEqual([
+      ["admission", 30],
+      ["merchandise", 25],
+      ["donation", 40],
     ]);
-    expect(r.namedCustomerReceipts[0].notes).toEqual(["for the March dance"]);
+
+    // Jo paid cash and appears once; the donation Chuck paid FOR Dee is not also a line of Dee's.
+    expect(lines.filter((l) => l.name === "Jo Friend")).toHaveLength(1);
+    expect(lines.filter((l) => l.name === "Dee Member")).toHaveLength(0);
+
+    // Nothing is double-counted: the check column is Chuck's $95 plus Big Donor's $500.
+    expect(receipts.totals.check).toBe(595);
   });
 
   it("says so plainly when there are none (FR-036)", async () => {
     const event = await makeEvent();
     await makeDoorRecord(event.id);
     const r = await report(event.id);
-    expect(r.checksReceived).toEqual([]);
+    expect(r.receipts.lines).toEqual([]);
+    expect(r.expenses.payments).toEqual([]);
+    expect(r.paidTonightForEarlier).toEqual([]);
   });
 });
 
-describe("the gate sales summary (FR-020)", () => {
-  it("counts admission paid by check, and keeps a check's T-shirt out of the card column", async () => {
+describe("admission as it is worked out (FR-020)", () => {
+  it("counts admission paid by check, and keeps a check's T-shirt out of the admission", async () => {
     const { eventId } = await evening();
-    const r = await report(eventId);
-    const line = (cat: string) =>
-      r.gateSalesSummary.lines.find((l: { category: string }) => l.category === cat);
+    const { receipts } = await report(eventId);
 
     // Cash admission: $500 counted − $15 float − the $25 T-shirt − Jo's $15 for a future event.
-    expect(line("admission")).toMatchObject({ cash: 445, card: 180, check: 30, total: 655 });
-    expect(line("merchandise")).toMatchObject({ cash: 25, card: 0, check: 25, total: 50 });
+    expect(receipts.admission).toEqual({ cash: 445, card: 180 });
+
+    // Admission paid by check is a line of its own, not folded into the derived figures.
+    const byCheck = receipts.lines.filter(
+      (l: { category: string; check: number }) => l.category === "admission" && l.check > 0,
+    );
+    expect(byCheck.map((l: { check: number }) => l.check)).toEqual([30]);
+
+    // The merchandise sold stays merchandise, in both columns it was paid in.
+    const merch = receipts.lines.filter((l: { category: string }) => l.category === "merchandise");
+    expect(merch.map((l: { cash: number; check: number }) => [l.cash, l.check])).toEqual([
+      [25, 0],
+      [0, 25],
+    ]);
   });
 });
 

@@ -27,6 +27,7 @@ export function REPORT(eventId: string, over: Record<string, unknown> = {}) {
       otherPaidOut: { amount: 0, reason: null },
       totals: { check: 0, cash: 0, total: 0 },
       rent: { vendor: "(no landlord set)", amount: 0, unpaid: true },
+      reconciliation: { booked: 0, paid: 0, outstanding: 0 },
     },
     card: { gross: 0, transactions: 0, fee: 0 },
     deposits: [
