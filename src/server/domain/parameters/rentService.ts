@@ -1,6 +1,6 @@
-import { and, desc, eq, isNull, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNull, lte } from "drizzle-orm";
 import type { Db, DbOrTx } from "@/server/db/client";
-import { series, venueRentAudit, venueRents, venues } from "@/server/db/schema";
+import { events, series, venueRentAudit, venueRents, venues } from "@/server/db/schema";
 import type { VenueRentRow } from "@/server/db/schema";
 import { errors } from "@/server/lib/apiError";
 import { writeAudit } from "@/server/lib/audit";
@@ -63,6 +63,52 @@ export async function resolveRentForVenue(
 }
 
 /** Create a venue rent (venue default when seriesKey omitted; else series-at-venue). */
+/**
+ * Feature 084 (FR-030): what would be lost by removing this rent — events at that venue, in that rent's
+ * series (or any series, for a venue-wide row), on or after the date it takes effect.
+ *
+ * Deliberately conservative: refusing a deletion the Booker wanted is recoverable by adding a newer row;
+ * allowing one that moves the rent a past report resolved is not (SC-006).
+ */
+export async function venueRentInUse(
+  db: Db,
+  rentId: string,
+): Promise<{ futureCount: number; nextDate: string | null }> {
+  const rent = await db.query.venueRents.findFirst({ where: eq(venueRents.id, rentId) });
+  if (!rent) throw errors.validation("That rent no longer exists.");
+  const used = and(
+    eq(events.venueId, rent.venueId),
+    gte(events.eventDate, rent.effectiveDate),
+    rent.seriesId ? eq(events.seriesId, rent.seriesId) : undefined,
+  );
+  const rows = await db
+    .select({ eventDate: events.eventDate })
+    .from(events)
+    .where(used)
+    .orderBy(asc(events.eventDate));
+  return { futureCount: rows.length, nextDate: rows[0]?.eventDate ?? null };
+}
+
+/**
+ * Feature 084 (FR-030): remove a rent nothing has used — a figure typed wrongly a moment ago. A rent an
+ * event has already resolved is corrected by adding a newer one instead (FR-029), which is how this table
+ * has always worked.
+ */
+export async function deleteVenueRent(
+  db: Db,
+  rentId: string,
+  actor: string | null = null,
+): Promise<void> {
+  const rent = await db.query.venueRents.findFirst({ where: eq(venueRents.id, rentId) });
+  if (!rent) throw errors.validation("That rent no longer exists.");
+  await db.delete(venueRents).where(eq(venueRents.id, rentId));
+  writeAudit({
+    kind: "venue_rent.deleted",
+    actor,
+    details: { venueId: rent.venueId, seriesId: rent.seriesId, amountCents: rent.amountCents },
+  });
+}
+
 export async function createVenueRent(
   db: Db,
   input: VenueRentCreateInput,

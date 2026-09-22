@@ -1,9 +1,10 @@
-import { and, eq, gte, ilike, inArray, lte, sql } from "drizzle-orm";
+import { and, asc, eq, gte, ilike, inArray, isNull, lte, sql } from "drizzle-orm";
 import type { Db } from "@/server/db/client";
 import { bookings, contactEmails, contacts, events, performers } from "@/server/db/schema";
 import type { PerformerRow, PerformerType } from "@/server/db/schema";
 import { errors } from "@/server/lib/apiError";
 import { centsToDollars } from "@/server/lib/money";
+import { writeAudit } from "@/server/lib/audit";
 import { deriveContactNames } from "@/server/domain/contacts/normalize";
 import { normalizePhone } from "@/server/domain/contacts/phone";
 import { addEmailInTx } from "@/server/domain/contacts/emailService";
@@ -83,8 +84,68 @@ export async function createPerformer(db: Db, input: PerformerCreateInput): Prom
   });
 }
 
-export async function listPerformers(db: Db): Promise<PerformerRow[]> {
-  return db.select().from(performers);
+export async function listPerformers(db: Db, includeArchived = false): Promise<PerformerRow[]> {
+  // Feature 084 (FR-006, FR-010): by name, and only those on offer — archived performers are not booked.
+  return db
+    .select()
+    .from(performers)
+    .where(includeArchived ? undefined : isNull(performers.archivedAt))
+    .orderBy(performers.displayName);
+}
+
+/** Today, as the database sees an event date. */
+const todayDate = () => new Date().toISOString().slice(0, 10);
+
+/**
+ * Feature 084 (FR-014): what still expects this performer — bookings to come, and the next date.
+ * Archiving warns with this and proceeds on confirmation; the bookings stand and still name them.
+ */
+export async function performerStillInUse(
+  db: Db,
+  performerId: string,
+): Promise<{ futureCount: number; nextDate: string | null }> {
+  const rows = await db
+    .select({ eventDate: events.eventDate })
+    .from(bookings)
+    .innerJoin(events, eq(events.id, bookings.eventId))
+    .where(and(eq(bookings.performerId, performerId), gte(events.eventDate, todayDate())))
+    .orderBy(asc(events.eventDate));
+  return { futureCount: rows.length, nextDate: rows[0]?.eventDate ?? null };
+}
+
+/**
+ * Feature 084 (FR-010, FR-013): retire a performer without deleting it — bookings keep naming them, and
+ * the public flag is left exactly as it was so restoring restores the listing (FR-031).
+ */
+export async function archivePerformer(
+  db: Db,
+  id: string,
+  actor: string | null = null,
+): Promise<void> {
+  const existing = await db.query.performers.findFirst({ where: eq(performers.id, id) });
+  if (!existing) throw errors.performerNotFound();
+  if (existing.archivedAt) return;
+  await db
+    .update(performers)
+    .set({ archivedAt: new Date(), updatedAt: new Date() })
+    .where(eq(performers.id, id));
+  writeAudit({ kind: "performer.archived", actor, details: { performerId: id } });
+}
+
+/** Feature 084 (FR-012): put an archived performer back on the roster. */
+export async function restorePerformer(
+  db: Db,
+  id: string,
+  actor: string | null = null,
+): Promise<void> {
+  const existing = await db.query.performers.findFirst({ where: eq(performers.id, id) });
+  if (!existing) throw errors.performerNotFound();
+  if (!existing.archivedAt) return;
+  await db
+    .update(performers)
+    .set({ archivedAt: null, updatedAt: new Date() })
+    .where(eq(performers.id, id));
+  writeAudit({ kind: "performer.restored", actor, details: { performerId: id } });
 }
 
 export type PerformerSummary = {
@@ -105,6 +166,7 @@ export async function searchPerformers(
   q: string,
   limit = 20,
   eventId?: string,
+  includeArchived = false,
 ): Promise<PerformerSummary[]> {
   const cols = { id: performers.id, displayName: performers.displayName };
   const needle = q.trim();
@@ -112,7 +174,14 @@ export async function searchPerformers(
   const found = await db
     .select(cols)
     .from(performers)
-    .where(needle ? ilike(performers.displayName, `%${escaped}%`) : undefined)
+    // Feature 084 (FR-010, FR-012): archived performers are not offered — unless the Booker asks for
+    // them, which is how one is found again to restore it.
+    .where(
+      and(
+        needle ? ilike(performers.displayName, `%${escaped}%`) : undefined,
+        includeArchived ? undefined : isNull(performers.archivedAt),
+      ),
+    )
     .orderBy(performers.displayName)
     .limit(limit);
   if (!eventId) return found;
@@ -154,6 +223,12 @@ export async function getPerformerMailtoEmail(db: Db, performerId: string): Prom
 export type PerformerDetail = PerformerRow & {
   appearanceCount: number;
   ytdEarnings: number; // dollars; excludes donated and $0
+  /**
+   * Feature 084 (FR-018): the linked contact's display name, for the link to the record that owns this
+   * person's email and telephone. A display name, never the PII itself — that stays behind
+   * `contact.pii.read`, and this payload is readable by any volunteer.
+   */
+  contactName: string | null;
 };
 
 /** Appearance history = all bookings; YTD earnings = paid, non-donated bookings this calendar year. */
@@ -180,10 +255,15 @@ export async function getPerformer(db: Db, id: string): Promise<PerformerDetail>
       ),
     );
 
+  const contact = performer.contactId
+    ? await db.query.contacts.findFirst({ where: eq(contacts.id, performer.contactId) })
+    : null;
+
   return {
     ...performer,
     appearanceCount: appearances?.count ?? 0,
     ytdEarnings: centsToDollars(earned?.total ?? 0),
+    contactName: contact?.displayName ?? null,
   };
 }
 

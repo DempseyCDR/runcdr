@@ -1,4 +1,4 @@
-import { eq, isNull } from "drizzle-orm";
+import { and, eq, ilike, isNull } from "drizzle-orm";
 import type { Db, DbOrTx } from "@/server/db/client";
 import { bandMembers, bands, performers } from "@/server/db/schema";
 import type { BandRow } from "@/server/db/schema";
@@ -90,9 +90,31 @@ export type BandSummary = {
   leadPerformerName: string | null;
 };
 
-/** Active (non-archived) bands with a small summary for the directory/pick list. */
-export async function listBands(db: Db): Promise<BandSummary[]> {
-  const rows = await db.select().from(bands).where(isNull(bands.archivedAt)).orderBy(bands.name);
+/**
+ * Active (non-archived) bands with a small summary for the directory/pick list.
+ *
+ * Feature 084 (FR-005 to FR-007): `q` narrows by name — the bands page searches rather than listing a
+ * roster. LIKE metacharacters are escaped so a stray `%` matches literally, as `searchPerformers` does.
+ * With no `q` the whole roster comes back, because the booking flows read it that way (analysis F1).
+ */
+export async function listBands(
+  db: Db,
+  q = "",
+  limit?: number,
+  includeArchived = false,
+): Promise<BandSummary[]> {
+  const needle = q.trim().replace(/[\\%_]/g, (c) => `\\${c}`);
+  const rows = await db
+    .select()
+    .from(bands)
+    .where(
+      and(
+        needle ? ilike(bands.name, `%${needle}%`) : undefined,
+        includeArchived ? undefined : isNull(bands.archivedAt),
+      ),
+    )
+    .orderBy(bands.name)
+    .limit(limit ?? 1000);
   const summaries: BandSummary[] = [];
   for (const b of rows) {
     const roster = await loadRoster(db, b.id);
@@ -157,6 +179,19 @@ export async function archiveBand(db: Db, id: string, actor: string | null = nul
       .set({ archivedAt: new Date(), updatedAt: new Date() })
       .where(eq(bands.id, id));
     writeAudit({ kind: "band.deleted", actor, details: { bandId: id } });
+  }
+}
+
+/**
+ * Feature 084 (FR-012, research R1): put an archived band back. Archiving has existed since feature 008
+ * with no way to undo it — the gap this feature closes for all three records.
+ */
+export async function restoreBand(db: Db, id: string, actor: string | null = null): Promise<void> {
+  const existing = await db.query.bands.findFirst({ where: eq(bands.id, id) });
+  if (!existing) throw errors.bandNotFound();
+  if (existing.archivedAt) {
+    await db.update(bands).set({ archivedAt: null, updatedAt: new Date() }).where(eq(bands.id, id));
+    writeAudit({ kind: "band.restored", actor, details: { bandId: id } });
   }
 }
 

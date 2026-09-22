@@ -96,11 +96,11 @@ describe("EventModal", () => {
       expect((screen.getByLabelText(/rent/i) as HTMLInputElement).value).toBe("200"),
     );
     await user.click(screen.getByRole("button", { name: /^Save$/ }));
-    await waitFor(() => expect(calls.some((c) => c.init?.method === "PATCH")).toBe(true));
-    const patch1 = calls.find((c) => c.init?.method === "PATCH")!;
-    const body1 = JSON.parse(patch1.init!.body as string);
-    expect(body1.rentCents).toBeNull();
-    expect(body1.startTime).toBe("19:30"); // normalised from "19:30:00" (regression: user's 422)
+    // Feature 084 (FR-028): a save carries only what changed. Nothing was touched here, so nothing is
+    // sent at all — which also makes the 422 this test once guarded (an unchanged "19:30:00" start time
+    // failing HH:MM validation) impossible rather than merely handled.
+    await waitFor(() => expect(calls.length).toBeGreaterThan(0));
+    expect(calls.some((c) => c.init?.method === "PATCH")).toBe(false);
 
     // Type a different rent → the override is sent.
     calls.length = 0;
@@ -122,6 +122,46 @@ describe("EventModal", () => {
     await waitFor(() => expect(calls.some((c) => c.init?.method === "PATCH")).toBe(true));
     const patch2 = calls.find((c) => c.init?.method === "PATCH")!;
     expect(JSON.parse(patch2.init!.body as string).rentCents).toBe(15000);
+  });
+
+  // Feature 084 US1 (FR-001, FR-028): the label, description and start time an event holds are editable
+  // here — `/events` collected them on creation and then offered no way to change them.
+  it("edits the label, description and start time, sending only what changed", async () => {
+    const calls: Call[] = [];
+    vi.stubGlobal(
+      "fetch",
+      stubFetch(calls, (url) => (url.includes("/rent-preview") ? { rentCents: 20000 } : {})),
+    );
+    const user = userEvent.setup();
+    render(
+      <EventModal
+        mode="edit"
+        event={{
+          id: "e1",
+          seriesKey: "tnc",
+          eventDate: "2026-06-18",
+          startTime: "19:30:00",
+          venueId: "v1",
+          rentCents: null,
+          label: "",
+          description: "",
+        }}
+        venues={VENUES}
+        onClose={() => {}}
+        onSaved={() => {}}
+      />,
+    );
+    await waitFor(() =>
+      expect((screen.getByLabelText(/rent/i) as HTMLInputElement).value).toBe("200"),
+    );
+
+    await user.type(screen.getByLabelText(/label/i), "Afternoon");
+    await user.type(screen.getByLabelText(/description/i), "Live band, beginners welcome");
+    await user.click(screen.getByRole("button", { name: /^Save$/ }));
+
+    await waitFor(() => expect(calls.some((c) => c.init?.method === "PATCH")).toBe(true));
+    const body = JSON.parse(calls.find((c) => c.init?.method === "PATCH")!.init!.body as string);
+    expect(body).toEqual({ label: "Afternoon", description: "Live band, beginners welcome" });
   });
 
   it("read-only: Close only", () => {

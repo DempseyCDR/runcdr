@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import type { Db } from "@/server/db/client";
 import { venues, type VenueRow } from "@/server/db/schema";
 import { venueMapUrl } from "./venueMap";
@@ -34,7 +34,8 @@ export async function listPublicVenues(db: Db): Promise<PublicVenue[]> {
   const rows = await db
     .select()
     .from(venues)
-    .where(eq(venues.isPublic, true))
+    // Feature 084 (FR-010): archived is never public, whatever the flag says — the rule bands follows.
+    .where(and(eq(venues.isPublic, true), isNull(venues.archivedAt)))
     .orderBy(asc(venues.name));
   return rows
     .filter((v) => v.address.trim() !== "") // defend against placeholder/address-less rows

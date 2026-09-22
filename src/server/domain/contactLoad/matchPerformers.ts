@@ -27,7 +27,8 @@ export async function matchPerformers(db: DbOrTx): Promise<PerformerResolution> 
   const unlinked = await db
     .select({ id: performers.id, displayName: performers.displayName })
     .from(performers)
-    .where(isNull(performers.contactId));
+    // Feature 084 (FR-010): an archived performer is settled — it is not waiting for a contact.
+    .where(and(isNull(performers.contactId), isNull(performers.archivedAt)));
 
   const res: PerformerResolution = { auto: [], ambiguous: [], unmatched: [] };
   for (const p of unlinked) {

@@ -33,6 +33,18 @@ describe("US5: role-aware navigation", () => {
   beforeEach(resetDb);
   afterAll(closeDb);
 
+  // Feature 084 (FR-017): a venue's rents are managed on the venue, so the separate destination is gone.
+  it("offers no venue-rents destination — rents live on the venue (FR-017)", async () => {
+    const { token } = await makeActor({
+      email: "booker@cdrochester.org",
+      grants: [{ role: "booker" }],
+    });
+    const items = navItemsFor(await actorFromToken(token));
+    expect(hrefs(items)).not.toContain("/venue-rents");
+    // …while the venue itself, where they now live, is still offered.
+    expect(hrefs(items)).toContain("/venues");
+  });
+
   it("a Door Attendant sees check-in and reports, NOT gate/treasurer/access (US5.1)", async () => {
     const { token } = await makeActor({
       email: "door@cdrochester.org",

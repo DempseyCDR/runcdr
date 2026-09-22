@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, asc, count, eq, gte, isNull } from "drizzle-orm";
 import type { Db } from "@/server/db/client";
 import { events, venues } from "@/server/db/schema";
 import type { VenueRow } from "@/server/db/schema";
@@ -49,8 +49,57 @@ export async function createVenue(
   return row;
 }
 
-export async function listVenues(db: Db): Promise<VenueRow[]> {
-  return db.select().from(venues).orderBy(venues.name);
+/** Feature 084 (FR-010): the venues on OFFER — an archived hall is not one of them. */
+export async function listVenues(db: Db, includeArchived = false): Promise<VenueRow[]> {
+  return db
+    .select()
+    .from(venues)
+    .where(includeArchived ? undefined : isNull(venues.archivedAt))
+    .orderBy(venues.name);
+}
+
+/** Today, as the database sees an event date. */
+const today = () => new Date().toISOString().slice(0, 10);
+
+/**
+ * Feature 084 (FR-014): what still expects this venue — how many events are to come, and the next one.
+ * Archiving warns with this and proceeds when the Booker confirms; the bookings themselves are untouched.
+ */
+export async function venueStillInUse(
+  db: Db,
+  venueId: string,
+): Promise<{ futureCount: number; nextDate: string | null }> {
+  const upcoming = and(eq(events.venueId, venueId), gte(events.eventDate, today()));
+  const [tally] = await db.select({ n: count() }).from(events).where(upcoming);
+  const [next] = await db
+    .select({ eventDate: events.eventDate })
+    .from(events)
+    .where(upcoming)
+    .orderBy(asc(events.eventDate))
+    .limit(1);
+  return { futureCount: tally?.n ?? 0, nextDate: next?.eventDate ?? null };
+}
+
+/**
+ * Feature 084 (FR-010, FR-013): retire a venue without deleting it. A no-op when already archived, as
+ * `archiveBand` is. Events that already name it keep naming it — archiving touches nothing but this row.
+ */
+export async function archiveVenue(db: Db, id: string, actor: string | null = null): Promise<void> {
+  const existing = await getVenue(db, id);
+  if (existing.archivedAt) return;
+  await db
+    .update(venues)
+    .set({ archivedAt: new Date(), updatedAt: new Date() })
+    .where(eq(venues.id, id));
+  writeAudit({ kind: "venue.archived", actor, details: { venueId: id } });
+}
+
+/** Feature 084 (FR-012): put an archived venue back. A no-op when it is already active. */
+export async function restoreVenue(db: Db, id: string, actor: string | null = null): Promise<void> {
+  const existing = await getVenue(db, id);
+  if (!existing.archivedAt) return;
+  await db.update(venues).set({ archivedAt: null, updatedAt: new Date() }).where(eq(venues.id, id));
+  writeAudit({ kind: "venue.restored", actor, details: { venueId: id } });
 }
 
 export async function getVenue(db: Db, id: string): Promise<VenueRow> {

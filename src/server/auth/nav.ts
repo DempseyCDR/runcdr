@@ -30,7 +30,6 @@ export const NAV: { href: string; label: string; capability: Capability | null }
   { href: "/manage/performers", label: "Performers", capability: "performer.write" },
   { href: "/bands", label: "Bands", capability: "performer.write" },
   { href: "/venues", label: "Venues", capability: "venue.write" },
-  { href: "/venue-rents", label: "Venue rents", capability: "venue.write" },
   { href: "/rate-parameters", label: "Rate parameters", capability: "parameter.write" },
   { href: "/admission-pricing", label: "Admission pricing", capability: "parameter.write" }, // feature 054 (P7-R10)
   { href: "/expense-parameters", label: "Expense parameters", capability: "parameter.write" },

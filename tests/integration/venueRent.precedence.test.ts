@@ -40,6 +40,26 @@ describe("venue rent precedence", () => {
     expect(await resolveEventRentCents(db, await eventRow(evt.id))).toBe(6000); // back to series-at-venue
   });
 
+  // Feature 084 (FR-029, SC-006, clarification Q2): a rent is changed by ADDING a newer dated row, so an
+  // evening already reported keeps resolving exactly what it reported.
+  it("leaves earlier events alone when a new rent is added from a date", async () => {
+    const past = await makeEvent({ seriesKey: "tnc", eventDate: "2026-03-01" });
+    const future = await makeEvent({ seriesKey: "tnc", eventDate: "2026-09-01" });
+    const [venue] = await db.insert(venues).values({ name: "Hall3", address: "3 St" }).returning();
+    await db.update(events).set({ venueId: venue!.id }).where(eq(events.id, past.id));
+    await db.update(events).set({ venueId: venue!.id }).where(eq(events.id, future.id));
+    await createVenueRent(db, { venueId: venue!.id, amount: 200, effectiveDate: "2026-01-01" });
+
+    const before = await resolveEventRentCents(db, await eventRow(past.id));
+    expect(before).toBe(20000);
+
+    // The hall puts its price up from August.
+    await createVenueRent(db, { venueId: venue!.id, amount: 300, effectiveDate: "2026-08-01" });
+
+    expect(await resolveEventRentCents(db, await eventRow(past.id))).toBe(before);
+    expect(await resolveEventRentCents(db, await eventRow(future.id))).toBe(30000);
+  });
+
   it("resolves the venue default in effect on the event's own date", async () => {
     const early = await makeEvent({ seriesKey: "tnc", eventDate: "2026-02-01" });
     const late = await makeEvent({ seriesKey: "tnc", eventDate: "2026-08-01" });

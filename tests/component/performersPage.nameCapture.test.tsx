@@ -34,6 +34,8 @@ describe("PerformersPage — structured name capture", () => {
     const user = userEvent.setup();
     render(<PerformersPage />);
 
+    // Feature 084: creating opens the one form the page also edits with (FR-002).
+    await user.click(await screen.findByRole("button", { name: "Add a performer" }));
     await user.type(await screen.findByLabelText(/first name/i), "Charles");
     await user.type(screen.getByLabelText(/last name/i), "Abell");
     await user.type(screen.getByLabelText(/display name/i), "Chuck Abell");

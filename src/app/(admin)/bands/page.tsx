@@ -1,7 +1,7 @@
 "use client";
 import { apiFetch } from "@/app/apiFetch";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { PROMO_LINK_TYPES, STYLE_TAGS, type PromoLink } from "@/server/domain/public/promoLinks";
 
 type BandSummary = {
@@ -27,10 +27,29 @@ export default function BandsPage() {
   const [links, setLinks] = useState<PromoLink[]>([]);
   const [message, setMessage] = useState<string | null>(null);
 
+  // Feature 084 (FR-005): searched, not listed — the page fetches nothing until a name is typed. The
+  // endpoint still browses the roster for the booking flows that read it that way (analysis F1).
+  const [q, setQ] = useState("");
+  const [truncated, setTruncated] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
+  const searchRef = useRef<HTMLInputElement>(null);
+
   const load = useCallback(async () => {
-    const res = await apiFetch("/api/bands");
-    setBands((await res.json()).items ?? []);
-  }, []);
+    const needle = q.trim();
+    if (!needle) {
+      setBands([]);
+      setTruncated(false);
+      return;
+    }
+    const res = await apiFetch(
+      `/api/bands?q=${encodeURIComponent(needle)}${showArchived ? "&archived=1" : ""}`,
+    );
+    const data = await res.json();
+    setBands(data.items ?? []);
+    setTruncated(!!data.truncated);
+  }, [q, showArchived]);
+
+  useEffect(() => searchRef.current?.focus(), []);
 
   useEffect(() => {
     void load();
@@ -138,6 +157,28 @@ export default function BandsPage() {
   return (
     <main style={{ padding: 24, maxWidth: 720 }}>
       <h1>Bands</h1>
+
+      <label>
+        Search bands
+        <input
+          ref={searchRef}
+          value={q}
+          placeholder="Type part of a name"
+          onChange={(e) => setQ(e.target.value)}
+        />
+      </label>
+      {/* FR-012: how a band retired by mistake is found again. */}
+      <label>
+        <input
+          type="checkbox"
+          checked={showArchived}
+          onChange={(e) => setShowArchived(e.target.checked)}
+        />
+        Include archived
+      </label>
+
+      {truncated && <p>More matched — narrow the search.</p>}
+
       <ul>
         {bands.map((b) => (
           <li key={b.id}>
@@ -146,7 +187,9 @@ export default function BandsPage() {
             <button onClick={() => archive(b.id)}>Archive</button>
           </li>
         ))}
-        {bands.length === 0 && <li style={{ color: "#888" }}>No bands</li>}
+        {q.trim() && bands.length === 0 && (
+          <li style={{ color: "#888" }}>No band matches “{q.trim()}”.</li>
+        )}
       </ul>
 
       <h2>{editingId ? "Edit band" : "New band"}</h2>

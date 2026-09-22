@@ -1,7 +1,7 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at specs/083-staff-sign-out/plan.md
+at specs/084-booker-record-editing/plan.md
 <!-- SPECKIT END -->
 
 ## Development conventions

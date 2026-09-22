@@ -1,259 +1,143 @@
 "use client";
 import { apiFetch } from "@/app/apiFetch";
+import PerformerForm, { type Performer } from "./PerformerForm";
 
-import { useCallback, useEffect, useState } from "react";
-import { PROMO_LINK_TYPES, STYLE_TAGS, type PromoLink } from "@/server/domain/public/promoLinks";
+import { useEffect, useRef, useState } from "react";
 
-type Performer = {
-  id: string;
-  displayName: string;
-  bio: string | null;
-  isPublic?: boolean;
-  isCaller?: boolean;
-  styles?: string[];
-  links?: PromoLink[];
-};
-
+/**
+ * Performers (feature 084, US1 and US2).
+ *
+ * **Searched, not listed** (FR-005): a roster of several hundred is not something to scroll, so the page
+ * opens on a focused search box and fetches nothing until something is typed — the shape the contact
+ * directory has used since feature 062. The endpoint still browses the whole roster for the booking flows
+ * that read it that way (analysis F1); it is this page that stops asking for one.
+ *
+ * **One form** creates and edits (FR-001, FR-002). The page this replaced collected a name, a biography,
+ * an email and a telephone on creation and then let you change only the public-roster flags.
+ */
 export default function PerformersPage() {
+  const [q, setQ] = useState("");
   const [items, setItems] = useState<Performer[]>([]);
-  // Feature 026: capture structured names (first/last/optional display) like the directory/check-in flows.
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [displayNameOverride, setDisplayNameOverride] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [bio, setBio] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [warning, setWarning] = useState<string | null>(null);
+  const [truncated, setTruncated] = useState(false);
+  const [searched, setSearched] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
+  const [editing, setEditing] = useState<{ performer?: Performer; name?: string } | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
 
-  // Feature 053 (P7-R9): per-performer public-profile editor state.
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [isPublic, setIsPublic] = useState(false);
-  const [isCaller, setIsCaller] = useState(false);
-  const [styleTags, setStyleTags] = useState<string[]>([]);
-  const [links, setLinks] = useState<PromoLink[]>([]);
-  const [editMessage, setEditMessage] = useState<string | null>(null);
+  useEffect(() => searchRef.current?.focus(), []);
 
-  const load = useCallback(async () => {
-    const res = await apiFetch("/api/performers");
-    const data = await res.json();
-    setItems(data.items ?? []);
-  }, []);
-
+  // FR-005: nothing is fetched until the Booker types. Clearing the box empties the results with it.
   useEffect(() => {
-    void load();
-  }, [load]);
-
-  async function create(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setWarning(null);
-    const hasContactInfo = email.trim() || phone.trim();
-    const res = await apiFetch("/api/performers", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        firstName: firstName.trim(),
-        ...(lastName.trim() ? { lastName: lastName.trim() } : {}),
-        ...(displayNameOverride.trim() ? { displayNameOverride: displayNameOverride.trim() } : {}),
-        ...(bio ? { bio } : {}),
-        ...(email.trim() ? { email: email.trim() } : {}),
-        ...(phone.trim() ? { phone: phone.trim() } : {}),
-      }),
-    });
-    if (!res.ok) {
-      setError("Failed to create performer");
+    const needle = q.trim();
+    if (!needle) {
+      setItems([]);
+      setTruncated(false);
+      setSearched(false);
       return;
     }
-    if (!hasContactInfo) {
-      setWarning("Performer created with no email or phone on file — flagged for follow-up.");
-    }
-    setFirstName("");
-    setLastName("");
-    setDisplayNameOverride("");
-    setEmail("");
-    setPhone("");
-    setBio("");
-    void load();
+    const timer = setTimeout(() => {
+      void apiFetch(
+        `/api/performers?q=${encodeURIComponent(needle)}${showArchived ? "&archived=1" : ""}`,
+      )
+        .then((r) => r.json())
+        .then((d) => {
+          setItems(d.items ?? []);
+          setTruncated(!!d.truncated);
+          setSearched(true);
+        });
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [q, showArchived]);
+
+  /**
+   * Open the form on the WHOLE record, never the search row.
+   *
+   * The search answers with summaries — id and display name — so a row carries no `contactId` and no
+   * `archivedAt`. Opening the form on one made every performer look unlinked and archived (found in the
+   * browser walk, T047).
+   */
+  async function open(id: string) {
+    const res = await apiFetch(`/api/performers/${id}`);
+    if (!res.ok) return setMessage("Could not open that performer.");
+    setEditing({ performer: (await res.json()) as Performer });
   }
 
-  function editProfile(p: Performer) {
-    setEditingId(p.id);
-    setIsPublic(p.isPublic ?? false);
-    setIsCaller(p.isCaller ?? false);
-    setStyleTags(p.styles ?? []);
-    setLinks(p.links ?? []);
-    setEditMessage(null);
-  }
-
-  function toggleStyle(s: string) {
-    setStyleTags((t) => (t.includes(s) ? t.filter((x) => x !== s) : [...t, s]));
-  }
-  function addLink() {
-    setLinks((l) => [...l, { type: "website", url: "" }]);
-  }
-  function setLink(i: number, patch: Partial<PromoLink>) {
-    setLinks((l) => l.map((link, idx) => (idx === i ? { ...link, ...patch } : link)));
-  }
-  function removeLink(i: number) {
-    setLinks((l) => l.filter((_, idx) => idx !== i));
-  }
-
-  async function saveProfile(e: React.FormEvent) {
-    e.preventDefault();
-    if (!editingId) return;
-    setEditMessage(null);
-    const res = await apiFetch(`/api/performers/${editingId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        isPublic,
-        isCaller,
-        styles: styleTags,
-        links: links.filter((l) => l.url.trim() !== ""),
-      }),
-    });
-    if (!res.ok) {
-      setEditMessage(
-        (await res.json().catch(() => null))?.error?.message ??
-          "Failed to save (check the link URLs are http(s))",
-      );
-      return;
-    }
-    setEditingId(null);
-    void load();
+  function refresh() {
+    setEditing(null);
+    setQ((typed) => typed); // leave the search as it was
   }
 
   return (
-    <main style={{ padding: 24, maxWidth: 720 }}>
+    <main style={{ padding: 24, maxWidth: 640 }}>
       <h1>Performers</h1>
+
+      <label>
+        Search performers
+        <input
+          ref={searchRef}
+          value={q}
+          placeholder="Type part of a name"
+          onChange={(e) => setQ(e.target.value)}
+        />
+      </label>
+
+      {/* FR-012: how a performer retired by mistake is found again and restored. */}
+      <label>
+        <input
+          type="checkbox"
+          checked={showArchived}
+          onChange={(e) => setShowArchived(e.target.checked)}
+        />
+        Include archived
+      </label>
+
+      {truncated && <p>More matched — narrow the search.</p>}
+
       <ul>
         {items.map((p) => (
-          <li key={p.id}>
-            {p.displayName}
+          <li key={p.id} style={{ marginBottom: 6 }}>
+            <strong>{p.displayName}</strong>
+            {p.isCaller ? " · calls" : ""}
             {p.isPublic ? " · public" : ""}
-            {p.isCaller ? " · caller" : ""}{" "}
-            <button onClick={() => editProfile(p)}>Edit public profile</button>
+            {p.archivedAt ? " · archived" : ""}{" "}
+            <button type="button" onClick={() => void open(p.id)}>
+              Edit
+            </button>
           </li>
         ))}
-        {items.length === 0 && <li style={{ color: "#888" }}>No performers</li>}
       </ul>
 
-      {editingId && (
-        <>
-          <h2>Public profile</h2>
-          <form onSubmit={saveProfile} style={{ display: "grid", gap: 6, maxWidth: 420 }}>
-            <label>
-              <input
-                type="checkbox"
-                checked={isPublic}
-                onChange={(e) => setIsPublic(e.target.checked)}
-              />{" "}
-              Show on the public /performers roster
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={isCaller}
-                onChange={(e) => setIsCaller(e.target.checked)}
-              />{" "}
-              List individually as a caller
-            </label>
-            <div>
-              Styles:{" "}
-              {STYLE_TAGS.map((s) => (
-                <label key={s} style={{ marginRight: 8 }}>
-                  <input
-                    type="checkbox"
-                    checked={styleTags.includes(s)}
-                    onChange={() => toggleStyle(s)}
-                  />{" "}
-                  {s}
-                </label>
-              ))}
-            </div>
-            <div>
-              <div>Promotional links:</div>
-              {links.map((l, i) => (
-                <div key={i} style={{ display: "flex", gap: 4, marginTop: 4 }}>
-                  <select
-                    aria-label={`link ${i + 1} type`}
-                    value={l.type}
-                    onChange={(e) => setLink(i, { type: e.target.value as PromoLink["type"] })}
-                  >
-                    {PROMO_LINK_TYPES.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    placeholder="https://…"
-                    aria-label={`link ${i + 1} url`}
-                    value={l.url}
-                    onChange={(e) => setLink(i, { url: e.target.value })}
-                  />
-                  <button type="button" onClick={() => removeLink(i)}>
-                    ×
-                  </button>
-                </div>
-              ))}
-              <button type="button" onClick={addLink} style={{ marginTop: 4 }}>
-                + Add link
-              </button>
-            </div>
-            <div>
-              <button type="submit">Save profile</button>{" "}
-              <button type="button" onClick={() => setEditingId(null)}>
-                Cancel
-              </button>
-            </div>
-            {editMessage && <p style={{ color: "crimson" }}>{editMessage}</p>}
-          </form>
-        </>
+      {/* FR-008: nothing found — offer to create that person, carrying what was typed. */}
+      {searched && items.length === 0 && (
+        <p>
+          No performer matches “{q.trim()}”.{" "}
+          <button type="button" onClick={() => setEditing({ name: q.trim() })}>
+            Add {q.trim()}
+          </button>
+        </p>
       )}
 
-      <h2>Add performer</h2>
-      <form onSubmit={create} style={{ display: "grid", gap: 6, maxWidth: 420 }}>
-        <input
-          placeholder="First name"
-          aria-label="First name"
-          value={firstName}
-          onChange={(e) => setFirstName(e.target.value)}
-        />
-        <input
-          placeholder="Last name (optional)"
-          aria-label="Last name"
-          value={lastName}
-          onChange={(e) => setLastName(e.target.value)}
-        />
-        <input
-          placeholder="Display name (optional — a stage name)"
-          aria-label="Display name"
-          value={displayNameOverride}
-          onChange={(e) => setDisplayNameOverride(e.target.value)}
-        />
-        <input
-          placeholder="Email (optional)"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-        <input
-          placeholder="Phone (optional)"
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-        />
-        <textarea
-          placeholder="Bio (optional)"
-          value={bio}
-          onChange={(e) => setBio(e.target.value)}
-        />
-        <button type="submit" disabled={!firstName.trim()}>
-          Create
-        </button>
-        {error && <p style={{ color: "crimson" }}>{error}</p>}
-        {warning && <p style={{ color: "#a15c00" }}>{warning}</p>}
-      </form>
+      <button type="button" onClick={() => setEditing({})}>
+        Add a performer
+      </button>
+
+      {editing && (
+        <section aria-label={editing.performer ? "Edit performer" : "Add a performer"}>
+          <h2>{editing.performer ? editing.performer.displayName : "Add a performer"}</h2>
+          <PerformerForm
+            performer={editing.performer}
+            initialName={editing.name}
+            onSaved={() => {
+              setMessage(editing.performer ? "Performer saved." : "Performer created.");
+              refresh();
+            }}
+            onClose={() => setEditing(null)}
+          />
+        </section>
+      )}
+
+      {message && <p role="status">{message}</p>}
     </main>
   );
 }
