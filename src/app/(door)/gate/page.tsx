@@ -206,7 +206,7 @@ export default function GatePage() {
 
   return (
     <main className={styles.page}>
-      <EventConfirm event={event} series={series} onSelect={choose} />
+      <EventConfirm event={event} series={series} onSelect={choose} defaultToMySeries />
       {payments && <PaymentSummaryView summary={payments} />}
       {figures && <MoneyPreview figures={figures} showFee={canWrite} />}
 

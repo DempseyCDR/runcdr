@@ -167,7 +167,7 @@ export default function PaymentsPage() {
 
   return (
     <main className={styles.page}>
-      <EventConfirm event={event} series={series} onSelect={setEvent} />
+      <EventConfirm event={event} series={series} onSelect={setEvent} defaultToMySeries />
       {list?.summary && <PaymentSummaryView summary={list.summary} />}
       {message && (
         <p role="alert" className={styles.error}>

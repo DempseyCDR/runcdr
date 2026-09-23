@@ -27,6 +27,11 @@ export type Capability =
   | "gate.write"
   | "performer_payment.write"
   | "treasurer_report.write"
+  // Feature 086 (FR-006): reading the gate report is its own capability. It existed as `base` — every
+  // signed-in volunteer could read the evening's money, which was never intended — and a WRITE capability
+  // cannot stand in, because the Financial Secretary who records the money does not hold it. Holding
+  // `treasurer_report.write` does not imply this; both are granted explicitly.
+  | "treasurer_report.read"
   | "contact.write"
   | "contact.mailing.write"
   | "contact.pii.read"
@@ -114,6 +119,15 @@ export const CAPABILITIES: Catalog = {
     "booking.write": "scoped",
     "parameter.write": "scoped",
     "contact.pii.read": "global", // negotiates fees with performers, who link to contacts (§5.1.5)
+    // Feature 086 (FR-001): feature 084 asks the Booker to settle a performer with no contact — link,
+    // create, or archive — and creating one needs this. Global because contacts are not series-scoped,
+    // the same reason the FS and the Door Attendant hold it that way. Deleting stays out of reach:
+    // `contact.delete` is a separate capability (FR-002).
+    "contact.write": "global",
+    // Feature 086 (walk-through 2026-09-23, Rich): the Booker reads the gate report too. They
+    // negotiate performer fees, so what an evening actually took and paid out is their business —
+    // reading it, never recording it (`treasurer_report.write` stays with the Treasurer).
+    "treasurer_report.read": "global",
   },
 
   // ⬤ per-series. Owns the door record's money.
@@ -125,6 +139,10 @@ export const CAPABILITIES: Catalog = {
     [FS_CAPABILITIES.contact]: "global",
     [FS_CAPABILITIES.membership]: "global",
     [FS_CAPABILITIES.pii]: "global",
+    // Feature 086 (FR-006c): global, NOT scoped — the club has two Financial Secretaries and they cover
+    // for each other, so confining the read by series would refuse a fill-in. Which series a page shows
+    // FIRST is a separate, presentational matter (FR-010).
+    "treasurer_report.read": "global",
   },
 
   // ⬡ club-wide. Treasurer ⊇ FS across ALL series (FR-009) — every FS capability, as `global`.
@@ -137,6 +155,7 @@ export const CAPABILITIES: Catalog = {
     [FS_CAPABILITIES.membership]: "global",
     [FS_CAPABILITIES.pii]: "global",
     "treasurer_report.write": "global",
+    "treasurer_report.read": "global", // 086: the write does not imply the read
     "parameter.write": "global", // any series' parameters (row 9)
     "venue.write": "global",
   },
@@ -151,6 +170,7 @@ export const CAPABILITIES: Catalog = {
     "role.assign": "global",
     "club_settings.write": "global",
     "volunteer.approve": "global",
+    "treasurer_report.read": "global", // 086: as President — oversight, not money work
   },
 
   webmaster: {
@@ -185,6 +205,9 @@ export const CAPABILITIES: Catalog = {
     "role.assign": "global",
     "club_settings.write": "global",
     "volunteer.approve": "global",
+    // Feature 086 (FR-005): officer oversight of the club's money. Reading the gate report, not working
+    // on it — the President holds no other money capability.
+    "treasurer_report.read": "global",
   },
 
   // Global god-mode. An app role, not a bylaws officer — and grantable ONLY from the operator CLI
@@ -201,6 +224,7 @@ export const CAPABILITIES: Catalog = {
     "gate.write": "global",
     "performer_payment.write": "global",
     "treasurer_report.write": "global",
+    "treasurer_report.read": "global",
     "contact.write": "global",
     "contact.mailing.write": "global",
     "contact.pii.read": "global",

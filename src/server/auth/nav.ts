@@ -34,7 +34,9 @@ export const NAV: { href: string; label: string; capability: Capability | null }
   { href: "/admission-pricing", label: "Admission pricing", capability: "parameter.write" }, // feature 054 (P7-R10)
   { href: "/expense-parameters", label: "Expense parameters", capability: "parameter.write" },
   { href: "/door-parameters", label: "Door parameters", capability: "parameter.write" }, // seed float (019 US5)
-  { href: "/treasurer", label: "Treasurer report", capability: "treasurer_report.write" },
+  // Feature 086 (FR-005): gated on the READ, so the Financial Secretary whose evening it reports is
+  // offered it — and the Door Attendant still is not. The route refuses too; this is only the signpost.
+  { href: "/treasurer", label: "Treasurer report", capability: "treasurer_report.read" },
   { href: "/exports", label: "Mailing-list exports", capability: "export.read" },
   { href: "/access", label: "Access control", capability: "role.assign" },
   { href: "/content", label: "Content pages", capability: "content.write" }, // feature 051 (P7-R7)

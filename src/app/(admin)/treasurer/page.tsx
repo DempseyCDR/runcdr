@@ -319,7 +319,7 @@ export default function TreasurerReportPage() {
       {/* Feature 082 (FR-031, research R18, R19): the evening's gate report, laid out as the paper one —
           receipts on the left, expenses on the right — for a laptop, and printed on landscape letter. */}
       <h1>Gate report</h1>
-      <EventSelector value={eventId} onSelect={(e) => setEventId(e.id)} />
+      <EventSelector value={eventId} onSelect={(e) => setEventId(e.id)} defaultToMySeries />
 
       {error && <p role="alert">Error: {error}</p>}
       {!error && eventId && !report && <p>Loading…</p>}

@@ -27,10 +27,17 @@ export default function EventConfirm({
   event,
   series,
   onSelect,
+  defaultToMySeries = false,
 }: {
   event: EventRow | null;
   series: SeriesRow[];
   onSelect: (event: EventRow) => void;
+  /**
+   * Feature 086 (FR-010, FR-013): forwarded to the shared selector. Gate money and payments opt in;
+   * check-in mounts this same wrapper and deliberately does not, so the default cannot be applied here
+   * on everyone's behalf — each page says for itself.
+   */
+  defaultToMySeries?: boolean;
 }) {
   const [changing, setChanging] = useState(false);
   const seriesName = event ? (series.find((s) => s.id === event.seriesId)?.name ?? "") : "";
@@ -61,6 +68,7 @@ export default function EventConfirm({
       )}
       <div hidden={!changing && !!event}>
         <EventSelector
+          defaultToMySeries={defaultToMySeries}
           value={event?.id ?? ""}
           onSelect={(e) => {
             setChanging(false);

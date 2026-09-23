@@ -83,6 +83,31 @@ describe("PerformerForm", () => {
     expect(screen.queryByLabelText("Telephone")).toBeNull();
   });
 
+  /**
+   * Feature 086 (FR-004a): the link sits inside this form, which holds unsaved edits in component
+   * state and sends only what changed. A same-tab navigation would unmount it and lose them with no
+   * warning — so the link opens beside the form, and nothing needs to learn about dirty state.
+   */
+  it("opens the contact in a NEW tab, so unsaved edits survive (086 FR-004a)", async () => {
+    stub();
+    const user = userEvent.setup();
+    render(<PerformerForm performer={PAT} onSaved={() => {}} onClose={() => {}} />);
+
+    // Type a change and do not save it.
+    const name = screen.getByLabelText("Display name") as HTMLInputElement;
+    await user.clear(name);
+    await user.type(name, "Patricia Caller-Smith");
+
+    const link = screen.getByRole("link", { name: /Patricia Caller/ });
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", expect.stringContaining("noopener"));
+
+    // The form is still mounted, still holding the edit — which is what `target` buys.
+    expect((screen.getByLabelText("Display name") as HTMLInputElement).value).toBe(
+      "Patricia Caller-Smith",
+    );
+  });
+
   it("says nothing about email or telephone when no contact is linked (FR-019)", () => {
     stub();
     render(
