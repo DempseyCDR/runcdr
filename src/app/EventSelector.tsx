@@ -31,9 +31,16 @@ function eventLabel(e: EventRow): string {
 export function EventSelector({
   value,
   onSelect,
+  defaultToMySeries = false,
 }: {
   value: string;
   onSelect: (event: EventRow) => void;
+  /**
+   * Feature 086 (FR-010): start the series filter on the series this viewer works in. Opt-in, because
+   * check-in deliberately does not (FR-013) — it is the busiest screen and a changed default costs most
+   * there. A DEFAULT, not a gate: the filter widens in one step and the routes decide every request.
+   */
+  defaultToMySeries?: boolean;
 }) {
   const [events, setEvents] = useState<EventRow[]>([]);
   const [series, setSeries] = useState<SeriesRow[]>([]);
@@ -42,6 +49,35 @@ export function EventSelector({
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const didDefault = useRef(false);
+  /**
+   * Feature 086 (FR-010a): the event default below latches behind `didDefault` the instant the events
+   * arrive. The viewer's series come from a DIFFERENT request, so without this gate the default would
+   * regularly win the race, pick from the unnarrowed list and never re-default — leaving the filter
+   * showing her series and the chosen evening belonging to another. "Settled" means known, or known to
+   * be unavailable: a failed self-check must degrade to today's behaviour, never to no behaviour.
+   */
+  const [mySeriesSettled, setMySeriesSettled] = useState(!defaultToMySeries);
+
+  useEffect(() => {
+    if (!defaultToMySeries) return;
+    let cancelled = false;
+    void apiFetch("/api/me/capabilities")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { mySeriesIds?: string[] } | null) => {
+        if (cancelled) return;
+        const mine = d?.mySeriesIds ?? [];
+        // Exactly one, or nothing: the filter holds a single series, so narrowing to one of several
+        // would hide the others — and a club-wide holder answers with none by design (FR-012).
+        if (mine.length === 1) setSeriesId(mine[0]!);
+        setMySeriesSettled(true);
+      })
+      .catch(() => {
+        if (!cancelled) setMySeriesSettled(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [defaultToMySeries]);
 
   useEffect(() => {
     void apiFetch("/api/events")
@@ -63,14 +99,14 @@ export function EventSelector({
   // Default ONCE on open (FR-001): the most recent event with date ≤ today within the current filter, else the
   // soonest upcoming. The ref guard means adjusting a filter never re-defaults (and never re-fires onSelect).
   useEffect(() => {
-    if (didDefault.current || value || !filtered.length) return;
+    if (didDefault.current || value || !mySeriesSettled || !filtered.length) return;
     const today = localToday(); // feature 079: the device's date, not UTC's
     const def = filtered.find((e) => e.eventDate <= today) ?? filtered[filtered.length - 1];
     if (def) {
       didDefault.current = true;
       onSelect(def);
     }
-  }, [filtered, value, onSelect]);
+  }, [filtered, value, onSelect, mySeriesSettled]);
 
   function pick(id: string) {
     const e = events.find((x) => x.id === id);

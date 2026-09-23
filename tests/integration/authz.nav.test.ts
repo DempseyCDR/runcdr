@@ -59,6 +59,31 @@ describe("US5: role-aware navigation", () => {
     expect(nav).not.toContain("/access");
   });
 
+  // Feature 086 (FR-005): the report's own work is the Financial Secretary's, and until now her menu
+  // did not offer it while a Treasurer's did. The Door-Attendant case above is UNCHANGED and must stay
+  // that way — it is the rule this feature keeps, not the one it reverses.
+  it("a Booker sees the gate report too (086, walk-through)", async () => {
+    const { token } = await makeActor({
+      email: "booker.nav086@cdrochester.org",
+      grants: [{ role: "booker" }],
+    });
+    const nav = hrefs(navItemsFor(await actorFromToken(token)));
+
+    expect(nav).toContain("/treasurer");
+    expect(nav).not.toContain("/gate"); // reading the evening's money is not recording it
+  });
+
+  it("a Financial Secretary sees the gate report (086 FR-005)", async () => {
+    const { token } = await makeActor({
+      email: "fs.nav@cdrochester.org",
+      grants: [{ role: "financial_secretary" }],
+    });
+    const nav = hrefs(navItemsFor(await actorFromToken(token)));
+
+    expect(nav).toContain("/treasurer");
+    expect(nav).toContain("/gate");
+  });
+
   it("a Treasurer sees gate and treasurer (US5.2)", async () => {
     const { token } = await makeActor({
       email: "treas@cdrochester.org",

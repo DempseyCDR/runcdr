@@ -14,7 +14,16 @@ import ContactPicker from "@/app/ContactPicker";
  * the nav (US5), but the routes enforce it regardless — hiding is presentation, not a control.
  */
 
-type Grant = { id: string; role: string; seriesId: string | null; groupId: string | null };
+type Grant = {
+  id: string;
+  role: string;
+  seriesId: string | null;
+  groupId: string | null;
+  /** Feature 086 (FR-007): what the grant covers, so the screen can say it. */
+  seriesKey: string | null;
+  seriesName: string | null;
+};
+type SeriesRow = { id: string; key: string; name: string };
 type Volunteer = {
   contactId: string;
   displayName: string;
@@ -36,8 +45,15 @@ const ROLES = [
   "president",
 ] as const;
 
+/**
+ * Feature 086 (FR-007, research R3): name the series, do not merely say there is one.
+ *
+ * This function returning the bare words "series-scoped" is why the club believed a volunteer could
+ * hold one series: a Booker for TNC and a Booker for ECD rendered identically, so a second grant looked
+ * like a duplicate. Multi-series always worked — it was invisible here.
+ */
 function scopeLabel(g: Grant): string {
-  if (g.seriesId) return "series-scoped";
+  if (g.seriesId) return g.seriesName ?? g.seriesKey ?? "a series no longer in the club's list";
   if (g.groupId) return "group-scoped";
   return "club-wide";
 }
@@ -53,6 +69,7 @@ export default function AccessPage() {
   const [subjectContactId, setSubjectContactId] = useState("");
   const [role, setRole] = useState<(typeof ROLES)[number]>("booker");
   const [seriesKey, setSeriesKey] = useState("");
+  const [seriesList, setSeriesList] = useState<SeriesRow[]>([]);
 
   const load = useCallback(async () => {
     const res = await apiFetch("/api/access/volunteers");
@@ -67,6 +84,13 @@ export default function AccessPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Feature 086 (FR-008a): the club's real series, for the scope picker.
+  useEffect(() => {
+    void apiFetch("/api/series")
+      .then((r) => (r.ok ? r.json() : { items: [] }))
+      .then((d: { items?: SeriesRow[] }) => setSeriesList(d.items ?? []));
+  }, []);
 
   // Designate a contact as a volunteer (FR-028). Provisional surface — the UI-spec process will settle
   // how this is presented (e.g. from the contact directory). Designation is a low-stakes nomination: it
@@ -197,11 +221,23 @@ export default function AccessPage() {
               </option>
             ))}
           </select>
-          <input
-            placeholder="series key (blank = club-wide)"
-            value={seriesKey}
-            onChange={(e) => setSeriesKey(e.target.value)}
-          />
+          {/* Feature 086 (FR-008a): chosen from the club's real series, never typed from memory — a
+              mistyped key produced a grant that silently matched nothing. Club-wide stays explicit. */}
+          <label>
+            Scope{" "}
+            <select
+              aria-label="Scope"
+              value={seriesKey}
+              onChange={(e) => setSeriesKey(e.target.value)}
+            >
+              <option value="">club-wide (every series)</option>
+              {seriesList.map((s) => (
+                <option key={s.id} value={s.key}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </label>
           <button type="submit" disabled={!subjectContactId}>
             Grant
           </button>

@@ -35,5 +35,15 @@ export const GET = withAuth({ requires: "base" }, async (_req, ctx) => {
     // shows that block only to a holder. `roleAssign` above additionally gates the sign-in PORTION of
     // an undo, but server-side — lacking it skips those entries rather than hiding the control.
     dedupWrite: actorCan(ctx.actor, "dedup.write"),
+    /**
+     * Feature 086 (FR-010, FR-012): the series this viewer works in — every series named by any grant
+     * they hold. The ONLY non-boolean here, and the only one that is not about offering a control: it
+     * decides what an evening list STARTS at. Empty means "do not narrow", which covers both a
+     * club-wide holder (a grant with no scope matches every series, so narrowing would be wrong) and a
+     * volunteer with no grants. Nothing here permits anything; the routes decide every request.
+     */
+    mySeriesIds: ctx.actor.grants.some((g) => g.seriesId === null && g.groupId === null)
+      ? []
+      : [...new Set(ctx.actor.grants.flatMap((g) => (g.seriesId ? [g.seriesId] : [])))],
   });
 });

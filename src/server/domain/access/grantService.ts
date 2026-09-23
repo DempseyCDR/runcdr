@@ -255,7 +255,20 @@ export async function approveVolunteer(db: Db, contactId: string, by: string): P
 export type VolunteerRow = {
   contactId: string;
   displayName: string;
-  grants: { id: string; role: Role; seriesId: string | null; groupId: string | null }[];
+  grants: {
+    id: string;
+    role: Role;
+    seriesId: string | null;
+    groupId: string | null;
+    /**
+     * Feature 086 (FR-007): what the grant actually COVERS, not just its identifier. The screen used to
+     * print the bare words "series-scoped" because an id is all it had — so two Bookers at two series
+     * looked identical, and the club concluded a volunteer could hold only one. Null for a club-wide or
+     * group-scoped grant, which is a different thing from a series with no name.
+     */
+    seriesKey: string | null;
+    seriesName: string | null;
+  }[];
   approvedAt: Date | null;
   /** FR-036: approval is null or older than a year. Advisory flag for the screen. */
   overdue: boolean;
@@ -294,8 +307,11 @@ export async function listVolunteers(db: Db): Promise<VolunteerRow[]> {
         role: roleGrants.role,
         seriesId: roleGrants.seriesId,
         groupId: roleGrants.groupId,
+        seriesKey: series.key,
+        seriesName: series.name,
       })
       .from(roleGrants)
+      .leftJoin(series, eq(series.id, roleGrants.seriesId))
       .where(eq(roleGrants.contactId, v.contactId));
     const hasAuthority = grants.some((g) => g.role === "president" || g.role === "vice_president");
     const hasFs = grants.some((g) => g.role === "financial_secretary");

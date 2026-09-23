@@ -54,3 +54,54 @@ describe("GET /api/me/capabilities — the gate and the door (082)", () => {
     });
   });
 });
+
+/**
+ * Feature 086 US3 (FR-010, FR-012, research R9): the series a viewer works in.
+ *
+ * This is the one entry in the self-check that is not a boolean, and it is worth being clear about why
+ * it is safe: it decides what a list STARTS at, never what may be opened. The routes refuse or answer
+ * exactly as they did. A club-wide grant reports nothing to narrow by — the club's Treasurer works
+ * every series, so narrowing hers would be wrong, not merely unhelpful.
+ */
+describe("GET /api/me/capabilities — the viewer's own series (086)", () => {
+  const seriesId = async (key: string) =>
+    (await db.query.series.findFirst({ where: eq(series.key, key) }))!.id;
+
+  it("names the one series a volunteer's roles cover", async () => {
+    const { token } = await makeActor({
+      email: "one.series@example.com",
+      grants: [{ role: "financial_secretary", seriesId: await seriesId("tnc") }],
+    });
+
+    expect(await capabilities(token)).toMatchObject({ mySeriesIds: [await seriesId("tnc")] });
+  });
+
+  it("names both when two roles cover two series", async () => {
+    const [tnc, ecd] = [await seriesId("tnc"), await seriesId("ecd")];
+    const { token } = await makeActor({
+      email: "two.series@example.com",
+      grants: [
+        { role: "booker", seriesId: tnc },
+        { role: "financial_secretary", seriesId: ecd },
+      ],
+    });
+
+    const body = await capabilities(token);
+    expect([...body.mySeriesIds].sort()).toEqual([tnc, ecd].sort());
+  });
+
+  it("reports nothing to narrow by for a club-wide holder (FR-012)", async () => {
+    const { token } = await makeActor({
+      email: "clubwide@example.com",
+      grants: [{ role: "treasurer" }],
+    });
+
+    expect(await capabilities(token)).toMatchObject({ mySeriesIds: [] });
+  });
+
+  it("reports nothing to narrow by for a volunteer with no grants at all", async () => {
+    const { token } = await makeBaseActor("nogrants.series@example.com");
+
+    expect(await capabilities(token)).toMatchObject({ mySeriesIds: [] });
+  });
+});

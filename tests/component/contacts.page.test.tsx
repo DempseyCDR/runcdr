@@ -704,3 +704,69 @@ describe("held merges in the review queue (feature 069)", () => {
     expect(calls.some((c) => c.url.endsWith("/api/dedup/held/h1"))).toBe(true);
   });
 });
+
+/**
+ * Feature 086 US4 (FR-003, FR-004): a link that names a contact opens it.
+ *
+ * Feature 084 gave the performer form a link to the contact behind it — `/contacts?contactId=…` — and
+ * the directory read no parameter at all, so it landed on the unfiltered list as though nothing had
+ * been asked for. Arriving by link now converges on the very path a clicked row takes.
+ */
+describe("ContactsPage — a contact named in the address (086)", () => {
+  const withAddress = (search: string) => {
+    window.history.replaceState({}, "", `/contacts${search}`);
+  };
+  afterEach(() => window.history.replaceState({}, "", "/contacts"));
+
+  it("opens the named contact on arrival (FR-003)", async () => {
+    stub({ record: REC({ id: "c9", displayName: "Clara Riedlinger" }) });
+    withAddress("?contactId=c9");
+    render(<ContactsPage />);
+
+    expect(await screen.findByRole("dialog")).toHaveTextContent("Clara Riedlinger");
+  });
+
+  it("opens an ARCHIVED contact and says that it is archived (FR-003)", async () => {
+    stub({
+      record: REC({
+        id: "c9",
+        displayName: "Retired Ruth",
+        archivedAt: "2026-01-01T00:00:00.000Z",
+      }),
+    });
+    withAddress("?contactId=c9");
+    render(<ContactsPage />);
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("Retired Ruth");
+    expect(dialog).toHaveTextContent(/archived/i);
+  });
+
+  it("says so when the named contact cannot be found (FR-004)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        const u = String(url);
+        if (u.includes("/api/contacts/launcher-counts"))
+          return json({ needsReview: 0, duplicates: 0 });
+        if (u.includes("/api/me/capabilities")) return json({});
+        if (/\/api\/contacts\/[^/?]+$/.test(u)) return json({ error: { code: "NOT_FOUND" } }, 404);
+        return json({ items: [] });
+      }),
+    );
+    withAddress("?contactId=gone");
+    render(<ContactsPage />);
+
+    // Not a silent unfiltered list: the directory says the request could not be met, and still works.
+    expect(await screen.findByText(/could not be opened|not found/i)).toBeInTheDocument();
+    expect(search()).toBeInTheDocument();
+  });
+
+  it("is untouched when no contact is named", async () => {
+    stub({ items: [] });
+    render(<ContactsPage />);
+
+    await waitFor(() => expect(search()).toBeInTheDocument());
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+});

@@ -273,7 +273,14 @@ export default function PerformerForm({
       {/* FR-018: the contact owns the person's email and telephone; this form never edits them. */}
       {performer?.contactId && (
         <p>
-          <a href={`/contacts?contactId=${performer.contactId}`}>
+          {/* Feature 086 (FR-004a): a new tab, because this link sits INSIDE the form. Navigating in
+              place would unmount it and take any unsaved edits with it, silently — and checking the
+              person behind a performer is a detour, not a destination. */}
+          <a
+            href={`/contacts?contactId=${performer.contactId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
             {performer.contactName ?? "the linked contact"}
           </a>{" "}
           holds this performer&apos;s email and telephone — change them on that contact record.

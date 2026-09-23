@@ -165,6 +165,8 @@ export default function ContactsPage() {
   const [includeArchived, setIncludeArchived] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false); // second-step guard for the destructive action
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  /** Feature 086 (FR-004): a contact was named in the address and could not be opened. */
+  const [arrivalError, setArrivalError] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   // Feature 063: the opened record editor. `eOverride === ""` means Automatic (no custom name).
   const [record, setRecord] = useState<EditorRecord | null>(null);
@@ -254,6 +256,31 @@ export default function ContactsPage() {
       }
     })();
   }, [refreshCounts]);
+
+  /**
+   * Feature 086 (FR-003, research R1): a contact named in the address opens on arrival.
+   *
+   * Read straight from the address rather than through `useSearchParams` — this page is already a
+   * client component that fetches everything itself, no page in the app uses that hook, and it would
+   * oblige a Suspense boundary for one string. Arriving by link then converges immediately on
+   * `openRecord`, the same path a clicked row takes, so an archived contact opens and shows its state
+   * exactly as it does from the list.
+   */
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("contactId");
+    if (!id) return;
+    void (async () => {
+      const res = await apiFetch(`/api/contacts/${id}`);
+      if (!res.ok) {
+        // Never the silent unfiltered list: say the request could not be met, and stay usable.
+        setArrivalError("That contact could not be opened — it may have been merged or removed.");
+        return;
+      }
+      await openRecord(id);
+    })();
+    // Deliberately once, on arrival, with an empty dependency list: re-running would reopen the record
+    // after the viewer had closed it.
+  }, []);
 
   // Feature 063 (FR-020): move focus into the record modal when it opens.
   useEffect(() => {
@@ -516,6 +543,7 @@ export default function ContactsPage() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
+        {arrivalError && <p role="status">{arrivalError}</p>}
         <div className={styles.taskRow}>
           <button type="button" className={styles.button} onClick={() => setShowCreate(true)}>
             Add contact
@@ -748,7 +776,12 @@ export default function ContactsPage() {
             }}
           >
             <RecordView
-              title={record.displayName}
+              title={
+                /* Feature 086 (FR-003): an archived record says so on its face. Until now the only
+                   sign was the Restore button, which is gated on `contact.write` — so a viewer who
+                   could not restore could not tell. The state is a fact, not a control. */
+                record.archivedAt ? `${record.displayName} · archived` : record.displayName
+              }
               actions={
                 <>
                   {record.needsReview && (

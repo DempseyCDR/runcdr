@@ -37,11 +37,13 @@ async function aVolunteer(email: string): Promise<string> {
   return contactId;
 }
 
-describe("US2: assignment", () => {
-  beforeAll(ensureSchema);
-  beforeEach(resetDb);
-  afterAll(closeDb);
+// Feature 086: hoisted to FILE level. Left inside the first describe, a second describe appended later
+// runs after its `afterAll(closeDb)` has shut the pool — CONNECTION_ENDED, with nothing wrong in the test.
+beforeAll(ensureSchema);
+beforeEach(resetDb);
+afterAll(closeDb);
 
+describe("US2: assignment", () => {
   describe("grant / revoke (FR-029, SC-007)", () => {
     it("grants a scoped role and records it in the audit trail", async () => {
       const subject = await aVolunteer("grantee@cdrochester.org");
@@ -432,5 +434,42 @@ describe("US2: assignment", () => {
       expect(ids).toContain(kept);
       expect(ids, "an archived contact is still listed as a volunteer").not.toContain(archived);
     });
+  });
+});
+
+/**
+ * Feature 086 US5 (FR-007, research R3): the volunteer read names the series each grant covers.
+ *
+ * The access screen printed the bare words "series-scoped" and stopped, because `listVolunteers` handed
+ * it a UUID and nothing else. Two Bookers at two series rendered identically — which is how the club
+ * came to believe a volunteer could hold only one. Multi-series has always worked; it was invisible.
+ */
+describe("FR-007: a grant reports the series it covers", () => {
+  it("names the series key and name on each grant, and leaves club-wide ones null", async () => {
+    const subject = await aVolunteer("two.series.report@cdrochester.org");
+    await grantRole(db, {
+      subjectContactId: subject,
+      role: "booker",
+      seriesKey: "tnc",
+      grantedBy: null,
+    });
+    await grantRole(db, {
+      subjectContactId: subject,
+      role: "booker",
+      seriesKey: "ecd",
+      grantedBy: null,
+    });
+    await grantRole(db, { subjectContactId: subject, role: "secretary", grantedBy: null });
+
+    const row = (await listVolunteers(db)).find((v) => v.contactId === subject);
+    const seen = (row?.grants ?? [])
+      .map((g) => `${g.role}:${g.seriesKey ?? "—"}:${g.seriesName ?? "—"}`)
+      .sort();
+
+    expect(seen).toEqual([
+      "booker:ecd:Sunday English Country Dance",
+      "booker:tnc:Thursday Night Contra",
+      "secretary:—:—",
+    ]);
   });
 });

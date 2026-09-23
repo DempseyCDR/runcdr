@@ -151,3 +151,113 @@ describe("EventSelector", () => {
     });
   });
 });
+
+/**
+ * Feature 086 US3 (FR-010, FR-010a, FR-011, FR-012): the list starts where the volunteer works.
+ *
+ * A DEFAULT, never a gate. The filter is changeable in one step and every evening stays openable — the
+ * routes decide that, not this component. Pages opt in; check-in deliberately does not.
+ */
+function stubWithSeries(mySeriesIds: string[] | "fail", events = EVENTS) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => {
+      const u = String(url);
+      if (u.includes("/api/me/capabilities")) {
+        if (mySeriesIds === "fail") return { ok: false, status: 500, json: async () => ({}) };
+        return { ok: true, status: 200, json: async () => ({ mySeriesIds }) };
+      }
+      const json = async () => (u.includes("/api/series") ? { items: SERIES } : { items: events });
+      return { ok: true, status: 200, json };
+    }),
+  );
+}
+
+function MineHarness({ onPick }: { onPick?: (e: EventRow) => void }) {
+  const [value, setValue] = useState("");
+  return (
+    <EventSelector
+      value={value}
+      defaultToMySeries
+      onSelect={(e) => {
+        setValue(e.id);
+        onPick?.(e);
+      }}
+    />
+  );
+}
+
+const seriesFilter = () => screen.getByLabelText("Filter series") as HTMLSelectElement;
+
+describe("EventSelector — the viewer's own series (086)", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("starts narrowed when the viewer's roles name exactly one series (FR-010)", async () => {
+    stubWithSeries(["s2"]);
+    render(<MineHarness />);
+
+    await waitFor(() => expect(seriesFilter().value).toBe("s2"));
+    // Only the ECD evening is offered; the TNC ones are filtered out.
+    await waitFor(() => expect(optionValues()).toEqual(["", "ecd"]));
+  });
+
+  it("chooses its default evening FROM the narrowed list, not the whole one (FR-010a)", async () => {
+    const picks: EventRow[] = [];
+    stubWithSeries(["s2"]);
+    render(<MineHarness onPick={(e) => picks.push(e)} />);
+
+    // Without the ordering fix the component latches onto "recent" (s1, and the most recent ≤ today)
+    // before the viewer's series arrive, and never re-defaults — the filter would read s2 while the
+    // chosen evening belonged to s1. Assert the SERIES of what was picked, not merely that a filter set.
+    await waitFor(() => expect(picks.length).toBeGreaterThan(0));
+    expect(picks[0]!.seriesId).toBe("s2");
+    expect(picks[0]!.id).toBe("ecd");
+  });
+
+  it("starts unnarrowed when two series are named (FR-010)", async () => {
+    stubWithSeries(["s1", "s2"]);
+    render(<MineHarness />);
+
+    await waitFor(() => expect(optionValues().length).toBeGreaterThan(1));
+    // The filter holds one series or none; narrowing to one of her two would hide the other.
+    expect(seriesFilter().value).toBe("");
+  });
+
+  it("starts unnarrowed for a club-wide holder (FR-012)", async () => {
+    stubWithSeries([]);
+    render(<MineHarness />);
+
+    await waitFor(() => expect(optionValues().length).toBeGreaterThan(1));
+    expect(seriesFilter().value).toBe("");
+  });
+
+  it("still defaults when the viewer's series cannot be fetched (U1)", async () => {
+    const picks: EventRow[] = [];
+    stubWithSeries("fail");
+    render(<MineHarness onPick={(e) => picks.push(e)} />);
+
+    // The default must degrade to today's behaviour, never to NO behaviour: a failed third request
+    // must not leave the selector with nothing chosen.
+    await waitFor(() => expect(picks.length).toBeGreaterThan(0));
+    expect(seriesFilter().value).toBe("");
+    expect(picks[0]!.id).toBe("recent");
+  });
+
+  it("widens in one step — the narrowing is a default, not a gate (FR-011)", async () => {
+    stubWithSeries(["s2"]);
+    render(<MineHarness />);
+    await waitFor(() => expect(seriesFilter().value).toBe("s2"));
+
+    await userEvent.selectOptions(seriesFilter(), "s1");
+
+    await waitFor(() => expect(optionValues()).toEqual(["", "fut", "recent", "old"]));
+  });
+
+  it("leaves a page that does not opt in exactly as it was (FR-013)", async () => {
+    stubWithSeries(["s2"]);
+    render(<Harness />); // no defaultToMySeries — this is check-in's case
+
+    await waitFor(() => expect(optionValues().length).toBeGreaterThan(2));
+    expect(seriesFilter().value).toBe("");
+  });
+});
