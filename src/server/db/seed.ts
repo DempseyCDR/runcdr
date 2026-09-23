@@ -13,7 +13,6 @@ import {
   performers,
   series,
   seriesParameters,
-  seriesQboMap,
   venues,
   venueRents,
 } from "@/server/db/schema";
@@ -215,19 +214,6 @@ async function main() {
     });
   }
 
-  // QBO gate customers + class per series.
-  const allSeries = await db.select().from(series);
-  for (const srow of allSeries) {
-    await db
-      .insert(seriesQboMap)
-      .values({
-        seriesId: srow.id,
-        gateCustomer: srow.key === "ecd" ? "English Gate" : "Contra Gate",
-        qboClass: srow.key === "tnc" ? "TNC" : srow.key === "ecd" ? "ECD" : "Community Dance",
-      })
-      .onConflictDoNothing({ target: seriesQboMap.seriesId });
-  }
-
   // Performers.
   await db
     .insert(performers)
@@ -258,6 +244,8 @@ async function main() {
       ]);
     }
   }
+
+  const allSeries = await db.select().from(series);
 
   // Sample series-scoped rates + ongoing charges per series (features 009/011). Rent lives in
   // venue_rents now (below), not series_parameters. Two concurrent ongoing charges demonstrate the

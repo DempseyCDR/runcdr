@@ -69,7 +69,6 @@ export type AuditEvent = {
     | "rate_parameter.created"
     | "door_parameter.created"
     | "treasurer_report.generated"
-    | "qbo_mapping.updated"
     | "expense_parameter.created"
     | "admission_pricing.set" // feature 054 (P7-R10): a series' admission tiers or schedule sentence changed
     | "officer.set" // feature 055 (P7-R12): a board-seat role's officer assignment changed

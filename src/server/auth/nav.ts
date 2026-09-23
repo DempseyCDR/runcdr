@@ -35,7 +35,6 @@ export const NAV: { href: string; label: string; capability: Capability | null }
   { href: "/expense-parameters", label: "Expense parameters", capability: "parameter.write" },
   { href: "/door-parameters", label: "Door parameters", capability: "parameter.write" }, // seed float (019 US5)
   { href: "/treasurer", label: "Treasurer report", capability: "treasurer_report.write" },
-  { href: "/qbo-mapping", label: "QBO mapping", capability: "treasurer_report.write" },
   { href: "/exports", label: "Mailing-list exports", capability: "export.read" },
   { href: "/access", label: "Access control", capability: "role.assign" },
   { href: "/content", label: "Content pages", capability: "content.write" }, // feature 051 (P7-R7)

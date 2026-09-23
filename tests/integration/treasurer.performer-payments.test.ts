@@ -36,7 +36,8 @@ describe("performer payments with check numbers", () => {
       ctx({ id: evt.id }),
     );
     const body = await res.json();
-    expect(body.performerPayments[0].payee).toBe("Check Caller");
-    expect(body.performerPayments[0].checkNumber).toBe("1042");
+    expect(body.expenses.payments[0].payee).toBe("Check Caller");
+    expect(body.expenses.payments[0].checkNumber).toBe("1042");
+    expect(body.expenses.payments[0].cash).toBe(false);
   });
 });

@@ -111,6 +111,7 @@ const EVENING = {
     otherPaidOut: { amount: 20, reason: "ice" },
     totals: { check: 240, cash: 80, total: 320 },
     rent: { vendor: "Faith Lutheran Church", amount: 250, unpaid: true },
+    reconciliation: { booked: 520, paid: 460, outstanding: 60 },
   },
   card: { gross: 180, transactions: 9, fee: 4.93 },
   deposits: [
@@ -204,7 +205,20 @@ describe("the gate report", () => {
       "ice",
       "Totalschecks $240.00 · cash $80.00$320.00",
       "RentFaith Lutheran Churchunpaid$250.00",
+      "Performersbooked $520.00 · paid $460.00outstanding$60.00",
     ]);
+  });
+
+  // Feature 085 (FR-008): "did we pay everyone?" — the one question the per-payment notes cannot answer.
+  it("shows the booked-versus-paid reconciliation, and shows it when nothing is outstanding", async () => {
+    await open({
+      ...EVENING,
+      expenses: {
+        ...EVENING.expenses,
+        reconciliation: { booked: 460, paid: 460, outstanding: 0 },
+      },
+    });
+    expect(rows("Expenses")).toContain("Performersbooked $460.00 · paid $460.00outstanding$0.00");
   });
 
   it("sets receipts and expenses side by side, with deposits under receipts and notes under expenses", async () => {

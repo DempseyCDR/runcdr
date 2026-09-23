@@ -10,8 +10,8 @@ import { assembleTreasurerReport } from "@/server/domain/treasurer/reportService
 import { updateDoorRecord } from "@/server/domain/door/doorRecordService";
 import type { PerformerType } from "@/server/db/schema";
 
-// Feature 023 US4: the per-event treasurer report lists live checks with their per-line breakdown, and voided
-// checks distinctly (so the treasurer records the void into QBO too).
+// Feature 023 US4: the per-event treasurer report lists every payment with its per-line detail, and marks a
+// voided check (feature 085: in the one expenses list, where the page shows it — and out of the totals).
 afterAll(closeDb);
 
 describe("treasurer report — payment lines + voided distinct (023)", () => {
@@ -53,19 +53,26 @@ describe("treasurer report — payment lines + voided distinct (023)", () => {
 
     const report = await assembleTreasurerReport(db, evt.id);
 
-    // Live check with its per-line allocation.
-    expect(report.performerPayments).toHaveLength(1);
-    const live = report.performerPayments[0]!;
-    expect(live.checkNumber).toBe("1001");
-    expect(live.lines).toHaveLength(1);
-    expect(live.lines[0]!.performer).toBe("Live Larry");
-    expect(live.lines[0]!.amount).toBe(100);
+    // Feature 085: both checks are in the one expenses list, in check-number order.
+    expect(report.expenses.payments).toHaveLength(2);
+    const [live, dead] = report.expenses.payments;
 
-    // Voided check, distinct.
-    expect(report.voidedPerformerPayments).toHaveLength(1);
-    const voided2 = report.voidedPerformerPayments[0]!;
-    expect(voided2.checkNumber).toBe("1002");
-    expect(voided2.voidReason).toBe("no-show");
+    // Live check, with the payee and role its own booking gives it.
+    expect(live).toMatchObject({
+      checkNumber: "1001",
+      payee: "Live Larry",
+      role: "musician",
+      amount: 100,
+      cash: false,
+      voided: false,
+    });
+
+    // The voided check is still listed — marked, with its reason.
+    expect(dead).toMatchObject({ checkNumber: "1002", payee: "Void Vic", voided: true });
+    expect(dead!.notes).toContain("Void — no-show");
+
+    // …and out of the totals: $100 live, not $200 (the rule the separate voided list used to prove).
+    expect(report.expenses.totals).toEqual({ check: 100, cash: 0, total: 100 });
   });
 });
 
@@ -120,45 +127,39 @@ describe("treasurer report — checks, cash and other events (081)", () => {
     await pay(d, 80, {});
 
     const report = await assembleTreasurerReport(db, tonight.id);
-    expect(report.checks.map((k) => k.checkNumber)).toEqual(["1499", "1500", "1500A", "1501"]);
-    expect(report.checks[1]).toMatchObject({
-      payee: "Ben Fiddle",
-      voided: true,
-      voidReason: "wrong amount",
-      replacedBy: "1500A",
-    });
-    expect(report.checks[3]).toMatchObject({
+
+    // Feature 085: one expenses list — every check by number, then the cash.
+    const payments = report.expenses.payments;
+    expect(payments.map((k) => k.checkNumber)).toEqual(["1499", "1500", "1500A", "1501", null]);
+    expect(payments[4]).toMatchObject({ payee: "Dee Earlier", cash: true, amount: 80 });
+
+    // The void carries its reason and its replacement in its notes.
+    expect(payments[1]).toMatchObject({ payee: "Ben Fiddle", voided: true });
+    expect(payments[1]!.notes).toEqual(["Void — wrong amount", "replaced by check 1500A"]);
+
+    // A short payment says what was booked against what was paid, beside the treasurer's own note.
+    expect(payments[3]).toMatchObject({
       payee: "Ann Caller",
+      role: "caller",
       amount: 100,
-      class: "TNC",
       voided: false,
-      voidReason: null,
-      replacedBy: null,
-      note: "left early",
-      lines: [{ performer: "Ann Caller", booked: 120, paid: 100, eventDate: null }],
     });
-    expect(report.cashPayments).toEqual([
-      {
-        payee: "Dee Earlier",
-        amount: 80,
-        note: null,
-        lines: [{ performer: "Dee Earlier", booked: 80, paid: 80, eventDate: "2026-06-04" }],
-      },
+    expect(payments[3]!.notes).toEqual(["booked $120.00 · paid $100.00", "left early"]);
+
+    // Live only, and the gate's cash payout counted with the cash.
+    expect(report.expenses.totals).toEqual({ check: 260, cash: 100, total: 360 });
+    expect(report.expenses.otherPaidOut).toEqual({ amount: 20, reason: "ice" });
+
+    // Tonight settles an earlier evening's booking, and both evenings say so.
+    expect(report.paidTonightForEarlier).toEqual([
+      { performer: "Dee Earlier", amount: 80, eventDate: "2026-06-04" },
     ]);
-    expect(report.otherCashPaidOut).toEqual({ amount: 20, reason: "ice" });
     expect(report.paidElsewhere).toEqual([]);
-    // The QBO batch the report always had is unchanged: live checks only.
-    expect(report.performerPayments.map((p) => p.checkNumber).sort()).toEqual([
-      "1499",
-      "1500A",
-      "1501",
-      null,
-    ]);
 
     const before = await assembleTreasurerReport(db, earlier.id);
     expect(before.paidElsewhere).toEqual([
       { performer: "Dee Earlier", amount: 80, eventDate: "2026-06-18" },
     ]);
-    expect(before.checks).toEqual([]);
+    expect(before.expenses.payments).toEqual([]);
   });
 });

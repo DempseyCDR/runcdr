@@ -8,7 +8,7 @@ import { GET as REPORT } from "@/app/api/events/[id]/treasurer-report/route";
 
 // Feature 019 US2 (R7): after the report cuts over to performer_payments, a payment mirroring what the
 // migration backfill produces (payee = booked performer, same amount + check, one linked booking) yields
-// the SAME performerPayments line shape the report emitted pre-cutover.
+// the SAME expenses line the report emitted pre-cutover.
 describe("treasurer report — performer payments cutover parity", () => {
   beforeAll(ensureSchema);
   beforeEach(resetDb);
@@ -37,20 +37,19 @@ describe("treasurer report — performer payments cutover parity", () => {
       ctx({ id: evt.id }),
     );
     const body = await res.json();
-    expect(body.performerPayments).toHaveLength(1);
-    expect(body.performerPayments[0]).toMatchObject({
+    expect(body.expenses.payments).toHaveLength(1);
+    expect(body.expenses.payments[0]).toMatchObject({
       payee: "Backfill Caller",
+      role: "caller",
       amount: 150,
-      class: expect.any(String), // Feature 039: GL account annotation removed; class retained
       checkNumber: "1042",
+      cash: false,
+      voided: false,
     });
-    expect(body.performerPayments[0]).not.toHaveProperty("account");
-    // Feature 023: the check now carries its per-line allocation (per-line GL account removed by 039).
-    expect(body.performerPayments[0].lines).toEqual([
-      { performer: "Backfill Caller", bookingId: expect.any(String), amount: 150 },
-    ]);
-    // Reconciliation: booked 150 = paid 150 → no gap.
-    expect(body.performerReconciliation).toEqual({ expected: 150, actual: 150, delta: 0 });
+    // Booked and paid agree, so the line needs no note about the difference.
+    expect(body.expenses.payments[0].notes).toEqual([]);
+    // Reconciliation: booked 150 = paid 150 → nothing outstanding, and it is still reported.
+    expect(body.expenses.reconciliation).toEqual({ booked: 150, paid: 150, outstanding: 0 });
   });
 
   it("a booked-but-unpaid performer shows as a reconciliation gap, no line", async () => {
@@ -64,7 +63,7 @@ describe("treasurer report — performer payments cutover parity", () => {
       ctx({ id: evt.id }),
     );
     const body = await res.json();
-    expect(body.performerPayments).toHaveLength(0);
-    expect(body.performerReconciliation).toEqual({ expected: 125, actual: 0, delta: -125 });
+    expect(body.expenses.payments).toHaveLength(0);
+    expect(body.expenses.reconciliation).toEqual({ booked: 125, paid: 0, outstanding: 125 });
   });
 });

@@ -25,7 +25,7 @@ describe("GET /api/events/:id/treasurer-report", () => {
     return { status: res.status, body: await res.json() };
   }
 
-  it("assembles all sections with mapping, named-customer split, and gift-card liability", async () => {
+  it("assembles the receipts, the named split and the gift-card sale", async () => {
     const evt = await makeEvent({ seriesKey: "tnc" });
     const [buyer] = await db.insert(contacts).values(contactRow("Member Buyer")).returning();
     const drId = await makeDoorRecord(evt.id, [
@@ -59,33 +59,25 @@ describe("GET /api/events/:id/treasurer-report", () => {
     // Feature 038 (P6-R6): the non-dance-income section is removed from the report entirely.
     expect(body).not.toHaveProperty("nonDanceIncome");
 
-    // Gate summary: anonymous customer, admission + gift_card lines present. Feature 039 (P6-R7): the GL
-    // `account` annotation is gone from every line; `customer` + `class` are retained (FR-002).
-    expect(body.gateSalesSummary.customer).toBe("Contra Gate");
-    const adm = body.gateSalesSummary.lines.find(
-      (l: { category: string }) => l.category === "admission",
-    );
-    expect(adm).not.toHaveProperty("account");
-    expect(adm.class).toBe("TNC"); // retained boundary: the class column stays (FR-002)
-    expect(adm.total).toBe(200);
-    const gc = body.gateSalesSummary.lines.find(
-      (l: { category: string }) => l.category === "gift_card",
-    );
-    expect(gc).not.toHaveProperty("account");
-    // membership is NOT on the gate receipt
-    expect(
-      body.gateSalesSummary.lines.find((l: { category: string }) => l.category === "membership"),
-    ).toBeUndefined();
+    // Admission is worked out: cash 120, card 145 - (25 gift card + 40 membership) = 80.
+    expect(body.receipts.admission).toEqual({ cash: 120, card: 80 });
 
-    // Named-customer receipt for membership: no GL account, class retained (039).
-    const mem = body.namedCustomerReceipts.find((r: { kind: string }) => r.kind === "membership");
-    expect(mem).not.toHaveProperty("account");
-    expect(mem.amount).toBe(40);
-    expect(mem.contact).toBe("Member Buyer");
+    // A gift card sold is income, on a line of its own.
+    const gc = body.receipts.lines.find((l: { category: string }) => l.category === "gift_card");
+    expect(gc).toMatchObject({ category: "gift_card", card: 25, name: null });
 
-    // Performer payment: no GL account annotation (039); amount unchanged.
-    expect(body.performerPayments[0]).not.toHaveProperty("account");
-    expect(body.performerPayments[0].amount).toBe(150);
+    // A named sale is credited to its buyer (the named split the QuickBooks receipts used to carry).
+    const mem = body.receipts.lines.find((l: { category: string }) => l.category === "membership");
+    expect(mem).toMatchObject({ card: 40, name: "Member Buyer" });
+
+    // The performer payment is an expense, at the amount actually paid.
+    expect(body.expenses.payments[0]).toMatchObject({
+      payee: "Pat Caller",
+      role: "caller",
+      amount: 150,
+      cash: true,
+      voided: false,
+    });
 
     // a report-generation audit row was written (FR-014)
     const audits = await db
@@ -98,7 +90,7 @@ describe("GET /api/events/:id/treasurer-report", () => {
   // Feature 040 (P6-R8): the report carries a Bills section — the venue rent as a bill owed to the venue's
   // landlord, amount derived from resolveEventRentCents; NO check/payment line (rent is paid outside the FS
   // check workflow).
-  it("shows the venue rent as a bill to the landlord, with no check line", async () => {
+  it("shows the venue rent as owed to the landlord, with no check line", async () => {
     const [landlord] = await db
       .insert(contacts)
       .values(contactRow("Faith Lutheran Church"))
@@ -110,32 +102,30 @@ describe("GET /api/events/:id/treasurer-report", () => {
     const evt = await makeEvent({ seriesKey: "tnc", venueId: venue!.id, rentCents: 25000 });
     await makeDoorRecord(evt.id);
     const { body } = await report(evt.id);
-    expect(body.bills).toHaveLength(1);
-    expect(body.bills[0]).toEqual({
+    expect(body.expenses.rent).toEqual({
       vendor: "Faith Lutheran Church",
-      class: "TNC",
       amount: 250, // rentCents 25000 (frozen override) → resolveEventRentCents → $250
+      unpaid: true,
     });
-    // no check/payment line on a bill (FR-004)
-    expect(body.bills[0]).not.toHaveProperty("checkNumber");
+    // Rent is owed, not paid through the FS, so it has no check line and stands outside the totals.
+    expect(body.expenses.rent).not.toHaveProperty("checkNumber");
+    expect(body.expenses.payments).toEqual([]);
+    expect(body.expenses.totals.total).toBe(0);
   });
 
   // Feature 040 (P6-R8/R9): a community-dance event is its own series, so its gate receipt is addressed to the
   // series' gate customer ("Contra Gate") with NO special-case code (FR-009). With no venue, rent resolves to
   // 0 and the bill still shows a $0 line to "(no landlord set)".
-  it("community-dance event with no venue: gate to Contra Gate, $0 rent line, no landlord", async () => {
+  it("community-dance event with no venue: $0 rent line, no landlord", async () => {
     const evt = await makeEvent({ seriesKey: "community_dance" });
     await makeDoorRecord(evt.id);
     const { body } = await report(evt.id);
-    expect(body.gateSalesSummary.customer).toBe("Contra Gate");
-    expect(body.bills).toHaveLength(1);
-    expect(body.bills[0].amount).toBe(0);
-    expect(body.bills[0].vendor).toBe("(no landlord set)");
+    expect(body.expenses.rent).toEqual({ vendor: "(no landlord set)", amount: 0, unpaid: true });
   });
 
   // Feature 040 (P6-R9): the report surfaces the raw comp-admission count and gift-card-redemption count for
   // reconciliation (both from the door record; display-only, no money figure changes).
-  it("surfaces comp-admission and gift-card-redemption counts", async () => {
+  it("surfaces comp-admission and gift-card-redemption counts in the attendance", async () => {
     const evt = await makeEvent();
     const drId = await makeDoorRecord(evt.id);
     await db
@@ -143,16 +133,14 @@ describe("GET /api/events/:id/treasurer-report", () => {
       .set({ compCount: 3, giftCardRedemptionCount: 2 })
       .where(eq(doorRecords.id, drId));
     const { body } = await report(evt.id);
-    expect(body.compCount).toBe(3);
-    expect(body.giftCardRedemptionCount).toBe(2);
+    expect(body.attendance).toMatchObject({ comps: 3, giftCards: 2 });
   });
 
   it("shows zero comp / gift-card-redemption counts (not hidden)", async () => {
     const evt = await makeEvent();
     await makeDoorRecord(evt.id);
     const { body } = await report(evt.id);
-    expect(body.compCount).toBe(0);
-    expect(body.giftCardRedemptionCount).toBe(0);
+    expect(body.attendance).toMatchObject({ comps: 0, giftCards: 0 });
   });
 
   it("computes deposit and shows POS verification", async () => {
@@ -160,9 +148,13 @@ describe("GET /api/events/:id/treasurer-report", () => {
     const drId = await makeDoorRecord(evt.id);
     await updateDoorRecord(db, drId, { grossCash: 200, pcGross: 100, seedFloat: 15 });
     const { body } = await report(evt.id);
-    expect(body.deposit).not.toHaveProperty("account"); // GL account annotation removed (039)
-    expect(body.deposit.amount).toBe(185); // gross cash 200 − seed 15
-    expect(body.gateSalesSummary.posVerification.gross).toBe(100); // PC gross (entered)
+    expect(body.deposits).toHaveLength(1);
+    expect(body.deposits[0]).toMatchObject({
+      kind: "main",
+      amount: 185, // gross cash 200 − seed 15
+      makeUp: { countedCash: 200, seedFloat: 15 },
+    });
+    expect(body.card.gross).toBe(100); // PC gross (entered)
   });
 
   it("derives admission from gross cash/PC gross minus all non-admission (anon + named) lines", async () => {
@@ -181,33 +173,34 @@ describe("GET /api/events/:id/treasurer-report", () => {
     await updateDoorRecord(db, drId, { grossCash: 300, pcGross: 200, seedFloat: 15 });
 
     const { body } = await report(evt.id);
-    const adm = body.gateSalesSummary.lines.find(
-      (l: { category: string }) => l.category === "admission",
-    );
     // cash: 300 − 15 − (30+10+5+25)=70 → 215 ; card: 200 − (20+40)=60 → 140
-    expect(adm.cash).toBe(215);
-    expect(adm.card).toBe(140);
-    expect(adm.total).toBe(355);
+    expect(body.receipts.admission).toEqual({ cash: 215, card: 140 });
 
-    // anonymous income items are reported
-    const merch = body.gateSalesSummary.lines.find(
-      (l: { category: string }) => l.category === "merchandise",
-    );
-    expect(merch.total).toBe(50);
-    expect(
-      body.gateSalesSummary.lines.some((l: { category: string }) => l.category === "gift_card"),
-    ).toBe(true);
-    expect(
-      body.gateSalesSummary.lines.some((l: { category: string }) => l.category === "misc_sales"),
-    ).toBe(true);
+    type Line = { category: string; name: string | null; cash: number; card: number };
+    const lines: Line[] = body.receipts.lines;
 
-    // named-customer receipts grouped by contact
-    const don = body.namedCustomerReceipts.find((r: { kind: string }) => r.kind === "donation");
-    expect(don.contact).toBe("Donor A");
-    expect(don.amount).toBe(25);
-    const mem = body.namedCustomerReceipts.find((r: { kind: string }) => r.kind === "membership");
-    expect(mem.contact).toBe("Member B");
-    expect(mem.amount).toBe(40);
+    // Every anonymous sale is reported, each on its own line.
+    expect(
+      lines
+        .filter((l) => l.name === null)
+        .map((l) => [l.category, l.cash + l.card])
+        .sort(),
+    ).toEqual([
+      ["gift_card", 10],
+      ["merchandise", 20],
+      ["merchandise", 30],
+      ["misc_sales", 5],
+    ]);
+
+    // A named sale carries its buyer.
+    expect(lines.find((l) => l.category === "donation")).toMatchObject({
+      name: "Donor A",
+      cash: 25,
+    });
+    expect(lines.find((l) => l.category === "membership")).toMatchObject({
+      name: "Member B",
+      card: 40,
+    });
   });
 
   it("404s when the event has no door record", async () => {
@@ -231,8 +224,6 @@ describe("GET /api/events/:id/treasurer-report", () => {
     const { status, body } = await report(evt.id);
     expect(status).toBe(200);
     expect(body.attendance).toEqual(await getAttendanceBreakdown(db, evt.id));
-    expect(body.attendance).toMatchObject({ children: 2, performers: { caller: 1 } });
-    // Existing fields are unchanged.
-    expect(body.compCount).toBe(1);
+    expect(body.attendance).toMatchObject({ children: 2, performers: { caller: 1 }, comps: 1 });
   });
 });
