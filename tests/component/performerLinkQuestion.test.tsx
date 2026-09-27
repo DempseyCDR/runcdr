@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import PerformerForm from "@/app/(admin)/manage/performers/PerformerForm";
+import PerformerForm from "@/app/(admin)/_performers/PerformerForm";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -113,5 +113,31 @@ describe("the performer with no contact", () => {
     );
     expect(screen.queryByText(/no contact/i)).toBeNull();
     expect(screen.getByLabelText("Biography")).toBeInTheDocument();
+  });
+
+  /**
+   * Feature 087 walk-through: when the suggestions miss — they offered only "Catherine Hughes" for
+   * "Catherine Sloboda" — the Booker had no way to find the right contact. The question now has a search.
+   */
+  it("finds any contact by searching, and links the one chosen (087)", async () => {
+    const calls = stub({
+      suggestions: [{ id: "c-hughes", displayName: "Catherine Hughes", similarity: 0.5 }],
+      nearMatch: [{ id: "c-mccallen", displayName: "Catherine Sloboda" }],
+    });
+    render(<PerformerForm performer={CLARA} onSaved={() => {}} onClose={() => {}} />);
+
+    await userEvent.type(
+      await screen.findByRole("searchbox", { name: /find a contact/i }),
+      "McCallen",
+    );
+    await userEvent.click(await screen.findByRole("button", { name: "Link Catherine Sloboda" }));
+
+    await waitFor(() => expect(writes(calls)).toHaveLength(1));
+    expect(writes(calls)[0]).toMatchObject({
+      url: "/api/performers/p-clara",
+      method: "PATCH",
+      body: { contactId: "c-mccallen" },
+    });
+    expect(calls.some((c) => c.url.includes("/api/contacts?q=McCallen"))).toBe(true);
   });
 });

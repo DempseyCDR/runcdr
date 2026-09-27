@@ -58,7 +58,7 @@ async function main() {
     .insert(series)
     .values([
       { key: "tnc", name: "Thursday Night Contra", hasSoundTech: true },
-      { key: "ecd", name: "Sunday English Country Dance", hasSoundTech: true },
+      { key: "ecd", name: "Sunday English Country Dance", hasSoundTech: false }, // 087: no sound tech (0059)
       { key: "community_dance", name: "Community Dance", hasSoundTech: false },
       { key: "general", name: "General / Joint Events", hasSoundTech: true },
     ])

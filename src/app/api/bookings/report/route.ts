@@ -5,17 +5,23 @@ import { assembleBookingsReport } from "@/server/domain/bookings/reportService";
 
 // Feature 018 (B24): cross-event bookings report. `base` — any authenticated staff may read it (booking
 // status/pay are not PII; the public site is separate and confirmed-only). Read-only planning view.
+//
+// Feature 087: Booking Central's read. It takes the series, a HORIZON (the upper bound — the page passes
+// today + 4 months by default, FR-001a) and a cursor, and answers one page plus the next cursor. The
+// caller, band and musician filters and the ascending sort are retired (FR-001b), so those parameters are
+// no longer read at all rather than silently half-honoured.
+const MAX_PAGE = 200;
+
 export const GET = withAuth({ requires: "base" }, async (req) => {
-  const url = new URL(req.url);
-  const p = url.searchParams;
+  const p = new URL(req.url).searchParams;
+  const limitParam = Number(p.get("limit"));
   const report = await assembleBookingsReport(db, {
     series: p.get("series") ?? undefined,
-    from: p.get("from") ?? undefined,
-    to: p.get("to") ?? undefined,
-    caller: p.get("caller") ?? undefined,
-    band: p.get("band") ?? undefined,
-    musician: p.get("musician") ?? undefined,
-    sort: p.get("sort") === "asc" ? "asc" : "desc", // feature 029 (P5-R2): default desc (was asc in 020 US1)
+    horizon: p.get("horizon") ?? undefined,
+    cursor: p.get("cursor") ?? undefined,
+    ...(Number.isInteger(limitParam) && limitParam > 0
+      ? { limit: Math.min(limitParam, MAX_PAGE) }
+      : {}),
   });
   return NextResponse.json(report);
 });

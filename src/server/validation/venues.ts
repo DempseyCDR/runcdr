@@ -38,6 +38,8 @@ export const assignVenueSchema = z.object({
     .nullable()
     .optional(),
   description: z.string().trim().min(1).nullable().optional(),
+  // Feature 087 (FR-014): the Booker's PRIVATE note on the dance — never the public `description` above.
+  note: z.string().trim().min(1).nullable().optional(),
   // Feature 018: reschedule (B25, event.write), cancel/revive (B25, event.write), advertised price
   // (B27, event.public.write). Field-level authorization is enforced by `assertFields` in the route.
   eventDate: z

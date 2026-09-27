@@ -62,6 +62,44 @@ describe("US5: role-aware navigation", () => {
   // Feature 086 (FR-005): the report's own work is the Financial Secretary's, and until now her menu
   // did not offer it while a Treasurer's did. The Door-Attendant case above is UNCHANGED and must stay
   // that way — it is the rule this feature keeps, not the one it reverses.
+  /**
+   * Feature 087 (SC-004): the Booker's WHOLE menu, pinned — the way 086 pinned the capability map.
+   *
+   * Booking Central absorbs four of these (bookings, the bookings report, performers, bands) and replaces
+   * them with one. Pinning the full list means the stories that should NOT touch the menu (US1, US2)
+   * are proved not to, and the story that does (US3) must edit this list deliberately — so "the menu
+   * lost four entries and gained one" is a diff anyone can read, not a claim.
+   */
+  it("the Booker's menu is exactly this (087 baseline)", async () => {
+    const { token } = await makeActor({
+      email: "booker.menu087@cdrochester.org",
+      grants: [{ role: "booker" }],
+    });
+    const nav = hrefs(navItemsFor(await actorFromToken(token)));
+
+    expect(nav).toEqual([
+      "/organizer/tnc",
+      "/contacts",
+      "/events",
+      "/bookings", // Booking Central — the report, performers and bands are in it now (087 US3)
+      "/venues",
+      "/rate-parameters",
+      "/admission-pricing",
+      "/expense-parameters",
+      "/door-parameters",
+      "/treasurer",
+    ]);
+  });
+
+  it("names the hub Booking Central (087 US3)", async () => {
+    const { token } = await makeActor({
+      email: "booker.label087@cdrochester.org",
+      grants: [{ role: "booker" }],
+    });
+    const items = navItemsFor(await actorFromToken(token));
+    expect(items.find((i) => i.href === "/bookings")?.label).toBe("Booking Central");
+  });
+
   it("a Booker sees the gate report too (086, walk-through)", async () => {
     const { token } = await makeActor({
       email: "booker.nav086@cdrochester.org",

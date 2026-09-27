@@ -133,4 +133,46 @@ describe("VenueForm", () => {
     expect(screen.getByLabelText("Address")).toBeDisabled();
     expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
   });
+
+  // Feature 087 walk-through: the landlord read "set" — the venue payload never carried a name, and the
+  // Booker wants to write to them. The name is shown, as a link to email them when there is an address.
+  it("names the landlord as a link to email them (087)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => ({
+        ok: true,
+        status: 200,
+        json: async () =>
+          String(url).endsWith("/api/venues/v1/landlord-mailto")
+            ? { email: "len@example.org" }
+            : { items: [] },
+      })),
+    );
+    render(
+      <VenueForm
+        venue={{ ...GRANGE, landlordContactId: "c-len", landlordName: "Len Landlord" }}
+        onSaved={() => {}}
+        onClose={() => {}}
+      />,
+    );
+    const link = await screen.findByRole("link", { name: "Len Landlord" });
+    expect(link).toHaveAttribute("href", "mailto:len@example.org");
+    expect(screen.queryByText("set")).toBeNull();
+  });
+
+  it("names the landlord without a link when there is no address to write to (087)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ email: null }) })),
+    );
+    render(
+      <VenueForm
+        venue={{ ...GRANGE, landlordContactId: "c-len", landlordName: "Len Landlord" }}
+        onSaved={() => {}}
+        onClose={() => {}}
+      />,
+    );
+    expect(await screen.findByText("Len Landlord")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Len Landlord" })).toBeNull();
+  });
 });

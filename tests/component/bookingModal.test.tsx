@@ -47,7 +47,7 @@ describe("BookingModal", () => {
       />,
     );
 
-    await user.type(screen.getByLabelText(/search performer/i), "fab");
+    await user.type(screen.getByRole("searchbox", { name: /find a performer/i }), "fab");
     await waitFor(() => screen.getByRole("button", { name: /Bob Fabinski/ }));
     await user.click(screen.getByRole("button", { name: /Bob Fabinski/ }));
     await user.click(screen.getByRole("button", { name: /^Save$/ }));
@@ -84,9 +84,9 @@ describe("BookingModal", () => {
       />,
     );
 
-    await user.type(screen.getByLabelText(/search performer/i), "Micah Wiesner");
-    // No performer → "Add performer" opens the contact search; still empty → create-new appears.
-    await user.click(await screen.findByRole("button", { name: /Add performer/i }));
+    await user.type(screen.getByRole("searchbox", { name: /find a performer/i }), "Micah Wiesner");
+    // No performer → "New performer" opens the contact search; still empty → create-new appears.
+    await user.click(await screen.findByRole("button", { name: /New performer/i }));
     await user.type(screen.getByLabelText(/new performer email/i), "micah@ex.com");
     await user.click(await screen.findByRole("button", { name: /Create performer/i }));
 
@@ -110,7 +110,7 @@ describe("BookingModal", () => {
     expect(screen.getByText(/Selected: Micah Wiesner/)).toBeInTheDocument();
   });
 
-  it("edit: Save issues one PATCH; Cancel issues none", async () => {
+  it("edit: Save issues one PATCH; Close issues none", async () => {
     const calls: { url: string; init?: RequestInit }[] = [];
     vi.stubGlobal(
       "fetch",
@@ -142,7 +142,7 @@ describe("BookingModal", () => {
     await user.click(screen.getByRole("button", { name: /^Save$/ }));
     await waitFor(() => expect(calls.filter((c) => c.init?.method === "PATCH")).toHaveLength(1));
 
-    // Cancel path: no PATCH.
+    // Close path: no PATCH. (Named Close, not Cancel, since feature 087 — cancelling is done to a booking.)
     calls.length = 0;
     rerender(
       <BookingModal
@@ -154,7 +154,7 @@ describe("BookingModal", () => {
         onSaved={() => {}}
       />,
     );
-    await user.click(screen.getByRole("button", { name: /^Cancel$/ }));
+    await user.click(screen.getByRole("button", { name: /^Close$/ }));
     expect(calls.filter((c) => c.init?.method === "PATCH")).toHaveLength(0);
   });
 
@@ -209,5 +209,27 @@ describe("BookingModal", () => {
     const link = await screen.findByRole("link", { name: /email/i });
     expect(link).toHaveAttribute("href", expect.stringContaining("mailto:bob@ex.com"));
     expect(link).toHaveAttribute("href", expect.stringContaining("Rochester%20Dance"));
+  });
+
+  // Feature 087 walk-through: the editor opened at the foot of the hub rather than over it.
+  it("opens as a modal over the page, not inline at its foot", () => {
+    vi.stubGlobal(
+      "fetch",
+      stubFetch([], () => ({})),
+    );
+    render(
+      <BookingModal
+        mode="create"
+        eventId="e1"
+        eventDate="2026-06-18"
+        role="caller"
+        onClose={() => {}}
+      />,
+    );
+    const dialog = screen.getByRole("dialog", { name: "Booking" });
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(
+      screen.getByRole("heading", { name: "Book a caller for 2026-06-18" }),
+    ).toBeInTheDocument();
   });
 });

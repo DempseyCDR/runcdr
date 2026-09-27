@@ -112,6 +112,17 @@
   font-weight: 600;
 }
 
+/* Feature 087 (FR-030a): the way into the performer editor — beside the name, and quieter than paying. */
+.quietButton {
+  background: none;
+  border: none;
+  color: var(--link, inherit);
+  font-size: 0.9rem;
+  min-height: 2.75rem;
+  padding: 0 var(--space-2);
+  text-decoration: underline;
+}
+
 .actions {
   display: grid;
   gap: var(--space-2);

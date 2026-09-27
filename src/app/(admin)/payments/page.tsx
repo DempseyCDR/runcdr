@@ -16,6 +16,7 @@ import PerformerRow from "./PerformerRow";
 import SeveralPerformersDialog from "./SeveralPerformersDialog";
 import SubstituteDialog from "./SubstituteDialog";
 import VoidDialog from "./VoidDialog";
+import PerformerForm, { type Performer } from "../_performers/PerformerForm";
 import { money, send } from "./savePayment";
 import type { Booking, Payment, PaymentsList, RefusalHandler, RowState } from "./types";
 import styles from "./payments.module.css";
@@ -55,6 +56,9 @@ export default function PaymentsPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [list, setList] = useState<PaymentsList | null>(null);
   const [canWrite, setCanWrite] = useState(false);
+  // Feature 087 (FR-030a): the performers page is gone, so the FS and Treasurer correct a performer here.
+  const [performerWrite, setPerformerWrite] = useState(false);
+  const [editingPerformer, setEditingPerformer] = useState<Performer | null>(null);
   const [donateFor, setDonateFor] = useState<Booking | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [choice, setChoice] = useState<Choice | null>(null);
@@ -70,7 +74,10 @@ export default function PaymentsPage() {
       .then((d) => setSeries(d.items ?? []));
     void apiFetch("/api/me/capabilities")
       .then((r) => r.json())
-      .then((d) => setCanWrite(d.performerPaymentWrite === true));
+      .then((d) => {
+        setCanWrite(d.performerPaymentWrite === true);
+        setPerformerWrite(d.performerWrite === true);
+      });
   }, []);
 
   const eventId = event?.id ?? "";
@@ -165,6 +172,12 @@ export default function PaymentsPage() {
     .filter((r) => r.state.kind === "toPay" || r.state.kind === "free")
     .map((r) => r.booking);
 
+  /** Open the editor on the WHOLE record — the booking carries only the performer's id and name. */
+  async function editPerformer(performerId: string) {
+    const res = await apiFetch(`/api/performers/${performerId}`);
+    if (!res.ok) return setMessage("Could not open that performer.");
+    setEditingPerformer((await res.json()) as Performer);
+  }
   return (
     <main className={styles.page}>
       <EventConfirm event={event} series={series} onSelect={setEvent} defaultToMySeries />
@@ -193,6 +206,9 @@ export default function PaymentsPage() {
               onDonate={setDonateFor}
               onRefused={onRefused}
               paidActions={paidActions}
+              onEditPerformer={
+                performerWrite ? () => void editPerformer(booking.performerId) : undefined
+              }
             />
           ))}
         </ul>
@@ -234,6 +250,19 @@ export default function PaymentsPage() {
             Pay an earlier booking
           </button>
         </div>
+      )}
+
+      {editingPerformer && (
+        <Dialog label={editingPerformer.displayName} onClose={() => setEditingPerformer(null)}>
+          <PerformerForm
+            performer={editingPerformer}
+            onSaved={() => {
+              setEditingPerformer(null);
+              void refresh();
+            }}
+            onClose={() => setEditingPerformer(null)}
+          />
+        </Dialog>
       )}
 
       {dialog === "add" && (

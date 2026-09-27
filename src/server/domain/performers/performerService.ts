@@ -1,4 +1,5 @@
 import { and, asc, eq, gte, ilike, inArray, isNull, lte, sql } from "drizzle-orm";
+import { retiredReason } from "./needContact";
 import type { Db } from "@/server/db/client";
 import { bookings, contactEmails, contacts, events, performers } from "@/server/db/schema";
 import type { PerformerRow, PerformerType } from "@/server/db/schema";
@@ -229,6 +230,11 @@ export type PerformerDetail = PerformerRow & {
    * `contact.pii.read`, and this payload is readable by any volunteer.
    */
   contactName: string | null;
+  /**
+   * Feature 087 (FR-027, B58): the linked contact has been archived or merged away, so it no longer
+   * reaches the person. The form raises the settle-it question for this as it does for no contact at all.
+   */
+  contactRetired: "archived" | "merged" | null;
 };
 
 /** Appearance history = all bookings; YTD earnings = paid, non-donated bookings this calendar year. */
@@ -264,6 +270,7 @@ export async function getPerformer(db: Db, id: string): Promise<PerformerDetail>
     appearanceCount: appearances?.count ?? 0,
     ytdEarnings: centsToDollars(earned?.total ?? 0),
     contactName: contact?.displayName ?? null,
+    contactRetired: contact ? retiredReason(contact) : null,
   };
 }
 

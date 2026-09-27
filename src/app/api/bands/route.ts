@@ -1,12 +1,20 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { db } from "@/server/db/client";
 import { withAuth } from "@/server/auth/withAuth";
 import { parseBody } from "@/server/lib/parseBody";
 import { bandCreateSchema } from "@/server/validation/bands";
-import { createBand, listBands } from "@/server/domain/bands/bandService";
+import { bandsOf, createBand, listBands } from "@/server/domain/bands/bandService";
 
 export const GET = withAuth({ requires: "base" }, async (req) => {
   const params = new URL(req.url).searchParams;
+  // Feature 087 (FR-020): the bands one performer plays in, for their card on the hub.
+  const performer = params.get("performer");
+  if (performer !== null) {
+    // An id that is not a uuid names nobody — answer that, rather than letting Postgres reject the cast.
+    if (!z.string().uuid().safeParse(performer).success) return NextResponse.json({ items: [] });
+    return NextResponse.json({ items: await bandsOf(db, performer) });
+  }
   const q = params.get("q");
   // FR-012: an archived band is found again by asking for it.
   const includeArchived = params.get("archived") === "1";

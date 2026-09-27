@@ -16,12 +16,14 @@ describe("band roster validation", () => {
     expect(r.success).toBe(true);
   });
 
-  it("rejects a roster with no lead", () => {
+  // Feature 087 (FR-022, FR-023): a lead is optional. Removing the lead leaves a band with no lead,
+  // stated plainly — the alternative, forcing a lead on save, would name someone the Booker did not pick.
+  it("accepts a roster with no lead", () => {
     const r = bandCreateSchema.safeParse({
       name: "The Reels",
       members: [{ performerId: uuid, isLead: false }],
     });
-    expect(r.success).toBe(false);
+    expect(r.success).toBe(true);
   });
 
   it("rejects a roster with two leads", () => {

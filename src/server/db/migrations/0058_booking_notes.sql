@@ -1,0 +1,13 @@
+-- Feature 087 (FR-014): the Booker's private note on a dance.
+--
+-- This is NOT `events.description`. That column is the dance's PUBLIC blurb: it renders on the public
+-- site, so a scheduling note typed into it ("Chuck can't do Thursdays — try Dave first") would be
+-- published. The note needs a column of its own precisely so that cannot happen by accident (FR-016).
+--
+-- Named `note`, singular, to match `bookings.note` — which already exists, is already edited in the
+-- booking modal, and already satisfies FR-015 (notes on caller and band bookings). The feature's plan
+-- originally proposed a second `bookings.notes` column beside it; that would have given a booking two
+-- notes, so it was dropped at implementation.
+--
+-- Idempotent — safe to re-run.
+ALTER TABLE events ADD COLUMN IF NOT EXISTS note text;

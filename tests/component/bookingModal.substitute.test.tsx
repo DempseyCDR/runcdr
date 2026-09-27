@@ -1,76 +1,13 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import BookingsReportPage from "@/app/(admin)/bookings-report/page";
 import { BookingModal } from "@/app/(admin)/_modals/BookingModal";
 
-// Feature 024 US2/US3 (component, jsdom, stubbed fetch): the report exposes a band re-point control that
-// POSTs repoint-band; the modal exposes a substitute action that POSTs substitute; a re-point refused as
-// paid surfaces the server's inline "settled by a live check" message.
+// Feature 024 US3 (component, jsdom, stubbed fetch): the booking modal's substitute action POSTs substitute,
+// and a re-point refused as paid surfaces the server's inline "settled by a live check" message. Split out
+// of the bookings report's test when feature 087 deleted that page — these never depended on it.
 type Call = { url: string; init?: RequestInit };
-
-const ROW = {
-  eventId: "e1",
-  date: "2026-06-18",
-  series: "Thursday Night Contra",
-  venueShortName: "GH",
-  hasSoundTech: false,
-  caller: null,
-  band: "Band A",
-  bandId: "bandA",
-  musicians: ["Ann"],
-  soundTech: null,
-  cancelled: false,
-  bookings: [
-    { bookingId: "b2", performerId: "p2", performer: "Ann", type: "musician", status: "confirmed" },
-  ],
-};
-
-const BANDS = [
-  { id: "bandA", name: "Band A" },
-  { id: "bandB", name: "Band B" },
-];
-
-describe("BookingsReportPage — band re-point", () => {
-  afterEach(() => vi.unstubAllGlobals());
-
-  it("offers a re-point control and POSTs repoint-band with from/to band ids", async () => {
-    const calls: Call[] = [];
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string, init?: RequestInit) => {
-        calls.push({ url, init });
-        const json = async () => {
-          if (url.includes("/api/me/capabilities")) return { bookingWrite: true, eventWrite: true };
-          if (url.includes("/api/bookings/report")) return { rows: [ROW] };
-          if (url.includes("/api/bands")) return { items: BANDS };
-          return { items: [] };
-        };
-        return { ok: true, status: 201, json };
-      }),
-    );
-    const user = userEvent.setup();
-    render(<BookingsReportPage />);
-
-    await waitFor(() => screen.getByText("GH"));
-    const row = screen.getByText("GH").closest("tr")!;
-    const select = within(row).getByLabelText(/re-point band to/i);
-    await user.selectOptions(select, "bandB");
-    await user.click(within(row).getByRole("button", { name: /re-point band/i }));
-
-    await waitFor(() =>
-      expect(
-        calls.some((c) => c.init?.method === "POST" && c.url.includes("/events/e1/repoint-band")),
-      ).toBe(true),
-    );
-    const post = calls.find((c) => c.url.includes("/repoint-band"))!;
-    expect(JSON.parse(post.init!.body as string)).toEqual({
-      fromBandId: "bandA",
-      toBandId: "bandB",
-    });
-  });
-});
 
 const BOOKING = {
   id: "b1",

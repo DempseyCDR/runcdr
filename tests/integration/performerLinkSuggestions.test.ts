@@ -71,4 +71,27 @@ describe("contact suggestions for an unlinked performer", () => {
     const { items } = await suggest(performer.id);
     expect(items).toEqual([]);
   });
+
+  /**
+   * Feature 087 walk-through (B58's live case): the performer "Catherine Sloboda" belongs to the contact
+   * whose LEGAL name is Catherine McCallen and who goes by "Catherine Sloboda" (a display-name override).
+   * Comparing only the legal name missed her entirely and offered "Catherine Hughes" on the first name.
+   * The name a person goes by is theirs too, so a match on either is a match.
+   */
+  it("matches the name a contact goes by, not only their legal name (087)", async () => {
+    const mccallen = await aContact("Catherine McCallen", {
+      firstName: "Catherine",
+      lastName: "McCallen",
+      displayNameOverride: "Catherine Sloboda",
+      displayName: "Catherine Sloboda",
+      nameNormalized: "catherine sloboda",
+      dedupNormalized: "catherine mccallen",
+    });
+    await aContact("Catherine Hughes");
+    const performer = await anUnlinkedPerformer("Catherine Sloboda");
+
+    const { items } = await suggest(performer.id);
+    expect(items[0]).toMatchObject({ id: mccallen.id, displayName: "Catherine Sloboda" });
+    expect(items[0].similarity).toBe(1);
+  });
 });

@@ -1,0 +1,13 @@
+-- Feature 087 (walk-through 2026-09-24, Rich): the Sunday English Country Dance does not use a sound tech.
+--
+-- Every series but the community dance was created wanting one (0004 defaulted `has_sound_tech` to true,
+-- and 0012's series insert kept it), so Booking Central marked every ECD dance as missing a sound tech — a
+-- warning that never goes away, which teaches the Booker to stop reading the column (FR-004a).
+--
+-- Turning it off hides the slot and refuses NEW sound-tech bookings on ECD dances (bookingService). Any
+-- sound-tech booking already made is left exactly as it is, and still shows on its dance.
+--
+-- Nothing in the app edits this flag yet; making it editable is backlogged (B61).
+--
+-- Idempotent — safe to re-run.
+UPDATE series SET has_sound_tech = false WHERE key = 'ecd' AND has_sound_tech;

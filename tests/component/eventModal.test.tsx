@@ -183,4 +183,50 @@ describe("EventModal", () => {
     expect(screen.getByRole("button", { name: /^Close$/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Save$/ })).not.toBeInTheDocument();
   });
+
+  // Feature 087 walk-through: the editor opened at the foot of the hub, under the table, rather than
+  // over it. It is a modal, so it sits over the page on a backdrop, as the payments dialogs do.
+  it("opens as a modal over the page, not inline at its foot", () => {
+    vi.stubGlobal(
+      "fetch",
+      stubFetch([], () => ({})),
+    );
+    const event = {
+      id: "e1",
+      seriesKey: "tnc",
+      eventDate: "2026-06-18",
+      startTime: null,
+      venueId: "v1",
+      rentCents: null,
+      label: "",
+      description: "",
+    };
+    render(<EventModal mode="edit" event={event} venues={VENUES} onClose={() => {}} />);
+    expect(screen.getByRole("dialog", { name: "Event" })).toHaveAttribute("aria-modal", "true");
+  });
+
+  // Feature 087 walk-through: the public blurb was a one-line box that could not be resized, beside a
+  // note that could. It is the longer of the two, so it is a text area at least the note's size.
+  it("gives the description a resizable text area at least as big as the note", () => {
+    vi.stubGlobal(
+      "fetch",
+      stubFetch([], () => ({})),
+    );
+    const event = {
+      id: "e1",
+      seriesKey: "tnc",
+      eventDate: "2026-06-18",
+      startTime: null,
+      venueId: "v1",
+      rentCents: null,
+      label: "",
+      description: "A public blurb",
+      note: "",
+    };
+    render(<EventModal mode="edit" event={event} venues={VENUES} withNote onClose={() => {}} />);
+    const description = screen.getByLabelText(/description/i) as HTMLTextAreaElement;
+    const note = screen.getByLabelText("Note") as HTMLTextAreaElement;
+    expect(description.tagName).toBe("TEXTAREA");
+    expect(description.rows).toBeGreaterThanOrEqual(note.rows);
+  });
 });

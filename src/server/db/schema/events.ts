@@ -33,6 +33,9 @@ export const events = pgTable("events", {
   label: text("label"),
   startTime: time("start_time"),
   description: text("description"),
+  // Feature 087 (FR-014): the Booker's PRIVATE note on a dance. Never the public blurb above — a note
+  // typed into `description` would be published (FR-016). Named to match `bookings.note`.
+  note: text("note"),
   chargesAdmission: boolean("charges_admission").notNull().default(true),
   // Feature 018 (B25): cancelled is a retained, public-visible state (not a delete).
   status: eventStatusEnum("status").notNull().default("scheduled"),
