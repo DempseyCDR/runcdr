@@ -174,7 +174,7 @@ contact is archived — with no booking disturbed.
 - [X] T068 Run the full gates with the dev server stopped: `pnpm db:migrate`, `pnpm tsc --noEmit`, `pnpm vitest run`, `pnpm build`
 - [X] T069 [P] Run `pnpm exec eslint` and `pnpm exec prettier --check` on the changed code files only, and `pnpm exec markdownlint-cli2 --fix` plus `pnpm lint:md` on the changed markdown
 - [X] T070 Walk [quickstart.md](./quickstart.md) §1–§5 as a **Booker** (Peggy Dempsey holds ecd, PeggyTBD holds tnc — a Super-user proves nothing about what the Booker was given)
-- [ ] T071 Walk the quickstart's closing guard as the **Financial Secretary**, the **Treasurer**, the **Webmaster** and the **Booker** in turn — four pages were deleted and four capabilities were nearly deleted with them during specification alone
+- [X] T071 Walk the quickstart's closing guard as the **Financial Secretary**, the **Treasurer**, the **Webmaster** and the **Booker** in turn — four pages were deleted and four capabilities were nearly deleted with them during specification alone
 - [X] T072 Update `specs/BACKLOG.md`: mark **B57** and **B58** done with this feature number
 - [X] T073 Tick this task and T074 **before** committing, then make one atomic commit for the feature — never amend and force-push a pushed branch merely to mark a step complete
 - [X] T074 Push the branch and open the pull request against `main`
