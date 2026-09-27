@@ -29,6 +29,29 @@ describe("GET /api/me/capabilities — performer payments (081)", () => {
 });
 
 /**
+ * Feature 087 (FR-030b): the performer editor is hosted by the hub and by the payments page, and each host
+ * offers it editable only to a holder of `performer.write`. The server still refuses every other write.
+ */
+describe("GET /api/me/capabilities — performer editing (087)", () => {
+  it("says a Booker and a Financial Secretary may edit performers, and a base volunteer may not", async () => {
+    const tnc = await db.query.series.findFirst({ where: eq(series.key, "tnc") });
+    const booker = await makeActor({
+      email: "booker.cap@example.com",
+      grants: [{ role: "booker", seriesId: tnc!.id }],
+    });
+    const fs = await makeActor({
+      email: "fs.cap@example.com",
+      grants: [{ role: "financial_secretary", seriesId: tnc!.id }],
+    });
+    const base = await makeBaseActor("base.cap@example.com");
+
+    expect(await capabilities(booker.token)).toMatchObject({ performerWrite: true });
+    expect(await capabilities(fs.token)).toMatchObject({ performerWrite: true });
+    expect(await capabilities(base.token)).toMatchObject({ performerWrite: false });
+  });
+});
+
+/**
  * Feature 082 (FR-027, edge case "someone without gate authority"): the gate page offers the money and its
  * Save only to someone who may record gate money; the door may still record a sale or a check.
  */

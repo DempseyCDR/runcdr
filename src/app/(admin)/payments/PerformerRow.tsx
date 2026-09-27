@@ -20,6 +20,7 @@ export default function PerformerRow({
   onDonate,
   onRefused,
   paidActions,
+  onEditPerformer,
 }: {
   booking: Booking;
   eventId: string;
@@ -31,6 +32,8 @@ export default function PerformerRow({
   onRefused?: RefusalHandler;
   /** The paid row's actions (edit, void, delete), supplied by the page. */
   paidActions?: (payment: Payment) => React.ReactNode;
+  /** Feature 087 (FR-030a): opens the performer editor. Absent without `performer.write`. */
+  onEditPerformer?: () => void;
 }) {
   const booked = booking.payCents / 100;
   const [open, setOpen] = useState(false);
@@ -48,6 +51,16 @@ export default function PerformerRow({
     <li aria-label={booking.performerName} className={styles.row}>
       <div className={styles.rowHead}>
         <span className={styles.name}>{booking.performerName}</span>
+        {onEditPerformer && (
+          <button
+            type="button"
+            className={styles.quietButton}
+            aria-label={`Edit ${booking.performerName}`}
+            onClick={onEditPerformer}
+          >
+            Edit
+          </button>
+        )}
         <span className={styles.meta}>
           {role} ·{" "}
           <span>

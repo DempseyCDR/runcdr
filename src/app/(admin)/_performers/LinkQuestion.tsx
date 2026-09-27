@@ -8,6 +8,10 @@ type Suggestion = { id: string; displayName: string; similarity?: number };
 type Props = {
   performerId: string;
   displayName: string;
+  /** Feature 087 (FR-027, B58): the performer IS linked, but to a contact archived or merged away. */
+  retired?: "archived" | "merged" | null;
+  /** The retired contact's name, so the Booker can see which record the link points at. */
+  contactName?: string | null;
   archived: boolean;
   /** Called once the performer has a contact — with that contact, so the form can offer its spelling. */
   onLinked: (contact: Suggestion) => void;
@@ -29,6 +33,8 @@ type Props = {
 export default function LinkQuestion({
   performerId,
   displayName,
+  retired = null,
+  contactName = null,
   archived,
   onLinked,
   onArchived,
@@ -37,6 +43,24 @@ export default function LinkQuestion({
   const [nearMatches, setNearMatches] = useState<Suggestion[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Feature 087 walk-through: a search of the whole directory, for when the suggestions miss the person.
+  const [findQ, setFindQ] = useState("");
+  const [found, setFound] = useState<Suggestion[]>([]);
+
+  useEffect(() => {
+    const needle = findQ.trim();
+    if (needle.length < 2) return setFound([]);
+    let cancelled = false;
+    void apiFetch(`/api/contacts?q=${encodeURIComponent(needle)}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (!cancelled) setFound(d.items ?? []);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [findQ]);
 
   useEffect(() => {
     void apiFetch(`/api/performers/${performerId}/link-suggestions`)
@@ -92,10 +116,19 @@ export default function LinkQuestion({
 
   return (
     <div>
-      <p>
-        <strong>{displayName}</strong> has no contact. Settle that before editing: link one, create
-        one, or archive the performer.
-      </p>
+      {retired ? (
+        <p>
+          <strong>{displayName}</strong> is linked to a contact that has been{" "}
+          {retired === "merged" ? "merged into another" : "archived"}
+          {contactName ? ` (${contactName})` : ""}, so it no longer reaches them. Point it at the
+          right one before editing: link one, create one, or archive the performer.
+        </p>
+      ) : (
+        <p>
+          <strong>{displayName}</strong> has no contact. Settle that before editing: link one,
+          create one, or archive the performer.
+        </p>
+      )}
 
       {suggestions.length > 0 && (
         <ul>
@@ -109,6 +142,29 @@ export default function LinkQuestion({
           ))}
         </ul>
       )}
+
+      {/* When the suggestions miss — a married name, a stage name — any contact can be found and linked. */}
+      <div>
+        <input
+          type="search"
+          aria-label="Find a contact"
+          placeholder="Not listed? Find a contact…"
+          value={findQ}
+          onChange={(e) => setFindQ(e.target.value)}
+        />
+        {found.length > 0 && (
+          <ul>
+            {found.map((c) => (
+              <li key={c.id}>
+                {c.displayName}{" "}
+                <button type="button" disabled={busy} onClick={() => void link(c)}>
+                  Link {c.displayName}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       {nearMatches ? (
         <div role="alert">

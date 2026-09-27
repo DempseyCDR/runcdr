@@ -16,6 +16,9 @@ export const GET = withAuth({ requires: "base" }, async (_req, ctx) => {
     performerPaymentWrite: actorCan(ctx.actor, "performer_payment.write"),
     // Feature 082 (FR-027): the gate page offers the money, its Save and "deposit separately" only to
     // someone who may record gate money; the door (attendance) may still record a sale or a check.
+    // Feature 087 (FR-030b): the performer editor, hosted by the hub and the payments page, is offered
+    // editable only to a holder. Moving the editor between pages widened nothing.
+    performerWrite: actorCan(ctx.actor, "performer.write"),
     gateWrite: actorCan(ctx.actor, "gate.write"),
     attendanceWrite: actorCan(ctx.actor, "attendance.write"),
     eventWrite: actorCan(ctx.actor, "event.write"),

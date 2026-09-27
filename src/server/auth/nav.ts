@@ -25,10 +25,9 @@ export const NAV: { href: string; label: string; capability: Capability | null }
   { href: "/gate", label: "Gate money", capability: "gate.write" },
   { href: "/payments", label: "Payments", capability: "performer_payment.write" }, // FS/Treasurer (fixes D1)
   { href: "/events", label: "Events", capability: "event.public.write" }, // Booker + Webmaster
-  { href: "/bookings", label: "Bookings", capability: "booking.write" },
-  { href: "/bookings-report", label: "Booking report", capability: "booking.write" }, // Booker report (020)
-  { href: "/manage/performers", label: "Performers", capability: "performer.write" },
-  { href: "/bands", label: "Bands", capability: "performer.write" },
+  // Feature 087: the Booker's hub. It absorbed the bookings report, performers and bands — four entries
+  // became one. The FS and Treasurer edit performers from Payments now (FR-030a).
+  { href: "/bookings", label: "Booking Central", capability: "booking.write" },
   { href: "/venues", label: "Venues", capability: "venue.write" },
   { href: "/rate-parameters", label: "Rate parameters", capability: "parameter.write" },
   { href: "/admission-pricing", label: "Admission pricing", capability: "parameter.write" }, // feature 054 (P7-R10)

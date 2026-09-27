@@ -17,6 +17,8 @@ export type Performer = {
   links: PromoLink[];
   contactId: string | null;
   contactName?: string | null;
+  /** Feature 087 (FR-027): the linked contact was archived or merged away — as unsettled as none at all. */
+  contactRetired?: "archived" | "merged" | null;
   archivedAt: string | null;
 };
 
@@ -64,6 +66,9 @@ const draftOf = (p?: Performer): Draft => ({
   links: p?.links ?? [],
 });
 
+/** What creating sends for the NEW contact — dropped when linking an existing one instead. */
+const CONTACT_FIELDS = new Set(["firstName", "lastName", "displayNameOverride", "email", "phone"]);
+
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 /**
@@ -99,9 +104,12 @@ export default function PerformerForm({
   });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // Feature 087 walk-through: the contacts this new performer may already be — asked before creating.
+  const [candidates, setCandidates] = useState<{ id: string; displayName: string }[] | null>(null);
   // FR-021/FR-024: an existing performer with no contact settles that before the rest of the form opens.
   const [linked, setLinked] = useState<{ id: string; displayName: string } | null>(null);
-  const unsettled = !!performer && !performer.contactId && !linked;
+  // Feature 087 (FR-027, B58): a link to a retired contact reaches nobody, so it is settled the same way.
+  const unsettled = !!performer && (!performer.contactId || !!performer.contactRetired) && !linked;
 
   const set = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }));
 
@@ -166,14 +174,46 @@ export default function PerformerForm({
     return changed;
   }
 
-  async function save() {
+  /**
+   * Feature 087 walk-through (Oliver Scanlon): look before creating a contact. Creating a performer makes a
+   * contact for them, so a person already in the directory got a SECOND record — and giving their email
+   * was refused, because the address was already theirs. Search by the name and by any email typed; a
+   * match is offered to link instead, as the unlinked-performer question does (084 FR-026).
+   */
+  async function existingContacts(): Promise<{ id: string; displayName: string }[]> {
+    const name = [fresh.firstName, fresh.lastName]
+      .map((x) => x.trim())
+      .filter(Boolean)
+      .join(" ");
+    const queries = [name, fresh.email.trim()].filter(Boolean);
+    const found = new Map<string, { id: string; displayName: string }>();
+    for (const q of queries) {
+      const res = await apiFetch(`/api/contacts?q=${encodeURIComponent(q)}`).catch(() => null);
+      const items: { id: string; displayName: string }[] = res?.ok
+        ? ((await res.json()).items ?? [])
+        : [];
+      for (const c of items) found.set(c.id, { id: c.id, displayName: c.displayName });
+    }
+    return [...found.values()];
+  }
+
+  async function save(opts: { contactId?: string; skipLookup?: boolean } = {}) {
     setError(null);
     if (!performer && !fresh.firstName.trim()) return setError("A performer needs a first name.");
     if (performer && !draft.displayName.trim()) {
       return setError("A performer needs a display name.");
     }
-    const changed = body();
+    if (!performer && !opts.contactId && !opts.skipLookup) {
+      const matches = await existingContacts();
+      if (matches.length > 0) return setCandidates(matches);
+    }
+    let changed = body();
     if (performer && Object.keys(changed).length === 0) return onClose();
+    if (opts.contactId) {
+      // Linking: the contact already holds the name, email and telephone — send only the performer fields.
+      const performerFields = Object.entries(changed).filter(([k]) => !CONTACT_FIELDS.has(k));
+      changed = { ...Object.fromEntries(performerFields), contactId: opts.contactId };
+    }
 
     setSaving(true);
     const res = await apiFetch(performer ? `/api/performers/${performer.id}` : "/api/performers", {
@@ -194,6 +234,8 @@ export default function PerformerForm({
       <LinkQuestion
         performerId={performer!.id}
         displayName={performer!.displayName}
+        retired={performer!.contactId ? (performer!.contactRetired ?? null) : null}
+        contactName={performer!.contactName ?? null}
         archived={performer!.archivedAt !== null}
         onLinked={(contact) => setLinked(contact)}
         onArchived={onSaved}
@@ -394,6 +436,36 @@ export default function PerformerForm({
           archived={performer.archivedAt !== null}
           onChanged={onSaved}
         />
+      )}
+
+      {candidates && (
+        <div role="alert">
+          <p>
+            {candidates.length === 1 ? "This person may be" : "This person may be one of these,"}{" "}
+            already in the directory. Use them, and no second record is made — their email and
+            telephone stay as the contact has them.
+          </p>
+          <ul>
+            {candidates.map((c) => (
+              <li key={c.id}>
+                {c.displayName}{" "}
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => void save({ contactId: c.id })}
+                >
+                  Use {c.displayName}
+                </button>
+              </li>
+            ))}
+          </ul>
+          <button type="button" disabled={saving} onClick={() => void save({ skipLookup: true })}>
+            No — create a new contact
+          </button>{" "}
+          <button type="button" onClick={() => setCandidates(null)}>
+            Back
+          </button>
+        </div>
       )}
 
       {error && <p role="alert">{error}</p>}

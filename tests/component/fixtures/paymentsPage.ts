@@ -75,6 +75,8 @@ export type StubOpts = {
   payments?: unknown[];
   list?: Record<string, unknown>;
   canWrite?: boolean;
+  /** Feature 087 (FR-030a): whether the viewer may edit performers — the FS and Treasurer may. */
+  performerWrite?: boolean;
   /** Replies to writes, by "METHOD path-suffix"; a function may vary per call. */
   writes?: Record<string, Reply | ((body: unknown, n: number) => Reply)>;
   performers?: { id: string; displayName: string; bookedAs?: string | null }[];
@@ -117,7 +119,10 @@ export function stubPayments(opts: StubOpts = {}): Call[] {
       }
 
       if (u.startsWith("/api/me/capabilities"))
-        return json({ performerPaymentWrite: opts.canWrite ?? true });
+        return json({
+          performerPaymentWrite: opts.canWrite ?? true,
+          performerWrite: opts.performerWrite ?? false,
+        });
       if (u.startsWith("/api/series")) return json({ items: SERIES });
       if (u.endsWith("/api/events/e1/bookings"))
         return json({ bookings: opts.bookings ?? [], performerTotal: 0 });
@@ -134,6 +139,26 @@ export function stubPayments(opts: StubOpts = {}): Call[] {
         });
       if (u.endsWith("/api/events/e1/roles")) return json({ roles: opts.roles ?? [] });
       if (u.includes("/unpaid-bookings")) return json({ bookings: opts.unpaid ?? [] });
+      // Feature 087: one performer's whole record, as the performer editor opens on it.
+      const one = /^\/api\/performers\/([^/?]+)$/.exec(u);
+      if (one) {
+        const b = (
+          opts.bookings as { performerId: string; performerName: string }[] | undefined
+        )?.find((x) => x.performerId === one[1]);
+        return json({
+          id: one[1],
+          displayName: b?.performerName ?? "Someone",
+          bio: null,
+          photoUrl: null,
+          isPublic: false,
+          isCaller: false,
+          styles: [],
+          links: [],
+          contactId: "c1",
+          contactName: b?.performerName ?? "Someone",
+          archivedAt: null,
+        });
+      }
       if (u.startsWith("/api/performers?")) {
         const q = (new URL(u, "http://x").searchParams.get("q") ?? "").toLowerCase();
         return json({

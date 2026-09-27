@@ -105,6 +105,8 @@ export async function updateEventDetails(
     label?: string | null;
     startTime?: string | null;
     description?: string | null;
+    /** Feature 087 (FR-014): the Booker's private note. */
+    note?: string | null;
     eventDate?: string;
     status?: EventStatus;
     advertisedPriceCents?: number | null;
@@ -118,6 +120,7 @@ export async function updateEventDetails(
       ...(input.label !== undefined ? { label: input.label } : {}),
       ...(input.startTime !== undefined ? { startTime: input.startTime } : {}),
       ...(input.description !== undefined ? { description: input.description } : {}),
+      ...(input.note !== undefined ? { note: input.note } : {}),
       ...(input.eventDate !== undefined ? { eventDate: input.eventDate } : {}),
       ...(input.status !== undefined ? { status: input.status } : {}),
       ...(input.advertisedPriceCents !== undefined

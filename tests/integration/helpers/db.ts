@@ -20,7 +20,7 @@ export async function resetDb(): Promise<void> {
   // series are config (seeded once); ensure they exist for tests
   await sql`INSERT INTO series (key, name, has_sound_tech) VALUES
     ('tnc','Thursday Night Contra',true),
-    ('ecd','Sunday English Country Dance',true),
+    ('ecd','Sunday English Country Dance',false),
     ('community_dance','Community Dance',false),
     ('general','General / Joint Events',true)
     ON CONFLICT (key) DO NOTHING`;

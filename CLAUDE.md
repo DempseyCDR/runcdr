@@ -1,7 +1,7 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at specs/086-access-signposting/plan.md
+at specs/087-booking-central/plan.md
 <!-- SPECKIT END -->
 
 ## Development conventions

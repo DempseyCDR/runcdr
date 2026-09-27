@@ -1,0 +1,265 @@
+/* Feature 087 — Booking Central. The Booker's spreadsheet, made live.
+   Every colour here carries an alternative that is not colour: a gap is a dash, a cancellation is a word,
+   a state is a letter. Colour is emphasis, never the only signal (FR-005). */
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-block-end: var(--space-4);
+}
+
+.series {
+  font-family: var(--font-heading);
+  font-size: var(--fs-h2);
+  margin: 0;
+}
+
+.horizon {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.table {
+  inline-size: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-body);
+}
+
+.table th {
+  text-align: start;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: var(--space-2);
+  border-block-end: 2px solid var(--hairline);
+}
+
+.table td {
+  padding: var(--space-2);
+  vertical-align: top;
+}
+
+/* A dance and its note are one visual unit: the rule falls after the note, not between them. */
+.dance td {
+  border-block-start: 1px solid var(--hairline);
+}
+
+.date {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* An orange pastel for a cancelled dance — with the word "Cancelled" beside it, always (FR-005). */
+.cancelled td {
+  background: #fde6d2;
+}
+
+.cancelledWord {
+  display: inline-block;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: #8a4b12;
+  margin-inline-start: var(--space-2);
+}
+
+.people {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  align-items: center;
+}
+
+.person {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* The one-letter state. A letter first, so it reads without colour. */
+.state {
+  display: inline-grid;
+  place-items: center;
+  min-inline-size: 1.5em;
+  block-size: 1.5em;
+  padding-inline: 0.2em;
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  background: var(--ground);
+}
+
+.state_confirmed {
+  border-color: var(--band);
+  color: var(--band);
+}
+
+.state_declined {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+/* The gap: a rounded square with a dash, in an alert red (Rich, 2026-09-23). It is as visible as a filled
+   slot on purpose — the empty slots are what the Booker is scanning for (FR-004). */
+.gap {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 1.75em;
+  block-size: 1.75em;
+  border: 2px solid #c0392b;
+  border-radius: 6px;
+  color: #c0392b;
+  background: #fdecea;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.note td {
+  padding-block-start: 0;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  white-space: pre-wrap;
+}
+
+.more {
+  margin-block-start: var(--space-4);
+}
+
+/* A name that opens its record. Looks like text, behaves like a link — the row stays a spreadsheet. */
+.link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.link:hover {
+  color: var(--link-hover);
+}
+
+button.state,
+button.gap {
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+/* The dialogs the row opens: a panel over the page, not a navigation away from it. */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 0.35);
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  z-index: 10;
+}
+
+.panel {
+  background: var(--surface);
+  border-radius: 8px;
+  padding: var(--space-5);
+  inline-size: min(560px, 100%);
+  max-block-size: 90vh;
+  overflow: auto;
+}
+
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-block: var(--space-3);
+}
+
+/* The search above the table: one box for performers and bands (FR-017). */
+.search {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin-block-end: var(--space-4);
+  position: relative;
+}
+
+.search input[type="search"] {
+  min-inline-size: 18rem;
+  padding: var(--space-2);
+}
+
+.results {
+  flex-basis: 100%;
+  list-style: none;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.results li {
+  padding-block: var(--space-1);
+}
+
+/* Performer or band — said in words beside every result, never left to be guessed (FR-017). */
+.kind {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* A band's roster (US3): its members, and only its members. */
+.roster {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.roster fieldset {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.member {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+
+.inline {
+  margin-inline-end: var(--space-2);
+}
+
+/* FR-023: a band with no lead is said plainly, not left to be noticed. */
+.noLead {
+  border-inline-start: 3px solid #c0392b;
+  padding-inline-start: var(--space-3);
+}
+
+/* 087 walk-through: add another to a filled slot. Quiet beside the red gap mark — an offer, not a warning. */
+.add {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 1.5em;
+  block-size: 1.5em;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* "<band> featuring <musician>" — the joining words, quieter than the names they join. */
+.featuring {
+  color: var(--text-muted);
+  font-style: italic;
+}

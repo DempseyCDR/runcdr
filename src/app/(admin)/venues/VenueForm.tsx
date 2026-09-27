@@ -71,6 +71,24 @@ export default function VenueForm({ venue, readOnly = false, onSaved, onClose }:
   const [saving, setSaving] = useState(false);
   // Feature 018 (B22): the landlord is a contact — the party the Booker negotiates rent with.
   const [landlordName, setLandlordName] = useState(venue?.landlordName ?? null);
+  // Feature 087: the saved landlord's address, for a link to write to them. Asked only while the landlord
+  // shown IS the saved one — a landlord just chosen is not saved yet, so the venue cannot answer for them.
+  const [landlordEmail, setLandlordEmail] = useState<string | null>(null);
+  const savedLandlord =
+    !!venue?.id && !!venue.landlordContactId && draft.landlordContactId === venue.landlordContactId;
+  useEffect(() => {
+    if (!savedLandlord) return setLandlordEmail(null);
+    let cancelled = false;
+    void apiFetch(`/api/venues/${venue!.id}/landlord-mailto`)
+      .then((r) => (r.ok ? r.json() : { email: null }))
+      .then((d) => {
+        if (!cancelled) setLandlordEmail(d.email ?? null);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [savedLandlord, venue]);
   const [q, setQ] = useState("");
   const [results, setResults] = useState<Contact[]>([]);
 
@@ -190,7 +208,16 @@ export default function VenueForm({ venue, readOnly = false, onSaved, onClose }:
       </label>
       <div>
         <span>
-          Landlord: <strong>{landlordName ?? (draft.landlordContactId ? "set" : "none")}</strong>
+          Landlord:{" "}
+          <strong>
+            {!draft.landlordContactId ? (
+              "none"
+            ) : landlordEmail ? (
+              <a href={`mailto:${landlordEmail}`}>{landlordName ?? landlordEmail}</a>
+            ) : (
+              (landlordName ?? "a contact")
+            )}
+          </strong>
         </span>
         {!readOnly && (
           <>

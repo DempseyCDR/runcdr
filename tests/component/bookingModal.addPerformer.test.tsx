@@ -44,8 +44,8 @@ describe("BookingModal add-performer — link existing contact", () => {
       />,
     );
 
-    await user.type(screen.getByLabelText(/search performer/i), "Ada");
-    await user.click(await screen.findByRole("button", { name: /Add performer/i }));
+    await user.type(screen.getByRole("searchbox", { name: /find a performer/i }), "Ada");
+    await user.click(await screen.findByRole("button", { name: /New performer/i }));
     await user.click(await screen.findByRole("button", { name: /Link Ada Lovelace/i }));
 
     const post = calls.find((c) => c.init?.method === "POST" && c.url === "/api/performers")!;

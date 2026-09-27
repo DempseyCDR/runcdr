@@ -14,18 +14,14 @@ describe("bookings report — booker view", () => {
   beforeEach(resetDb);
   afterAll(closeDb);
 
-  it("sorts by date desc (default, feature 029) and asc", async () => {
+  // Feature 087 (FR-001b): newest first, always. The ascending toggle is RETIRED with the other filters —
+  // the table reads like the Booker's spreadsheet, and that has one order.
+  it("is always newest first", async () => {
     await makeEvent({ seriesKey: "tnc", eventDate: "2026-06-04" });
     await makeEvent({ seriesKey: "tnc", eventDate: "2026-06-18" });
 
-    // Feature 029 (P5-R2): the no-`sort` default is now descending (newest-relevant-first).
-    const def = await assembleBookingsReport(db, {});
-    expect(def.rows.map((r) => r.date)).toEqual(["2026-06-18", "2026-06-04"]);
-    const desc = await assembleBookingsReport(db, { sort: "desc" });
-    expect(desc.rows.map((r) => r.date)).toEqual(["2026-06-18", "2026-06-04"]);
-    // Explicit ascending still works.
-    const asc = await assembleBookingsReport(db, { sort: "asc" });
-    expect(asc.rows.map((r) => r.date)).toEqual(["2026-06-04", "2026-06-18"]);
+    const { rows } = await assembleBookingsReport(db, {});
+    expect(rows.map((r) => r.date)).toEqual(["2026-06-18", "2026-06-04"]);
   });
 
   it("shows the venue short name, falling back to derived initials when null", async () => {
@@ -53,16 +49,18 @@ describe("bookings report — booker view", () => {
     expect(byId.get(cd.id)?.hasSoundTech).toBe(false);
   });
 
-  it("still filters by performer after the sort/venue changes (FR-006 regression)", async () => {
+  // Feature 087: the performer FILTER is retired (FR-001b); a performer's own history answers that (US3).
+  // What this test really protected survives: every booking line carries its id, because clicking a name
+  // on the hub opens THAT booking (FR-009).
+  it("carries each booking's id, so the hub can open that booking", async () => {
     const p = await makePerformer("Bob Fabinski");
     const withP = await makeEvent({ seriesKey: "tnc", eventDate: "2026-06-04" });
-    const withoutP = await makeEvent({ seriesKey: "tnc", eventDate: "2026-06-18" });
+    await makeEvent({ seriesKey: "tnc", eventDate: "2026-06-18" });
     await createBooking(db, withP.id, { performerId: p.id, performerType: "musician", pay: 100 });
 
-    const { rows } = await assembleBookingsReport(db, { musician: p.id, sort: "desc" });
-    expect(rows.map((r) => r.eventId)).toEqual([withP.id]);
-    expect(rows.some((r) => r.eventId === withoutP.id)).toBe(false);
-    // The booking line carries its id so the report UI can open the booking modal (US2).
-    expect(rows[0]?.bookings[0]?.bookingId).toBeDefined();
+    const { rows } = await assembleBookingsReport(db, {});
+    const line = rows.find((r) => r.eventId === withP.id)?.bookings[0];
+    expect(line?.performer).toBe("Bob Fabinski");
+    expect(line?.bookingId).toBeDefined();
   });
 });

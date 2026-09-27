@@ -77,6 +77,36 @@ describe("US3: field-level authority", () => {
       expect(res.status).toBe(200);
     });
 
+    /**
+     * Feature 087 (FR-014, FR-016): the Booker's private note on a dance is STRUCTURE, not public display.
+     * The events page never shows it — but a Webmaster, who holds only `event.public.write`, must also be
+     * refused it straight at the route. Hiding a field in a form has never been a control.
+     */
+    it("a Webmaster writing the Booker's NOTE is refused (087)", async () => {
+      const event = await makeEvent({ seriesKey: "ecd" });
+      const { token } = await makeActor({
+        email: "wm.note@cdrochester.org",
+        grants: [{ role: "webmaster" }],
+      });
+      const res = await patchEvent(token, event.id, { note: "not yours to write" });
+      expect(res.status).toBe(403);
+      expect((await res.json()).error.code).toBe("FIELD_NOT_PERMITTED");
+      const [row] = await db.select().from(events).where(eq(events.id, event.id));
+      expect(row?.note).toBeNull();
+    });
+
+    it("a Booker-of-ecd writes the note on an ecd dance — succeeds (087)", async () => {
+      const event = await makeEvent({ seriesKey: "ecd" });
+      const { token } = await makeActor({
+        email: "bk.note@cdrochester.org",
+        grants: [{ role: "booker", seriesId: await seriesId("ecd") }],
+      });
+      const res = await patchEvent(token, event.id, { note: "ask Dave first" });
+      expect(res.status).toBe(200);
+      const [row] = await db.select().from(events).where(eq(events.id, event.id));
+      expect(row?.note).toBe("ask Dave first");
+    });
+
     it("FR-022: a MIXED submission (permitted + forbidden) is refused ENTIRELY — no partial write", async () => {
       const event = await makeEvent({ seriesKey: "ecd" });
       const venueId = await aVenue();

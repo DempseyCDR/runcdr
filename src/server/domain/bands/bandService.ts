@@ -128,6 +128,28 @@ export async function listBands(
   return summaries;
 }
 
+/** A band a performer plays in, as their card lists it (feature 087 FR-020). */
+export type PerformerBand = { id: string; name: string; isLead: boolean; archived: boolean };
+
+/**
+ * Feature 087 US3 (FR-020): the bands a performer plays in, by name. A report of the person, so archived
+ * bands are listed and marked rather than hidden — they are still bands this person played in.
+ */
+export async function bandsOf(db: Db, performerId: string): Promise<PerformerBand[]> {
+  const rows = await db
+    .select({
+      id: bands.id,
+      name: bands.name,
+      isLead: bandMembers.isLead,
+      archivedAt: bands.archivedAt,
+    })
+    .from(bandMembers)
+    .innerJoin(bands, eq(bands.id, bandMembers.bandId))
+    .where(eq(bandMembers.performerId, performerId))
+    .orderBy(bands.name);
+  return rows.map(({ archivedAt, ...b }) => ({ ...b, archived: archivedAt !== null }));
+}
+
 export async function getBand(db: Db, id: string): Promise<BandWithRoster> {
   const band = await db.query.bands.findFirst({ where: eq(bands.id, id) });
   if (!band) throw errors.bandNotFound();

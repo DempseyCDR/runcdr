@@ -28,3 +28,29 @@
   min-block-size: var(--space-7);
   min-inline-size: var(--space-7);
 }
+
+/* Feature 087 (FR-032, FR-033): the administrative identity — defined ONCE, adopted per page.
+   A visible cue that this is volunteer work, not public content: the public site's band colour as a rule
+   across the top, and a quieter working surface than the public cream. Built only from globals.css tokens,
+   so it stays a sibling of the public look rather than a second vocabulary. */
+.identity {
+  border-block-start: var(--space-1) solid var(--band);
+  background: var(--surface);
+}
+
+.identity .title::before {
+  content: "Volunteer";
+  display: block;
+  font-family: var(--font-body);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--band);
+  margin-block-end: var(--space-1);
+}
+
+/* For pages whose job is a table rather than prose. */
+.wide {
+  max-width: 1200px;
+}

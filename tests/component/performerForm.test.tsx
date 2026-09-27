@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import PerformerForm from "@/app/(admin)/manage/performers/PerformerForm";
+import PerformerForm from "@/app/(admin)/_performers/PerformerForm";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -125,5 +125,27 @@ describe("PerformerForm", () => {
     render(<PerformerForm performer={PAT} readOnly onSaved={() => {}} onClose={() => {}} />);
     expect(screen.getByLabelText("Display name")).toBeDisabled();
     expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+  });
+
+  // Feature 026 US2 (FR-004), carried here from the performers page's own test when 087 deleted that page:
+  // creating posts the contact's structured name — never a single `displayName`.
+  it("creates with firstName/lastName/displayNameOverride, not a single displayName", async () => {
+    const calls = stub();
+    render(<PerformerForm onSaved={() => {}} onClose={() => {}} />);
+
+    await userEvent.type(screen.getByLabelText(/first name/i), "Charles");
+    await userEvent.type(screen.getByLabelText(/last name/i), "Abell");
+    await userEvent.type(screen.getByLabelText(/display name/i), "Chuck Abell");
+    await userEvent.click(screen.getByRole("button", { name: /^create$/i }));
+
+    await waitFor(() => expect(writes(calls)).toHaveLength(1));
+    const [post] = writes(calls);
+    expect(post).toMatchObject({ url: "/api/performers", method: "POST" });
+    expect(post!.body).toMatchObject({
+      firstName: "Charles",
+      lastName: "Abell",
+      displayNameOverride: "Chuck Abell",
+    });
+    expect(post!.body?.displayName).toBeUndefined();
   });
 });

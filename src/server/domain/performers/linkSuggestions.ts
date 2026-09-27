@@ -23,6 +23,12 @@ const THRESHOLD = 0.4;
  * Trigram similarity is what the duplicate queue already uses to judge whether two names are one person;
  * this asks the same question of a performer and a contact.
  *
+ * Feature 087 walk-through: a contact is compared on BOTH its names — the legal one (`dedup_normalized`,
+ * first + last) and the one they go by (`name_normalized`, which follows a display-name override). The
+ * live case: the performer "Catherine Sloboda" is the contact whose legal name is Catherine McCallen and
+ * who goes by Catherine Sloboda. On the legal name alone she scored below the threshold and "Catherine
+ * Hughes" was offered instead, on the first name.
+ *
  * A merged or archived contact is never offered — the rule `matchPerformers` already follows, for the
  * same reason: a retired shell keeps its survivor's `dedup_normalized`, so offering it would suggest the
  * wrong row for the right person.
@@ -41,11 +47,13 @@ export async function linkSuggestions(
   if (!needle) return [];
 
   const rows = await db.execute<{ id: string; display_name: string; sim: number }>(sql`
-    SELECT c.id, c.display_name, similarity(c.dedup_normalized, ${needle}) AS sim
+    SELECT c.id, c.display_name,
+      greatest(similarity(c.dedup_normalized, ${needle}), similarity(c.name_normalized, ${needle})) AS sim
     FROM contacts c
     WHERE c.merged_into_id IS NULL
       AND c.archived_at IS NULL
-      AND similarity(c.dedup_normalized, ${needle}) >= ${THRESHOLD}
+      AND greatest(similarity(c.dedup_normalized, ${needle}), similarity(c.name_normalized, ${needle}))
+        >= ${THRESHOLD}
     ORDER BY sim DESC, c.display_name ASC
     LIMIT ${limit}`);
 

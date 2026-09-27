@@ -1,9 +1,10 @@
 import { and, asc, count, eq, gte, isNull } from "drizzle-orm";
 import type { Db } from "@/server/db/client";
-import { events, venues } from "@/server/db/schema";
+import { contactEmails, contacts, events, venues } from "@/server/db/schema";
 import type { VenueRow } from "@/server/db/schema";
 import { errors } from "@/server/lib/apiError";
 import { writeAudit } from "@/server/lib/audit";
+import { mailtoEmailFor } from "@/server/domain/contacts/mailtoEmail";
 import type { VenueCreateInput, VenuePatchInput } from "@/server/validation/venues";
 
 /**
@@ -49,13 +50,22 @@ export async function createVenue(
   return row;
 }
 
+/**
+ * A venue as it is read, with its landlord's NAME (feature 087). A display name, readable by any volunteer
+ * as a performer's contact name is; the landlord's address stays behind `contact.pii.read`
+ * (`getLandlordMailtoEmail`). Without it the venue form could only say the landlord was "set".
+ */
+export type VenueView = VenueRow & { landlordName: string | null };
+
 /** Feature 084 (FR-010): the venues on OFFER — an archived hall is not one of them. */
-export async function listVenues(db: Db, includeArchived = false): Promise<VenueRow[]> {
-  return db
-    .select()
+export async function listVenues(db: Db, includeArchived = false): Promise<VenueView[]> {
+  const rows = await db
+    .select({ venue: venues, landlordName: contacts.displayName })
     .from(venues)
+    .leftJoin(contacts, eq(contacts.id, venues.landlordContactId))
     .where(includeArchived ? undefined : isNull(venues.archivedAt))
     .orderBy(venues.name);
+  return rows.map((r) => ({ ...r.venue, landlordName: r.landlordName }));
 }
 
 /** Today, as the database sees an event date. */
@@ -102,10 +112,30 @@ export async function restoreVenue(db: Db, id: string, actor: string | null = nu
   writeAudit({ kind: "venue.restored", actor, details: { venueId: id } });
 }
 
-export async function getVenue(db: Db, id: string): Promise<VenueRow> {
-  const row = await db.query.venues.findFirst({ where: eq(venues.id, id) });
+export async function getVenue(db: Db, id: string): Promise<VenueView> {
+  const [row] = await db
+    .select({ venue: venues, landlordName: contacts.displayName })
+    .from(venues)
+    .leftJoin(contacts, eq(contacts.id, venues.landlordContactId))
+    .where(eq(venues.id, id));
   if (!row) throw errors.venueNotFound();
-  return row;
+  return { ...row.venue, landlordName: row.landlordName };
+}
+
+/**
+ * Feature 087: the address to email a venue's landlord at, or null — chosen as a performer's is
+ * (`mailtoEmailFor`). PII, so its route requires `contact.pii.read`.
+ */
+export async function getLandlordMailtoEmail(db: Db, venueId: string): Promise<string | null> {
+  const venue = await db.query.venues.findFirst({ where: eq(venues.id, venueId) });
+  if (!venue) throw errors.venueNotFound();
+  if (!venue.landlordContactId) return null;
+  const rows = await db.query.contactEmails.findMany({
+    where: eq(contactEmails.contactId, venue.landlordContactId),
+  });
+  return mailtoEmailFor(
+    rows.map((r) => ({ email: r.email, purposes: r.purposes, status: r.status })),
+  );
 }
 
 export async function patchVenue(

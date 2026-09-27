@@ -23,6 +23,10 @@ const EVENT_FIELDS = {
   eventDate: "event.write",
   status: "event.write",
   advertisedPriceCents: "event.public.write",
+  // Feature 087 (FR-014, FR-016): the Booker's private scheduling note is STRUCTURE, not public display —
+  // so the Webmaster, who holds only `event.public.write`, is refused it even straight at this route, not
+  // merely never shown it. Reading stays `base` (private to volunteers, never public).
+  note: "event.write",
 } as const;
 
 // Feature 020: the event modal fetches the event it edits. `base` — event structure is not PII, and the
@@ -58,6 +62,7 @@ export const PATCH = withAuth<{ id: string }>(
       input.label !== undefined ||
       input.startTime !== undefined ||
       input.description !== undefined ||
+      input.note !== undefined ||
       input.eventDate !== undefined ||
       input.status !== undefined ||
       input.advertisedPriceCents !== undefined
@@ -66,6 +71,7 @@ export const PATCH = withAuth<{ id: string }>(
         label: input.label,
         startTime: input.startTime,
         description: input.description,
+        note: input.note,
         eventDate: input.eventDate,
         status: input.status,
         advertisedPriceCents: input.advertisedPriceCents,
