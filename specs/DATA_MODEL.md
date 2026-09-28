@@ -376,7 +376,7 @@ A standing dance series (config; seeded).
 | Column | Type | Notes |
 |---|---|---|
 | id | uuid PK | |
-| key | text NOT NULL UNIQUE | e.g. `tnc`, `ecd`, `community_dance`, `general` |
+| key | text NOT NULL UNIQUE | `tnc`, `ecd`, `cdob` (Community Dance / Open Band — `community_dance` until 088), `general`; the code takes them from `SERIES_KEYS` |
 | name | text NOT NULL | |
 | has_sound_tech | boolean NOT NULL default true | false for Community Dance (blocks Sound Tech bookings) |
 | schedule_sentence | text NULL | feature 054: curated standing-schedule prose (no recurrence engine; carries the DST note) |
@@ -466,7 +466,7 @@ One per event; the money-capture header. **Exactly one per event** (unique `even
 | deposit_cents | integer NOT NULL default 0 | |
 | gift_card_redemption_count | integer NOT NULL default 0 | |
 | comp_count | integer NOT NULL default 0 | feature 014: people admitted free; subtracted from paying dancers |
-| open_band_count | integer NOT NULL default 0 | feature 017 (B36): open-band musicians comped (community_dance); kept separate from `comp_count` |
+| open_band_count | integer NOT NULL default 0 | feature 017 (B36): open-band musicians comped (the community dance, `cdob`); kept separate from `comp_count` |
 | created_at, updated_at | timestamptz | |
 
 - **Domain rules**: **admission is DERIVED, never stored**. **Deposit = gross cash − seed float − cash
@@ -516,7 +516,7 @@ Who was present (contact-tracing). **Purged after 90 days.**
 | event_id | uuid NOT NULL → events(id) ON DELETE CASCADE | |
 | contact_id | uuid NULL → contacts(id) ON DELETE SET NULL | null = unmatched walk-in placeholder |
 | children_count | integer NOT NULL default 0 | feature 017 (B35): children on this check-in (counted as paying) |
-| is_open_band | boolean NOT NULL default false | feature 017 (B36): open-band musician marker (community_dance) |
+| is_open_band | boolean NOT NULL default false | feature 017 (B36): open-band musician marker (the community dance, `cdob`) |
 | created_at | timestamptz | |
 
 - **Indexes**: `attendance_event` `(event_id)`, `attendance_created` `(created_at)`; partial unique

@@ -13,6 +13,7 @@ import { CATEGORY_LABEL } from "../gate/types";
 import styles from "./checkin.module.css";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { SERIES_KEYS } from "@/server/domain/series/seriesKeys";
 
 type SeriesRow = { id: string; key: string; name: string };
 /** A search result (contract §1). */
@@ -67,7 +68,7 @@ export default function CheckinPage() {
   const [showingMine, setShowingMine] = useState(false);
   const [recording, setRecording] = useState<{ editing?: SaleToEdit | CheckToEdit } | null>(null);
 
-  const communityDanceSeriesId = series.find((s) => s.key === "community_dance")?.id ?? null;
+  const communityDanceSeriesId = series.find((s) => s.key === SERIES_KEYS.cdob)?.id ?? null;
   const isCommunityDance = !!event && event.seriesId === communityDanceSeriesId;
 
   useEffect(() => {

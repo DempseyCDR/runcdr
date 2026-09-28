@@ -3,6 +3,7 @@ import { ensureSchema, resetDb, closeDb } from "./helpers/db";
 import { jsonReq, ctx } from "./helpers/http";
 import { makeEvent, makeDoorRecord } from "./helpers/factories";
 import { GET as REPORT } from "@/app/api/events/[id]/treasurer-report/route";
+import { SERIES_KEYS } from "@/server/domain/series/seriesKeys";
 
 // FR-004 — a TNC and a Community Dance on the same date are two evenings, and each reports its own money.
 // (Feature 085: this used to assert both carried the QuickBooks customer "Contra Gate". The customer went
@@ -22,7 +23,7 @@ describe("same-evening events", () => {
 
   it("reports two evenings on one date separately, each with its own receipts", async () => {
     const tnc = await makeEvent({ seriesKey: "tnc", eventDate: "2026-06-18" });
-    const cd = await makeEvent({ seriesKey: "community_dance", eventDate: "2026-06-18" });
+    const cd = await makeEvent({ seriesKey: SERIES_KEYS.cdob, eventDate: "2026-06-18" });
     await makeDoorRecord(tnc.id, [{ category: "merchandise", paymentMethod: "cash", amount: 20 }]);
     await makeDoorRecord(cd.id, [{ category: "donation", paymentMethod: "cash", amount: 5 }]);
 

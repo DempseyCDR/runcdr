@@ -11,6 +11,7 @@ import {
   moveAttendance,
 } from "@/server/domain/attendance/attendanceService";
 import { adjustDoorCount } from "@/server/domain/door/doorRecordService";
+import { SERIES_KEYS } from "@/server/domain/series/seriesKeys";
 
 // Feature 025 US1 (FR-001..FR-010): per-record roster corrections keep the denormalized head count (and the
 // door-record counts) exact. Delete / edit children / reassign / open-band toggle / comp-gift ±1 / move to a
@@ -78,7 +79,7 @@ describe("attendance corrections", () => {
   });
 
   it("toggles open-band, adjusting the door open_band_count and enforcing the community-dance rule", async () => {
-    const cd = await makeEvent({ seriesKey: "community_dance" });
+    const cd = await makeEvent({ seriesKey: SERIES_KEYS.cdob });
     const c = await contact("Ozzy");
     const row = await recordAttendance(db, cd.id, { contactId: c });
     expect((await doorCounts(cd.id)).openBand).toBe(0);
@@ -114,7 +115,7 @@ describe("attendance corrections", () => {
 
   it("moves a dancer to a same-group sibling, keeping both head counts exact", async () => {
     const group = await createEventGroup(db, { name: "Same-day double" });
-    const cd = await makeEvent({ seriesKey: "community_dance", groupId: group.id });
+    const cd = await makeEvent({ seriesKey: SERIES_KEYS.cdob, groupId: group.id });
     const contra = await makeEvent({ seriesKey: "tnc", groupId: group.id });
     const c = await contact("Mover");
     const row = await recordAttendance(db, cd.id, { contactId: c, childrenCount: 1 });
@@ -128,7 +129,7 @@ describe("attendance corrections", () => {
 
   it("refuses a move to a non-sibling event (L1) and to a target where the dancer is already present (G1)", async () => {
     const group = await createEventGroup(db, { name: "Grp" });
-    const a = await makeEvent({ seriesKey: "community_dance", groupId: group.id });
+    const a = await makeEvent({ seriesKey: SERIES_KEYS.cdob, groupId: group.id });
     const b = await makeEvent({ seriesKey: "tnc", groupId: group.id });
     const outsider = await makeEvent({ seriesKey: "ecd" }); // no group → not a sibling
     const c = await contact("Al");
@@ -143,7 +144,7 @@ describe("attendance corrections", () => {
 
   it("moving an open-band admission to a non-community-dance sibling clears the flag + decrements source open_band_count (G2)", async () => {
     const group = await createEventGroup(db, { name: "CD + Contra" });
-    const cd = await makeEvent({ seriesKey: "community_dance", groupId: group.id });
+    const cd = await makeEvent({ seriesKey: SERIES_KEYS.cdob, groupId: group.id });
     const contra = await makeEvent({ seriesKey: "tnc", groupId: group.id });
     const c = await contact("Fiddler");
     const row = await recordAttendance(db, cd.id, { contactId: c, isOpenBand: true });
@@ -157,7 +158,7 @@ describe("attendance corrections", () => {
 
   it("getGroupSiblings returns the other same-group events, empty when ungrouped", async () => {
     const group = await createEventGroup(db, { name: "Pair" });
-    const a = await makeEvent({ seriesKey: "community_dance", groupId: group.id });
+    const a = await makeEvent({ seriesKey: SERIES_KEYS.cdob, groupId: group.id });
     const b = await makeEvent({ seriesKey: "tnc", groupId: group.id });
     const lone = await makeEvent({ seriesKey: "ecd" });
 

@@ -1,6 +1,7 @@
 import { resolveDatabaseUrl } from "@/server/validation/env";
 import { runMigrations } from "@/server/db/migrate";
 import { db, sql } from "@/server/db/client";
+import { SERIES_KEYS } from "@/server/domain/series/seriesKeys";
 import { contactEmails, contacts, roleGrants, staffIdentities } from "@/server/db/schema";
 import { deriveContactNames } from "@/server/domain/contacts/normalize";
 import { createSession } from "@/server/auth/session";
@@ -17,12 +18,13 @@ export async function ensureSchema(): Promise<void> {
 /** Truncate all feature tables between tests (preserves club_settings seed). */
 export async function resetDb(): Promise<void> {
   await sql`TRUNCATE campaigns, announcements, officers, admission_prices, content_pages, role_grants, audit_events, staff_sessions, staff_identities, mailing_list_exports, series_parameters, series_parameter_audit, venue_rents, venue_rent_audit, misc_expenses, treasurer_report_audit, payment_bookings, performer_payments, paypal_notifications, membership_captures, band_members, bands, bookings, performers, door_record_audit, gate_sales, door_records, attendance, quarterly_attendance_counts, events, event_groups, venues, merge_audit, status_change_audit, membership_members, membership_accounts, contact_emails, contacts RESTART IDENTITY CASCADE`;
-  // series are config (seeded once); ensure they exist for tests
+  // series are config (seeded once); ensure they exist for tests. The keys come from SERIES_KEYS: the
+  // insert skips keys that exist, so a stale key here would ADD a fifth series (088 research R3).
   await sql`INSERT INTO series (key, name, has_sound_tech) VALUES
-    ('tnc','Thursday Night Contra',true),
-    ('ecd','Sunday English Country Dance',false),
-    ('community_dance','Community Dance',false),
-    ('general','General / Joint Events',true)
+    (${SERIES_KEYS.tnc},'Thursday Night Contra',true),
+    (${SERIES_KEYS.ecd},'Sunday English Country Dance',false),
+    (${SERIES_KEYS.cdob},'Community Dance',false),
+    (${SERIES_KEYS.general},'General / Joint Events',true)
     ON CONFLICT (key) DO NOTHING`;
 
   await seedTestStaff();

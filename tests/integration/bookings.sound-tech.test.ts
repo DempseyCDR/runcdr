@@ -3,6 +3,7 @@ import { ensureSchema, resetDb, closeDb } from "./helpers/db";
 import { jsonReq, ctx } from "./helpers/http";
 import { makeEvent, makePerformer } from "./helpers/factories";
 import { POST as BOOK } from "@/app/api/events/[id]/bookings/route";
+import { SERIES_KEYS } from "@/server/domain/series/seriesKeys";
 
 // FR-004
 describe("Sound Tech on Community Dance", () => {
@@ -10,8 +11,8 @@ describe("Sound Tech on Community Dance", () => {
   beforeEach(resetDb);
   afterAll(closeDb);
 
-  it("rejects a Sound Tech booking on a community_dance event", async () => {
-    const evt = await makeEvent({ seriesKey: "community_dance" });
+  it("rejects a Sound Tech booking on a community dance event", async () => {
+    const evt = await makeEvent({ seriesKey: SERIES_KEYS.cdob });
     const p = await makePerformer("Tech");
     const res = await BOOK(
       jsonReq("POST", `/api/events/${evt.id}/bookings`, {

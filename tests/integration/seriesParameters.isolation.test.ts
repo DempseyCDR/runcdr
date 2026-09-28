@@ -6,6 +6,7 @@ import {
   createRateParameter,
   resolveParameterCents,
 } from "@/server/domain/parameters/seriesParameterService";
+import { SERIES_KEYS } from "@/server/domain/series/seriesKeys";
 
 // FR-002, FR-003, SC-001
 describe("series-scoped rate isolation", () => {
@@ -30,7 +31,7 @@ describe("series-scoped rate isolation", () => {
     const tnc = await db.query.series.findFirst({ where: eq(series.key, "tnc") });
     const ecd = await db.query.series.findFirst({ where: eq(series.key, "ecd") });
     const communityDance = await db.query.series.findFirst({
-      where: eq(series.key, "community_dance"),
+      where: eq(series.key, SERIES_KEYS.cdob),
     });
 
     expect(

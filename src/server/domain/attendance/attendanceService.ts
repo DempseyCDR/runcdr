@@ -18,6 +18,7 @@ import { normalizePhone } from "@/server/domain/contacts/phone";
 import { ensureDoorRecord } from "@/server/domain/door/doorRecordService";
 import { linkMessageRecipientIn } from "@/server/domain/contacts/referenceService";
 import type { AttendanceInput, AttendancePatchInput } from "@/server/validation/attendance";
+import { SERIES_KEYS } from "@/server/domain/series/seriesKeys";
 
 const UNIQUE_VIOLATION = "23505";
 
@@ -49,9 +50,9 @@ async function recordAttendanceIn(
   // B36: an open-band musician is flagged manually at check-in (never sourced from bookings).
   const isOpenBand = "isOpenBand" in input ? (input.isOpenBand ?? false) : false;
   if (isOpenBand) {
-    // FR-022: the open-band rule is the community_dance series' own; reject it elsewhere.
+    // FR-022: the open-band rule is the community dance series' own (cdob); reject it elsewhere.
     const evtSeries = await db.query.series.findFirst({ where: eq(series.id, event.seriesId) });
-    if (evtSeries?.key !== "community_dance") {
+    if (evtSeries?.key !== SERIES_KEYS.cdob) {
       throw errors.validation("Open-band musicians can only be checked in at a community dance.");
     }
   }
@@ -345,7 +346,7 @@ export async function patchAttendance(
       const evtSeries = event
         ? await db.query.series.findFirst({ where: eq(series.id, event.seriesId) })
         : null;
-      if (evtSeries?.key !== "community_dance") {
+      if (evtSeries?.key !== SERIES_KEYS.cdob) {
         throw errors.validation("Open-band musicians can only be marked at a community dance.");
       }
       const contactId = input.contactId ?? row.contactId;
@@ -414,7 +415,7 @@ export async function moveAttendance(
     if (dup) throw errors.alreadyCheckedIn();
   }
   const targetSeries = await db.query.series.findFirst({ where: eq(series.id, target.seriesId) });
-  const targetIsCommunityDance = targetSeries?.key === "community_dance";
+  const targetIsCommunityDance = targetSeries?.key === SERIES_KEYS.cdob;
   const clearsOpenBand = row.isOpenBand && !targetIsCommunityDance;
   const headDelta = 1 + row.childrenCount;
 

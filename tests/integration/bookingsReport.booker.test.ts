@@ -6,6 +6,7 @@ import { events, venues } from "@/server/db/schema";
 import { createBooking } from "@/server/domain/bookings/bookingService";
 import { createVenue } from "@/server/domain/venues/venueService";
 import { assembleBookingsReport } from "@/server/domain/bookings/reportService";
+import { SERIES_KEYS } from "@/server/domain/series/seriesKeys";
 
 // Feature 020 US1 (FR-001/002/004/006): sort direction, venue short name (+ fallback), hasSoundTech, and
 // the existing performer filter still working.
@@ -40,9 +41,9 @@ describe("bookings report — booker view", () => {
     expect(byId.get(e2.id)?.venueShortName).toBe("TRR"); // derived fallback
   });
 
-  it("reports hasSoundTech per the event's series (false for community_dance)", async () => {
+  it("reports hasSoundTech per the event's series (false for the community dance)", async () => {
     const tnc = await makeEvent({ seriesKey: "tnc", eventDate: "2026-06-04" });
-    const cd = await makeEvent({ seriesKey: "community_dance", eventDate: "2026-06-05" });
+    const cd = await makeEvent({ seriesKey: SERIES_KEYS.cdob, eventDate: "2026-06-05" });
     const { rows } = await assembleBookingsReport(db, {});
     const byId = new Map(rows.map((r) => [r.eventId, r]));
     expect(byId.get(tnc.id)?.hasSoundTech).toBe(true);

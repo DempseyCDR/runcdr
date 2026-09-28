@@ -4,6 +4,7 @@ import { ensureSchema, resetDb, closeDb, db } from "./helpers/db";
 import { makeBand, makeEvent, makePerformer } from "./helpers/factories";
 import { admissionPrices, bookings, events, series, venues } from "@/server/db/schema";
 import { getPrintableCalendar, PAGE_LINE_BUDGET } from "@/server/domain/public/printableCalendar";
+import { SERIES_KEYS } from "@/server/domain/series/seriesKeys";
 
 // Feature 058 (P7-R15, real Postgres): the printable view-model assembler over live data — capped rows, the
 // per-series footer (only series with a sentence + their price), cancelled preserved, future-start window, and
@@ -90,6 +91,13 @@ describe("getPrintableCalendar", () => {
     expect(cal.truncated).toBe(false);
   });
 
+  // 088: the community dance keeps the code visitors read, whatever its key.
+  it('codes a community dance "CD" in the Series column', async () => {
+    await makeEvent({ seriesKey: SERIES_KEYS.cdob, eventDate: "2026-09-10" });
+    const cal = await getPrintableCalendar(db, "2026-09-01");
+    expect(cal.rows.map((r) => r.series)).toEqual(["CD"]);
+  });
+
   it("a future startISO excludes earlier events (advance planning)", async () => {
     await makeEvent({ seriesKey: "tnc", eventDate: "2026-09-03" });
     await makeEvent({ seriesKey: "tnc", eventDate: "2026-10-01" });
@@ -123,7 +131,7 @@ describe("getPrintableCalendar", () => {
   it("footer lists only series with a schedule sentence, each with its price (Free for all-$0)", async () => {
     await setSentence("tnc", "Thursdays, 7:30 PM at the German House.");
     await setSentence("ecd", "Second Sundays, 6:30 PM.");
-    await setSentence("community_dance", null); // no sentence → omitted
+    await setSentence(SERIES_KEYS.cdob, null); // no sentence → omitted
     await seedTiers("tnc", [
       { label: "Supporter", amountCents: 1500 },
       { label: "Dancer", amountCents: 1200 },
@@ -132,7 +140,7 @@ describe("getPrintableCalendar", () => {
 
     const cal = await getPrintableCalendar(db, "2026-09-01");
     const byKey = Object.fromEntries(cal.seriesSchedules.map((s) => [s.seriesKey, s]));
-    expect(Object.keys(byKey).sort()).toEqual(["ecd", "tnc"]); // community_dance/general omitted (no sentence)
+    expect(Object.keys(byKey).sort()).toEqual(["ecd", "tnc"]); // the community dance and general omitted (no sentence)
     expect(byKey.tnc!.sentence).toBe("Thursdays, 7:30 PM at the German House.");
     expect(byKey.tnc!.price).toBe("$12–$15");
     expect(byKey.ecd!.price).toBe("Free");

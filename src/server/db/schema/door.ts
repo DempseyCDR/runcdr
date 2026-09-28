@@ -21,7 +21,7 @@ export const doorRecords = pgTable("door_records", {
   // Feature 014: people admitted free ("next dance free" + performers' guests), one combined count.
   // Distinct from giftCardRedemptionCount; subtracted from paying dancers in the organizer report.
   compCount: integer("comp_count").notNull().default(0),
-  // Feature 017 (B36): open-band musicians comped at this event (community_dance). Kept separate from
+  // Feature 017 (B36): open-band musicians comped at this event (the community dance, cdob). Kept separate from
   // compCount so the FS's absolute comp edit never clobbers per-person open-band increments and so the
   // count survives the 90-day attendance purge. Report uses effective comps = compCount + openBandCount.
   openBandCount: integer("open_band_count").notNull().default(0),

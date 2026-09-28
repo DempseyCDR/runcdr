@@ -2,11 +2,13 @@
 // The club's own voice, migrated from the existing site (lifted, not rewritten). Copy is edited HERE without
 // touching component logic. The role/gendered-language note is STYLE-SPECIFIC (spec FR-001): contra & community
 // use gender-free Larks/Robins; English uses traditional men's/women's line terms (some callers moving toward
-// positional). See B48 re: a shared source of truth for series keys.
+// positional). Series keys come from SERIES_KEYS (088, B48).
+
+import { SERIES_KEYS, type SeriesKey } from "@/server/domain/series/seriesKeys";
 
 export type StyleLanding = {
   slug: string; // route param + marketing slug
-  seriesKey: string; // club series key (drives color/hero/dance filter): tnc | ecd | community_dance
+  seriesKey: SeriesKey; // club series key (drives color/hero/dance filter)
   title: string; // the page <h1>
   intro: string[]; // "what it is"
   whyYoullLove: string[]; // "why you'll love it" (the club's voice / testimonials)
@@ -15,7 +17,7 @@ export type StyleLanding = {
 
 const CONTRA: StyleLanding = {
   slug: "contra",
-  seriesKey: "tnc",
+  seriesKey: SERIES_KEYS.tnc,
   title: "What is contra dancing?",
   intro: [
     "Contra dance is a social folk dance with roots going back over 400 years. Couples line up in two facing lines and dance a sequence of figures — some with the person beside you, some with the couple across from you, and some with everyone at once. After each sequence, you move down the line and dance with the next couple. By the end of the night, you've danced with everyone in the room.",
@@ -40,7 +42,7 @@ const CONTRA: StyleLanding = {
 
 const ENGLISH: StyleLanding = {
   slug: "english",
-  seriesKey: "ecd",
+  seriesKey: SERIES_KEYS.ecd,
   title: "What is English country dance?",
   intro: [
     "English Country Dance (ECD) is a social folk dance with roots in 17th- and 18th-century England. If you've seen a Jane Austen film like Pride and Prejudice, you've seen it. The tradition was revived in the 20th century and is still growing — new dances are being choreographed and new music composed in this style today.",
@@ -65,7 +67,7 @@ const ENGLISH: StyleLanding = {
 
 const COMMUNITY: StyleLanding = {
   slug: "community",
-  seriesKey: "community_dance",
+  seriesKey: SERIES_KEYS.cdob,
   title: "What is the community dance?",
   intro: [
     "The community dance is a family-friendly dance for all ages, held on the second Thursday of every month from 6:00 to 7:00 pm at Rosette Studio (downstairs at 295 Gregory St), right before the evening contra.",
