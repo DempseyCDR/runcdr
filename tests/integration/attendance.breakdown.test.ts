@@ -14,6 +14,7 @@ import { createBooking } from "@/server/domain/bookings/bookingService";
 import { recordAttendance } from "@/server/domain/attendance/attendanceService";
 import { getAttendanceBreakdown } from "@/server/domain/attendance/breakdownService";
 import { GET as BREAKDOWN } from "@/app/api/events/[id]/attendance-breakdown/route";
+import { SERIES_KEYS } from "@/server/domain/series/seriesKeys";
 
 beforeAll(ensureSchema);
 beforeEach(resetDb);
@@ -35,7 +36,7 @@ const anonymous = async (eventId: string, n: number) => {
  */
 describe("an event's attendance breakdown (079)", () => {
   it("counts attendance, children, comps, gift cards and the door attendant", async () => {
-    const evt = await makeEvent({ seriesKey: "community_dance", eventDate: "2026-09-17" });
+    const evt = await makeEvent({ seriesKey: SERIES_KEYS.cdob, eventDate: "2026-09-17" });
     await anonymous(evt.id, 5);
     await recordAttendance(db, evt.id, { unmatched: true, childrenCount: 2, isComp: true });
     await recordAttendance(db, evt.id, { unmatched: true, redeemedGiftCard: true });
@@ -100,7 +101,7 @@ describe("an event's attendance breakdown (079)", () => {
   it("counts only bookings for this event, in any status (FR-024)", async () => {
     const [group] = await db.insert(eventGroups).values({ name: "2nd Thursday" }).returning();
     const contra = await makeEvent({ seriesKey: "tnc", groupId: group!.id });
-    const community = await makeEvent({ seriesKey: "community_dance", groupId: group!.id });
+    const community = await makeEvent({ seriesKey: SERIES_KEYS.cdob, groupId: group!.id });
     const elsewhere = await makePerformer("Sib Ling");
     await book(community.id, elsewhere, "caller");
     await checkIn(contra.id, elsewhere);

@@ -4,6 +4,7 @@ import type { Db } from "@/server/db/client";
 import { bands, bookings, events, performers } from "@/server/db/schema";
 import { getPublicSchedule } from "@/server/domain/public/publicSchedule";
 import { pricingSummary, resolveEventPricing } from "@/server/domain/public/publicPricing";
+import { isSeriesKey, SERIES_KEYS, type SeriesKey } from "@/server/domain/series/seriesKeys";
 
 // Feature 058 (P7-R15): the printable-calendar view model. Render-only, SINGLE-SOURCED — upcoming events from
 // getPublicSchedule (already PII-gated on venue + confirmed-only), each event's confirmed band/caller, its public
@@ -33,14 +34,15 @@ function rowCost(description: string | null): number {
 }
 
 /** Short codes for the table's Series column (the full name is in the footer standing schedule). */
-const SERIES_SHORT: Record<string, string> = {
-  tnc: "TNC",
-  ecd: "ECD",
-  community_dance: "CD",
-  general: "Joint",
+// Feature 088: typed over SeriesKey; the community dance keeps "CD" — what visitors read, not its key.
+const SERIES_SHORT: Record<SeriesKey, string> = {
+  [SERIES_KEYS.tnc]: "TNC",
+  [SERIES_KEYS.ecd]: "ECD",
+  [SERIES_KEYS.cdob]: "CD",
+  [SERIES_KEYS.general]: "Joint",
 };
 function seriesShort(seriesKey: string): string {
-  return SERIES_SHORT[seriesKey] ?? seriesKey.toUpperCase();
+  return isSeriesKey(seriesKey) ? SERIES_SHORT[seriesKey] : seriesKey.toUpperCase();
 }
 
 export type PrintableRow = {

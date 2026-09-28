@@ -4,6 +4,7 @@ import { jsonReqAs, ctx } from "./helpers/http";
 import { makeBaseActor, makeEvent } from "./helpers/factories";
 import { createRateParameter } from "@/server/domain/parameters/seriesParameterService";
 import { GET as ROLES } from "@/app/api/events/[id]/roles/route";
+import { SERIES_KEYS } from "@/server/domain/series/seriesKeys";
 
 beforeAll(ensureSchema);
 beforeEach(resetDb);
@@ -49,7 +50,7 @@ describe("GET /api/events/{id}/roles (081)", () => {
   });
 
   it("leaves out sound tech where the series has none", async () => {
-    const evt = await makeEvent({ seriesKey: "community_dance" });
+    const evt = await makeEvent({ seriesKey: SERIES_KEYS.cdob });
     const { roles: list } = await (await roles(evt.id)).json();
     expect(list.map((r: { performerType: string }) => r.performerType)).not.toContain("sound_tech");
   });

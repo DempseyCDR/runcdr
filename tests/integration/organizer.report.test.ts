@@ -11,6 +11,7 @@ import { purgeOldAttendance } from "@/server/domain/attendance/retentionService"
 import { assembleOrganizerReport } from "@/server/domain/organizer/reportService";
 import { createGateCheck } from "@/server/domain/door/gateCheckService";
 import { getAttendanceBreakdown } from "@/server/domain/attendance/breakdownService";
+import { SERIES_KEYS } from "@/server/domain/series/seriesKeys";
 
 const year = 2026;
 
@@ -129,7 +130,7 @@ describe("organizer report", () => {
   });
 
   it("shows 'Open Band' for open-band-only and blank when no musicians play (FR-003)", async () => {
-    const evt1 = await makeEvent({ seriesKey: "community_dance", eventDate: "2026-06-10" });
+    const evt1 = await makeEvent({ seriesKey: SERIES_KEYS.cdob, eventDate: "2026-06-10" });
     const ob = await makePerformer("Ollie Openband");
     await createBooking(db, evt1.id, {
       performerId: ob.id,
@@ -187,12 +188,12 @@ describe("organizer report", () => {
   });
 
   it("counts an open-band musician as attending but not paying (B36)", async () => {
-    const evt = await makeEvent({ seriesKey: "community_dance", eventDate: "2026-06-18" });
+    const evt = await makeEvent({ seriesKey: SERIES_KEYS.cdob, eventDate: "2026-06-18" });
     const musician = await createContact(db, { firstName: "Ollie", lastName: "Openband" });
     await recordAttendance(db, evt.id, { contactId: musician.id, isOpenBand: true });
     for (let i = 0; i < 5; i++) await recordAttendance(db, evt.id, { unmatched: true });
 
-    const report = await assembleOrganizerReport(db, "community_dance", year);
+    const report = await assembleOrganizerReport(db, SERIES_KEYS.cdob, year);
     const row = report.perDanceRows[0] as { dancers: number };
     // attendance = 6 (musician + 5); effective comps = 0 manual + 1 open-band; performers = 0.
     // dancers = 6 − 0 − 1 door − 1 comp = 4 (the musician attends but does not pay).
@@ -201,13 +202,13 @@ describe("organizer report", () => {
 
   it("TNC report includes same-evening Community Dance events (FR-001)", async () => {
     await makeEvent({ seriesKey: "tnc", eventDate: "2026-06-18" });
-    await makeEvent({ seriesKey: "community_dance", eventDate: "2026-06-18" });
+    await makeEvent({ seriesKey: SERIES_KEYS.cdob, eventDate: "2026-06-18" });
     const report = await assembleOrganizerReport(db, "tnc", year);
     const seriesInRows = new Set(
       (report.perDanceRows as { series: string }[]).map((r) => r.series),
     );
     expect(seriesInRows.has("tnc")).toBe(true);
-    expect(seriesInRows.has("community_dance")).toBe(true);
+    expect(seriesInRows.has(SERIES_KEYS.cdob)).toBe(true);
   });
 
   it("per-event dancer count survives the 90-day purge (FR-014)", async () => {

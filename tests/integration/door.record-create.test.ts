@@ -3,6 +3,7 @@ import { ensureSchema, resetDb, closeDb } from "./helpers/db";
 import { jsonReq, ctx } from "./helpers/http";
 import { makeEvent } from "./helpers/factories";
 import { POST as CREATE_DR } from "@/app/api/door-records/route";
+import { SERIES_KEYS } from "@/server/domain/series/seriesKeys";
 
 // FR-009
 describe("POST /api/door-records", () => {
@@ -12,7 +13,7 @@ describe("POST /api/door-records", () => {
 
   it("gives two same-date events their own door records", async () => {
     const tnc = await makeEvent({ seriesKey: "tnc", eventDate: "2026-06-18" });
-    const cd = await makeEvent({ seriesKey: "community_dance", eventDate: "2026-06-18" });
+    const cd = await makeEvent({ seriesKey: SERIES_KEYS.cdob, eventDate: "2026-06-18" });
 
     const r1 = await CREATE_DR(jsonReq("POST", "/api/door-records", { eventId: tnc.id }), ctx());
     const r2 = await CREATE_DR(jsonReq("POST", "/api/door-records", { eventId: cd.id }), ctx());

@@ -10,6 +10,7 @@ import { createPerformerPayment } from "@/server/domain/payments/performerPaymen
 import { recordAttendance } from "@/server/domain/attendance/attendanceService";
 import { getAttendanceBreakdown } from "@/server/domain/attendance/breakdownService";
 import { GET as REPORT } from "@/app/api/events/[id]/treasurer-report/route";
+import { SERIES_KEYS } from "@/server/domain/series/seriesKeys";
 
 // FR-001/003/004/005/006/007/012/014
 describe("GET /api/events/:id/treasurer-report", () => {
@@ -117,7 +118,7 @@ describe("GET /api/events/:id/treasurer-report", () => {
   // series' gate customer ("Contra Gate") with NO special-case code (FR-009). With no venue, rent resolves to
   // 0 and the bill still shows a $0 line to "(no landlord set)".
   it("community-dance event with no venue: $0 rent line, no landlord", async () => {
-    const evt = await makeEvent({ seriesKey: "community_dance" });
+    const evt = await makeEvent({ seriesKey: SERIES_KEYS.cdob });
     await makeDoorRecord(evt.id);
     const { body } = await report(evt.id);
     expect(body.expenses.rent).toEqual({ vendor: "(no landlord set)", amount: 0, unpaid: true });

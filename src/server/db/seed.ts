@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { db, sql } from "@/server/db/client";
+import { SERIES_KEYS } from "@/server/domain/series/seriesKeys";
 import {
   bandMembers,
   bands,
@@ -57,10 +58,12 @@ async function main() {
   await db
     .insert(series)
     .values([
-      { key: "tnc", name: "Thursday Night Contra", hasSoundTech: true },
-      { key: "ecd", name: "Sunday English Country Dance", hasSoundTech: false }, // 087: no sound tech (0059)
-      { key: "community_dance", name: "Community Dance", hasSoundTech: false },
-      { key: "general", name: "General / Joint Events", hasSoundTech: true },
+      { key: SERIES_KEYS.tnc, name: "Thursday Night Contra", hasSoundTech: true },
+      // 087: no sound tech (0059)
+      { key: SERIES_KEYS.ecd, name: "Sunday English Country Dance", hasSoundTech: false },
+      // 088: keyed cdob — Community Dance / Open Band (0060); the name is unchanged
+      { key: SERIES_KEYS.cdob, name: "Community Dance", hasSoundTech: false },
+      { key: SERIES_KEYS.general, name: "General / Joint Events", hasSoundTech: true },
     ])
     .onConflictDoNothing({ target: series.key });
 

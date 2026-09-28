@@ -15,7 +15,7 @@ describe("events / series / groups listing", () => {
   it("lists the seeded series", async () => {
     const res = await LIST_SERIES(jsonReq("GET", "/api/series"), ctx());
     const keys = (await res.json()).items.map((s: { key: string }) => s.key).sort();
-    expect(keys).toEqual(["community_dance", "ecd", "general", "tnc"]);
+    expect(keys).toEqual(["cdob", "ecd", "general", "tnc"]);
   });
 
   it("filters events by `from` (recency window for the pick list)", async () => {

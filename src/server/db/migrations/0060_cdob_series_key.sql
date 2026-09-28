@@ -1,0 +1,12 @@
+-- Feature 088: the community dance series' key becomes `cdob` — Community Dance / Open Band.
+--
+-- The key is the short name the system matches on (the open band at the door, the organizer report that
+-- counts the community dance with Thursday Night Contra, the public site's colour, photo and landing page);
+-- the series is still NAMED "Community Dance". Only the key changes.
+--
+-- One row, nothing else: every table that belongs to a series — events, series_parameters and their audit,
+-- venue_rents and their audit, role_grants, admission_prices, quarterly_attendance_counts — refers to it by
+-- id, never by key. So renaming the key moves no record and cascades nothing.
+--
+-- Idempotent — a second run finds no `community_dance` row.
+UPDATE series SET key = 'cdob' WHERE key = 'community_dance';

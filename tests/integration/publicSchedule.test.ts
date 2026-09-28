@@ -4,6 +4,7 @@ import { ensureSchema, resetDb, closeDb, db } from "./helpers/db";
 import { makeEvent } from "./helpers/factories";
 import { events, venues } from "@/server/db/schema";
 import { getPublicSchedule, homeWindowStart } from "@/server/domain/public/publicSchedule";
+import { SERIES_KEYS } from "@/server/domain/series/seriesKeys";
 
 // FR-001, FR-010
 describe("getPublicSchedule", () => {
@@ -62,7 +63,7 @@ describe("getPublicSchedule", () => {
 
   it("includes a free event (chargesAdmission = false) in the schedule", async () => {
     const free = await makeEvent({
-      seriesKey: "community_dance",
+      seriesKey: SERIES_KEYS.cdob,
       eventDate: "2026-06-20",
       chargesAdmission: false,
     });

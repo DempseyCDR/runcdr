@@ -12,6 +12,7 @@ import { avgTicketCents, breakEvenDancers, danceNetCents } from "./danceResult";
 import { getAttendanceBreakdown } from "@/server/domain/attendance/breakdownService";
 import { quarterlySummary, type QuarterlyRow } from "./quarterly";
 import { buildTrend, type TrendPoint } from "./trend";
+import { SERIES_KEYS } from "@/server/domain/series/seriesKeys";
 
 export type OrganizerReport = {
   series: { key: string; name: string };
@@ -22,7 +23,7 @@ export type OrganizerReport = {
 
 /** Series included in a report: the TNC report also includes its Community Dance events (FR-001). */
 function includedKeys(seriesKey: string): string[] {
-  return seriesKey === "tnc" ? ["tnc", "community_dance"] : [seriesKey];
+  return seriesKey === SERIES_KEYS.tnc ? [SERIES_KEYS.tnc, SERIES_KEYS.cdob] : [seriesKey];
 }
 
 export async function assembleOrganizerReport(

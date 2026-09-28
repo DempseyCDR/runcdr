@@ -3,6 +3,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import CheckinPage from "@/app/(door)/checkin/page";
+import { SERIES_KEYS } from "@/server/domain/series/seriesKeys";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -29,7 +30,7 @@ const EVENT = (over: Record<string, unknown> = {}) => ({
 });
 const SERIES = [
   { id: "s-tnc", key: "tnc", name: "Thursday Night Contra" },
-  { id: "s-cd", key: "community_dance", name: "Community Dance" },
+  { id: "s-cd", key: SERIES_KEYS.cdob, name: "Community Dance" },
 ];
 const RESULT = (over: Record<string, unknown> = {}) => ({
   id: "c1",

@@ -7,6 +7,7 @@ import { bookings, series } from "@/server/db/schema";
 import { createBooking, patchBooking } from "@/server/domain/bookings/bookingService";
 import { createRateParameter } from "@/server/domain/parameters/seriesParameterService";
 import { POST as ADD } from "@/app/api/events/[id]/settlement-performer/route";
+import { SERIES_KEYS } from "@/server/domain/series/seriesKeys";
 
 // Feature 030 (FR-011): the FS adds a last-minute performer at settlement — creates a booking via
 // performer_payment.write (NOT booking.write), scoped to the event's series, deduping an already-booked
@@ -107,8 +108,8 @@ describe("add-settlement-performer (030 US6)", () => {
   });
 
   it("refuses a sound tech where the series has none", async () => {
-    const evt = await makeEvent({ seriesKey: "community_dance" });
-    const res = await add(await fsFor("community_dance"), evt.id, {
+    const evt = await makeEvent({ seriesKey: SERIES_KEYS.cdob });
+    const res = await add(await fsFor(SERIES_KEYS.cdob), evt.id, {
       performerId: (await makePerformer("Sam Sound")).id,
       performerType: "sound_tech",
     });

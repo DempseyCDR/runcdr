@@ -51,7 +51,7 @@ export type BookingsReportRow = {
   /** Feature 087: so the venue's short code can open the venue itself. */
   venueId: string | null;
   venueShortName: string | null; // feature 020 US1 (FR-002); derived initials when short_name is null
-  hasSoundTech: boolean; // feature 020 US1 (FR-004); false → no sound-tech slot (community_dance)
+  hasSoundTech: boolean; // feature 020 US1 (FR-004); false → no sound-tech slot (the community dance, cdob)
   caller: string | null;
   /** Feature 087 (FR-003a): shares the caller's cell on the hub. Never makes a gap (FR-004a). */
   instructor: string | null;

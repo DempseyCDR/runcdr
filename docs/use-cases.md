@@ -74,7 +74,7 @@ Per-series roles are always "of series X" — Booker-of-ecd has no authority ove
 
 ⚠️ **Scope is NOT a hierarchy.** It would be tempting to read club-wide ⊃ series ⊃ event as a tree, but
 **event groups deliberately span series**: "Thanksgiving 2026" contains both **tnc** and **ecd** events, and
-a double dance pairs a `community_dance` event with a `tnc` one. `event_groups` has no `series_id`, and
+a double dance pairs a `cdob` event with a `tnc` one. `event_groups` has no `series_id`, and
 `events.group_id` is independent of `events.series_id` — the schema already allows this.
 
 So **⬢ group and ⬤ series are orthogonal axes**, and a group-scoped grant can legitimately reach events in a
@@ -291,14 +291,16 @@ authenticated roles inherit the Organizer base. ⚠️ = inferred or still open.
    ("first last") and **editable** by the Door Attendant (B34).
 8. **Family check-in** (**all series**): one parent contact + a **count of children**; children **count as
    paying** (B35).
-9. **Open-band musician check-in** (**community_dance series**): note an **unpaid, non-leading** open-band
-   musician; they are **comp'd into every event of the event group** and **count as attending** (B36).
+9. **Open-band musician check-in** (**community dance series, `cdob`**): note an **unpaid,
+   non-leading** open-band musician; they are **comp'd into every event of the event group** and
+   **count as attending** (B36).
 10. **Boundary:** must not **write** `/gate` — the FS owns gate money. **May read it** (money is open to
     every volunteer; §4). *Revised 2026-07-15 from "no `/gate` access".*
 
-> **Community dance** — its **own series** (`community_dance`), a peer of Thursday Night Contra (`tnc`),
-> already seeded as such. It is **not** an event type: B37 proposed one and was **retired 2026-07-14**, as
-> it rested on a misreading — the codebase was already right.
+> **Community dance** — its **own series** (key `cdob`, "Community Dance / Open Band"; it was
+> `community_dance` until feature 088), a peer of Thursday Night Contra (`tnc`), already seeded as
+> such. It is **not** an event type: B37 proposed one and was **retired 2026-07-14**, as it rested
+> on a misreading — the codebase was already right.
 >
 > What makes the series special is a **rule, not a shape**: it runs on a mix of **paid musicians** (booked)
 > plus **open-band musicians** (unpaid volunteers), and an open-band musician is **comp'd into all events of

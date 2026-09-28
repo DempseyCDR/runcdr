@@ -11,7 +11,7 @@ export const attendance = pgTable("attendance", {
   // Feature 017 (B35): children accompanying the parent on this check-in. Counted as paying via
   // events.attendance_count; the row is for roster display and correct decrement on correction.
   childrenCount: integer("children_count").notNull().default(0),
-  // Feature 017 (B36): this check-in is an open-band musician (community_dance only). Roster marker;
+  // Feature 017 (B36): this check-in is an open-band musician (the community dance, cdob, only). Roster marker;
   // the persisted comp quantity lives on door_records.open_band_count (this row purges at 90 days).
   isOpenBand: boolean("is_open_band").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
