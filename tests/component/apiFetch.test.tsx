@@ -131,3 +131,46 @@ describe("apiFetch (B41)", () => {
     expect(loc.sets).toBe(1);
   });
 });
+
+/**
+ * Dev tunnel (ngrok): a free ngrok address answers a browser's request with a warning page unless the
+ * request carries `ngrok-skip-browser-warning`. The app's own background requests carry it in development,
+ * so a phone testing through the tunnel never receives that page where it expected data. Page loads are the
+ * browser's own requests and cannot carry it; ngrok shows its warning once per browser for those.
+ */
+describe("apiFetch — the dev tunnel", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  function stubCapture() {
+    const seen: Headers[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        seen.push(new Headers(init?.headers));
+        return { status: 200, ok: true, json: async () => ({}) };
+      }),
+    );
+    return seen;
+  }
+
+  it("asks ngrok to skip its warning page in development, keeping the caller's own headers", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    const seen = stubCapture();
+    const apiFetch = await loadApiFetch();
+
+    await apiFetch("/api/series", { headers: { "Content-Type": "application/json" } });
+
+    expect(seen[0]!.get("ngrok-skip-browser-warning")).toBe("1");
+    expect(seen[0]!.get("Content-Type")).toBe("application/json");
+  });
+
+  it("sends nothing extra outside development", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const seen = stubCapture();
+    const apiFetch = await loadApiFetch();
+
+    await apiFetch("/api/series");
+
+    expect(seen[0]!.has("ngrok-skip-browser-warning")).toBe(false);
+  });
+});

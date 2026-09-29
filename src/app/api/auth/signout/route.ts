@@ -1,8 +1,8 @@
-import { NextResponse } from "next/server";
 import { withLogging } from "@/server/lib/withLogging";
 import { db } from "@/server/db/client";
 import { destroySession, SESSION_COOKIE } from "@/server/auth/session";
 import { clearCookie, readCookie } from "@/server/auth/cookies";
+import { relativeRedirect } from "@/server/lib/relativeRedirect";
 
 /**
  * End the session (contracts §3, FR-002).
@@ -11,7 +11,7 @@ import { clearCookie, readCookie } from "@/server/auth/cookies";
  */
 export const POST = withLogging(async (req) => {
   await destroySession(db, readCookie(req, SESSION_COOKIE));
-  const res = NextResponse.redirect(new URL("/", req.url), { status: 303 });
+  const res = relativeRedirect("/", 303);
   res.headers.append("Set-Cookie", clearCookie(SESSION_COOKIE));
   return res;
 });

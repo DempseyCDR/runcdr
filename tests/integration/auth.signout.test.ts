@@ -40,7 +40,8 @@ describe("POST /api/auth/signout", () => {
 
     const res = await signOut(token);
     expect(res.status).toBe(303);
-    expect(new URL(res.headers.get("location")!).pathname).toBe("/");
+    // Relative, so the browser resolves it against the address it is on — localhost or a tunnel.
+    expect(res.headers.get("location")).toBe("/");
     expect(res.headers.get("set-cookie")).toContain(`${SESSION_COOKIE}=`);
 
     // The cookie the device still holds is now worthless.
