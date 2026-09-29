@@ -33,7 +33,8 @@ describe("OAuth callback state validation (CSRF)", () => {
 
   async function expectRefused(res: Response) {
     expect(res.status).toBe(307);
-    expect(res.headers.get("location")).toContain("/login?error=access_denied");
+    // Relative, so the browser resolves it against the address it is on — localhost or a tunnel.
+    expect(res.headers.get("location")).toBe("/login?error=access_denied");
     // No NEW session may be minted by a refusal. (The harness seeds one standing session of its
     // own for the rest of the suite, so count rather than assert emptiness.)
     expect(await db.select().from(staffSessions)).toHaveLength(baselineSessions);
