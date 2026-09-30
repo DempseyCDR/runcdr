@@ -56,6 +56,15 @@ export default function CheckinPage() {
   const [extras, setExtras] = useState<Extras>(NO_EXTRAS);
   const searchRef = useRef<HTMLInputElement>(null);
 
+  // Feature 089: as a name is typed, bring the search box to the top so the results beneath it are not
+  // hidden by the phone's keyboard. After the render, so the room to scroll into (`.searching`) is
+  // already there. (jsdom has no scrollIntoView.)
+  const typing = q !== "";
+  useEffect(() => {
+    const box = searchRef.current;
+    if (typing && box && "scrollIntoView" in box) box.scrollIntoView({ block: "start" });
+  }, [typing, q]);
+
   const [adding, setAdding] = useState(false);
 
   const [showingIn, setShowingIn] = useState(false);
@@ -205,7 +214,12 @@ export default function CheckinPage() {
     <main className={styles.page}>
       <div className={styles.top}>
         <EventConfirm event={event} series={series} onSelect={setEvent} />
+      </div>
 
+      {/* Feature 089 (Rich's phone tests, 2026-09-30): from the search box down. While a name is typed
+          this part is at least a screen tall, so the search box can always be scrolled to the top —
+          with one result the page was too short, and the result sat under the keyboard. */}
+      <div className={q ? `${styles.work} ${styles.searching}` : styles.work}>
         <input
           ref={searchRef}
           type="search"
@@ -263,6 +277,51 @@ export default function CheckinPage() {
           )}
         </fieldset>
 
+        {message && (
+          <p role="status" className={message.error ? styles.error : styles.status}>
+            {message.text}
+          </p>
+        )}
+
+        {candidates.length > 0 && (
+          <ul aria-label="Search results" className={styles.results}>
+            {candidates.map((c) => (
+              <li key={c.id} className={styles.result}>
+                <div className={styles.resultName}>
+                  <ContactName c={c} />
+                  <div className={styles.resultMeta}>
+                    {c.emails.length > 0
+                      ? c.emails.join(", ")
+                      : c.reachedVia
+                        ? `reached via ${c.reachedVia.ownerDisplayName}${
+                            c.reachedVia.address ? ` (${c.reachedVia.address})` : ""
+                          }`
+                        : null}
+                  </div>
+                </div>
+                <div className={styles.resultAction}>
+                  {c.checkedIn ? (
+                    <span className={styles.checkmark} role="img" aria-label="Already checked in">
+                      ✓
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      className={styles.primaryButton}
+                      onClick={() => void checkInCandidate(c)}
+                    >
+                      Check in
+                    </button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        {candidatesTruncated && <p className={styles.hint}>More matches — refine your search.</p>}
+
+        {/* Feature 089 (Rich's Galaxy test, 2026-09-30): the buttons sit below the results, so what is typed
+          and what it finds stay together above the phone's keyboard. */}
         <div className={styles.actions}>
           {/* FR-012: an anonymous dancer has no name, and open band needs one — the server refuses it. */}
           <button
@@ -349,50 +408,7 @@ export default function CheckinPage() {
             ))}
           </ul>
         )}
-
-        {message && (
-          <p role="status" className={message.error ? styles.error : styles.status}>
-            {message.text}
-          </p>
-        )}
       </div>
-
-      {candidates.length > 0 && (
-        <ul aria-label="Search results" className={styles.results}>
-          {candidates.map((c) => (
-            <li key={c.id} className={styles.result}>
-              <div className={styles.resultName}>
-                <ContactName c={c} />
-                <div className={styles.resultMeta}>
-                  {c.emails.length > 0
-                    ? c.emails.join(", ")
-                    : c.reachedVia
-                      ? `reached via ${c.reachedVia.ownerDisplayName}${
-                          c.reachedVia.address ? ` (${c.reachedVia.address})` : ""
-                        }`
-                      : null}
-                </div>
-              </div>
-              <div className={styles.resultAction}>
-                {c.checkedIn ? (
-                  <span className={styles.checkmark} role="img" aria-label="Already checked in">
-                    ✓
-                  </span>
-                ) : (
-                  <button
-                    type="button"
-                    className={styles.primaryButton}
-                    onClick={() => void checkInCandidate(c)}
-                  >
-                    Check in
-                  </button>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-      {candidatesTruncated && <p className={styles.hint}>More matches — refine your search.</p>}
 
       {adding && (
         <AddContactDialog

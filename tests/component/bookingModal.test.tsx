@@ -226,7 +226,7 @@ describe("BookingModal", () => {
         onClose={() => {}}
       />,
     );
-    const dialog = screen.getByRole("dialog", { name: "Booking" });
+    const dialog = screen.getByRole("dialog", { name: "Book a caller for 2026-06-18" });
     expect(dialog).toHaveAttribute("aria-modal", "true");
     expect(
       screen.getByRole("heading", { name: "Book a caller for 2026-06-18" }),

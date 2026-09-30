@@ -39,7 +39,6 @@ export default function Lineup({
   onAddMusician,
   onRepointed,
   onChanged,
-  onClose,
 }: {
   eventId: string;
   band: string | null;
@@ -54,7 +53,6 @@ export default function Lineup({
   onRepointed: () => void;
   /** A booking here was changed (the band note) — re-read the lineup and the table. */
   onChanged: () => void;
-  onClose: () => void;
 }) {
   const [toBandId, setToBandId] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -184,10 +182,6 @@ export default function Lineup({
       )}
 
       {error && <p role="alert">{error}</p>}
-
-      <button type="button" onClick={onClose}>
-        Close
-      </button>
     </>
   );
 }

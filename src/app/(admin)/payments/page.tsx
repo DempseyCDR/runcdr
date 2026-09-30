@@ -253,7 +253,7 @@ export default function PaymentsPage() {
       )}
 
       {editingPerformer && (
-        <Dialog label={editingPerformer.displayName} onClose={() => setEditingPerformer(null)}>
+        <Dialog heading={editingPerformer.displayName} onClose={() => setEditingPerformer(null)}>
           <PerformerForm
             performer={editingPerformer}
             onSaved={() => {
@@ -333,12 +333,10 @@ export default function PaymentsPage() {
       )}
 
       {donateFor && (
-        <Dialog label="Donated fee" onClose={() => setDonateFor(null)}>
-          <p>
-            {donateFor.performerName} is donating the fee — no payment will be made, and the booking
-            is kept as donated.
-          </p>
-          <div className={styles.buttons}>
+        <Dialog
+          heading="Donated fee"
+          onClose={() => setDonateFor(null)}
+          actions={
             <button
               type="button"
               className={styles.primaryButton}
@@ -346,10 +344,12 @@ export default function PaymentsPage() {
             >
               Confirm donation
             </button>
-            <button type="button" className={styles.button} onClick={() => setDonateFor(null)}>
-              Cancel
-            </button>
-          </div>
+          }
+        >
+          <p>
+            {donateFor.performerName} is donating the fee — no payment will be made, and the booking
+            is kept as donated.
+          </p>
         </Dialog>
       )}
     </main>

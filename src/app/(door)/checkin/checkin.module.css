@@ -14,10 +14,27 @@
   gap: var(--space-2);
 }
 
+/* Feature 089: the search box and everything below it. */
+.work {
+  align-content: start;
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+/* While a name is typed: at least a screen tall, so the search box can scroll to the top even when
+   there is only one result below it (an iPhone's keyboard lies over the page; it does not shrink it). */
+.searching {
+  min-height: 100dvh;
+}
+
 .search {
   box-sizing: border-box;
+  scroll-margin-top: var(
+    --space-2
+  ); /* 089: where typing scrolls it to — the top, clear of the edge */
   font-size: 1rem; /* 16px or more stops iOS zooming into the field */
-  min-height: 2.75rem;
+  min-height: var(--tap-min);
   padding: var(--space-2);
   width: 100%;
 }
@@ -28,33 +45,38 @@
   border-radius: 6px;
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-1) var(--space-3);
+  gap: 0 var(--space-3);
   margin: 0;
-  padding: var(--space-1) var(--space-2);
+  padding: 0 var(--space-2); /* 089 (Rich's Galaxy test): the controls are 48px; the frame adds nothing */
 }
 
 .extras label {
   align-items: center;
   display: inline-flex;
   gap: var(--space-1);
-  min-height: 2.25rem;
+  min-height: var(--tap-min);
 }
 
 .childrenInput {
+  box-sizing: border-box;
   font-size: 1rem;
+  min-height: var(--tap-min);
   width: 3.5rem;
 }
 
 .actions {
   display: grid;
   gap: var(--space-2);
-  grid-template-columns: repeat(3, 1fr);
+  margin-top: var(--space-4);
+  /* Feature 089: as many columns as fit, each at least 6rem — no page-specific breakpoint, and it
+     follows enlarged text. */
+  grid-template-columns: repeat(auto-fit, minmax(6rem, 1fr));
 }
 
 .button,
 .primaryButton {
-  font-size: 0.95rem;
-  min-height: 2.75rem;
+  font-size: 1rem;
+  min-height: var(--tap-min);
   padding: var(--space-1) var(--space-2);
 }
 
@@ -63,13 +85,13 @@
 }
 
 .status {
-  font-size: var(--fs-sm);
+  font-size: 1rem;
   margin: 0;
 }
 
 .error {
   color: #b00020;
-  font-size: var(--fs-sm);
+  font-size: 1rem;
   margin: 0;
 }
 
@@ -96,7 +118,7 @@
 
 .resultMeta {
   color: var(--text-muted);
-  font-size: var(--fs-sm);
+  font-size: 1rem;
   overflow-wrap: anywhere;
 }
 
@@ -107,34 +129,13 @@
 .checkmark {
   display: inline-block;
   font-size: 1.4rem;
-  min-width: 2.75rem;
+  min-width: var(--tap-min);
   text-align: center;
 }
 
 .hint {
   color: var(--text-muted);
-  font-size: var(--fs-sm);
-}
-
-/* Dialogs (US2, US3): a backdrop and a panel that scrolls within the viewport. */
-.backdrop {
-  background: rgba(0, 0, 0, 0.45);
-  inset: 0;
-  overflow-y: auto;
-  padding: var(--space-2);
-  position: fixed;
-  z-index: 50;
-}
-
-.panel {
-  background: var(--surface, #fff);
-  border-radius: 8px;
-  box-sizing: border-box;
-  margin: 0 auto;
-  max-height: calc(100dvh - 2 * var(--space-2));
-  max-width: 40rem;
-  overflow-y: auto;
-  padding: var(--space-3);
+  font-size: 1rem;
 }
 
 .attendeeButton {
@@ -143,7 +144,7 @@
   color: inherit;
   cursor: pointer;
   font: inherit;
-  min-height: 2.75rem;
+  min-height: var(--tap-min);
   padding: 0;
   text-align: left;
   width: 100%;
@@ -157,13 +158,8 @@
 
 .suggestHeading {
   color: var(--text-muted);
-  font-size: var(--fs-sm);
+  font-size: 1rem;
   margin: var(--space-3) 0 0;
-}
-
-.dialogHeading {
-  font-size: 1.15rem;
-  margin: 0 0 var(--space-2);
 }
 
 .form {
@@ -173,13 +169,13 @@
 
 .form label {
   display: grid;
-  font-size: var(--fs-sm);
+  font-size: 1rem;
   gap: 2px;
 }
 
 .form input {
   font-size: 1rem;
-  min-height: 2.5rem;
+  min-height: var(--tap-min);
   padding: var(--space-1) var(--space-2);
 }
 
@@ -198,10 +194,4 @@
   flex-wrap: wrap;
   gap: var(--space-2);
   margin-top: var(--space-3);
-}
-
-@media (max-width: 22.5rem) {
-  .actions {
-    grid-template-columns: 1fr 1fr;
-  }
 }

@@ -3,13 +3,15 @@
 .fields {
   display: grid;
   gap: var(--space-2);
-  grid-template-columns: 1fr 1fr;
+  /* Feature 089: as many columns as fit, each at least 9rem — no page-specific breakpoint, and it
+     follows enlarged text. */
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
 }
 
 .fields label,
 .field {
   display: grid;
-  font-size: var(--fs-sm);
+  font-size: 1rem;
   gap: 2px;
 }
 
@@ -20,7 +22,7 @@
 .input {
   box-sizing: border-box;
   font-size: 1rem; /* 16px or more stops iOS zooming into the field */
-  min-height: 2.75rem;
+  min-height: var(--tap-min);
   padding: var(--space-1) var(--space-2);
   width: 100%;
 }
@@ -35,7 +37,7 @@
 }
 
 .legend {
-  font-size: var(--fs-sm);
+  font-size: 1rem;
   font-weight: 600;
   padding: 0 var(--space-1);
 }
@@ -56,7 +58,7 @@
   border: none;
   border-bottom: 1px solid var(--hairline);
   font-size: 1rem;
-  min-height: 2.75rem;
+  min-height: var(--tap-min);
   text-align: left;
   width: 100%;
 }
@@ -73,8 +75,8 @@
   background: none;
   border: none;
   color: var(--link, #1a5fb4);
-  font-size: var(--fs-sm);
-  min-height: 2.75rem;
+  font-size: 1rem;
+  min-height: var(--tap-min);
   padding: 0;
   text-align: left;
   text-decoration: underline;
@@ -92,7 +94,7 @@
   align-items: center;
   display: flex;
   gap: var(--space-2);
-  min-height: 2.75rem;
+  min-height: var(--tap-min);
 }
 
 .total {
@@ -108,8 +110,8 @@
 
 .button,
 .primaryButton {
-  font-size: 0.95rem;
-  min-height: 2.75rem;
+  font-size: 1rem;
+  min-height: var(--tap-min);
   padding: var(--space-1) var(--space-3);
 }
 
@@ -119,14 +121,8 @@
 
 .error {
   color: #b00020;
-  font-size: var(--fs-sm);
+  font-size: 1rem;
   margin: 0;
-}
-
-@media (max-width: 22.5rem) {
-  .fields {
-    grid-template-columns: 1fr;
-  }
 }
 
 /* Cash and card are one line: no box around it, and its "Line 1" is for a screen reader only. */

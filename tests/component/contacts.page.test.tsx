@@ -264,6 +264,31 @@ describe("contacts launcher — search hybrid + exclusivity (feature 064)", () =
   });
 });
 
+// Feature 089 (Rich, 2026-09-30): as on check-in, typing a name brings the search box to the top of
+// the screen, so what it finds is not hidden by the phone's keyboard.
+describe("contacts launcher — the search box on a phone (089)", () => {
+  it("scrolls the search box to the top when a name is typed", async () => {
+    stub({});
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll; // jsdom has none
+    try {
+      render(<ContactsPage />);
+      await userEvent.type(search(), "a");
+      expect(scroll).toHaveBeenCalledWith({ block: "start" });
+      expect(scroll.mock.contexts.at(-1)).toBe(search());
+      // With little found, the page was too short to scroll that far: while a name is typed, the part
+      // from the search box down is made at least a screen tall.
+      const room = () => search().closest("section")?.parentElement?.className ?? "";
+      expect(room()).toMatch(/searching/);
+      await userEvent.clear(search());
+      expect(room()).not.toMatch(/searching/);
+    } finally {
+      // @ts-expect-error -- put jsdom back as it was: it has no scrollIntoView
+      delete Element.prototype.scrollIntoView;
+    }
+  });
+});
+
 describe("contacts launcher — add contact modal (feature 064)", () => {
   it("Add contact opens a modal; submit creates, closes, and refreshes (C13/C14)", async () => {
     const calls = stub({ counts: { needsReview: 0, duplicates: 0 } });
@@ -282,12 +307,12 @@ describe("contacts launcher — add contact modal (feature 064)", () => {
     expect(calls.some((c) => c.url.includes("launcher-counts"))).toBe(true);
   });
 
-  it("Cancel closes the create modal without a POST", async () => {
+  it("Close closes the create modal without a POST (the bar's Close, 089)", async () => {
     const calls = stub({});
     render(<ContactsPage />);
     await userEvent.click(screen.getByRole("button", { name: /add contact/i }));
     const dialog = await screen.findByRole("dialog", { name: /add contact/i });
-    await userEvent.click(within(dialog).getByRole("button", { name: /cancel/i }));
+    await userEvent.click(within(dialog).getByRole("button", { name: /^close$/i }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: /add contact/i })).toBeNull());
     expect(calls.some((c) => c.init?.method === "POST")).toBe(false);
   });

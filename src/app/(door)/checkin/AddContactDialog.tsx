@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "@/app/apiFetch";
 import ContactName, { type ContactNames } from "@/app/_components/ContactName";
+import Dialog from "@/app/_components/Dialog";
 import styles from "./checkin.module.css";
 
 /** A search result, as the page's results use it (contract §1). */
@@ -51,9 +52,6 @@ export default function AddContactDialog({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const emailRef = useRef<HTMLInputElement>(null);
-  const firstRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => firstRef.current?.focus(), []);
 
   // FR-014: "did you mean…?" — the email once it looks like one, otherwise the name as typed so far.
   const query = email.includes("@") ? email.trim() : `${first} ${last}`.trim();
@@ -117,153 +115,140 @@ export default function AddContactDialog({
   }
 
   return (
-    <div className={styles.backdrop}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Add contact"
-        className={styles.panel}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") onClose();
-        }}
-      >
-        <h2 className={styles.dialogHeading}>Add contact</h2>
-        {extrasSummary && <p className={styles.hint}>With: {extrasSummary}</p>}
-
-        <div className={styles.form}>
-          <label>
-            First name
-            <input ref={firstRef} value={first} onChange={(e) => setFirst(e.target.value)} />
-          </label>
-          <label>
-            Last name
-            <input value={last} onChange={(e) => setLast(e.target.value)} />
-          </label>
-          <label>
-            Display name (optional)
-            <input
-              value={display}
-              placeholder={`${first} ${last}`.trim() || "First Last"}
-              onChange={(e) => setDisplay(e.target.value)}
-            />
-          </label>
-          <label>
-            Email
-            <input
-              ref={emailRef}
-              type="email"
-              inputMode="email"
-              value={email}
-              onChange={(e) => {
-                setEmail(e.target.value);
-                setOwner(null);
-              }}
-            />
-          </label>
-          <label>
-            Phone
-            <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
-          </label>
-        </div>
-
-        {suggestions.length > 0 && !owner && (
-          <p className={styles.suggestHeading}>Already here? Check them in instead:</p>
-        )}
-        {suggestions.length > 0 && !owner && (
-          <ul aria-label="Did you mean…" className={styles.results}>
-            {suggestions.map((s) => (
-              <li key={s.id} className={styles.result}>
-                <div className={styles.resultName}>
-                  <ContactName c={s} />
-                </div>
-                <div className={styles.resultAction}>
-                  {s.checkedIn ? (
-                    <span className={styles.checkmark} role="img" aria-label="Already checked in">
-                      ✓
-                    </span>
-                  ) : (
-                    <button
-                      type="button"
-                      className={styles.button}
-                      disabled={busy}
-                      onClick={() => void checkInExisting(s.id, s.displayName)}
-                    >
-                      Check in
-                    </button>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        {owner && !ownerIn && (
-          <div className={styles.question}>
-            <p>
-              {email.trim()} already belongs to {owner.displayName}. Is this the same person?
-            </p>
-            <div className={styles.choices}>
-              <button
-                type="button"
-                className={styles.button}
-                disabled={busy}
-                onClick={() => void checkInExisting(owner.contactId, owner.displayName)}
-              >
-                {`It's ${owner.displayName}`}
-              </button>
-              <button
-                type="button"
-                className={styles.button}
-                disabled={busy}
-                onClick={() => void addNew(true)}
-              >
-                Different person sharing it
-              </button>
-              <button
-                type="button"
-                className={styles.button}
-                onClick={() => {
-                  setOwner(null);
-                  emailRef.current?.focus();
-                }}
-              >
-                Fix the email
-              </button>
-            </div>
-          </div>
-        )}
-
-        {owner && ownerIn && (
-          <div className={styles.question}>
-            <p>{owner.displayName} is already checked in.</p>
-            <button type="button" className={styles.button} onClick={onClose}>
-              Close
-            </button>
-          </div>
-        )}
-
-        {error && (
+    <Dialog
+      heading="Add contact"
+      onClose={onClose}
+      settled={ownerIn}
+      message={
+        error && (
           <p role="alert" className={styles.error}>
             {error}
           </p>
-        )}
+        )
+      }
+      actions={
+        !owner && (
+          <button
+            type="button"
+            className={styles.primaryButton}
+            disabled={busy || !first.trim()}
+            onClick={() => void addNew(false)}
+          >
+            Add and check in
+          </button>
+        )
+      }
+    >
+      {extrasSummary && <p className={styles.hint}>With: {extrasSummary}</p>}
 
-        <div className={styles.choices}>
-          {!owner && (
+      <div className={styles.form}>
+        <label>
+          First name
+          <input value={first} onChange={(e) => setFirst(e.target.value)} />
+        </label>
+        <label>
+          Last name
+          <input value={last} onChange={(e) => setLast(e.target.value)} />
+        </label>
+        <label>
+          Display name (optional)
+          <input
+            value={display}
+            placeholder={`${first} ${last}`.trim() || "First Last"}
+            onChange={(e) => setDisplay(e.target.value)}
+          />
+        </label>
+        <label>
+          Email
+          <input
+            ref={emailRef}
+            type="email"
+            inputMode="email"
+            value={email}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              setOwner(null);
+            }}
+          />
+        </label>
+        <label>
+          Phone
+          <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
+        </label>
+      </div>
+
+      {suggestions.length > 0 && !owner && (
+        <p className={styles.suggestHeading}>Already here? Check them in instead:</p>
+      )}
+      {suggestions.length > 0 && !owner && (
+        <ul aria-label="Did you mean…" className={styles.results}>
+          {suggestions.map((s) => (
+            <li key={s.id} className={styles.result}>
+              <div className={styles.resultName}>
+                <ContactName c={s} />
+              </div>
+              <div className={styles.resultAction}>
+                {s.checkedIn ? (
+                  <span className={styles.checkmark} role="img" aria-label="Already checked in">
+                    ✓
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className={styles.button}
+                    disabled={busy}
+                    onClick={() => void checkInExisting(s.id, s.displayName)}
+                  >
+                    Check in
+                  </button>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {owner && !ownerIn && (
+        <div className={styles.question}>
+          <p>
+            {email.trim()} already belongs to {owner.displayName}. Is this the same person?
+          </p>
+          <div className={styles.choices}>
             <button
               type="button"
-              className={styles.primaryButton}
-              disabled={busy || !first.trim()}
-              onClick={() => void addNew(false)}
+              className={styles.button}
+              disabled={busy}
+              onClick={() => void checkInExisting(owner.contactId, owner.displayName)}
             >
-              Add and check in
+              {`It's ${owner.displayName}`}
             </button>
-          )}
-          <button type="button" className={styles.button} onClick={onClose}>
-            Cancel
-          </button>
+            <button
+              type="button"
+              className={styles.button}
+              disabled={busy}
+              onClick={() => void addNew(true)}
+            >
+              Different person sharing it
+            </button>
+            <button
+              type="button"
+              className={styles.button}
+              onClick={() => {
+                setOwner(null);
+                emailRef.current?.focus();
+              }}
+            >
+              Fix the email
+            </button>
+          </div>
         </div>
-      </div>
-    </div>
+      )}
+
+      {owner && ownerIn && (
+        <div className={styles.question}>
+          <p>{owner.displayName} is already checked in.</p>
+        </div>
+      )}
+    </Dialog>
   );
 }

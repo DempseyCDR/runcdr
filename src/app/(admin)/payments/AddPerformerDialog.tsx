@@ -64,7 +64,17 @@ export default function AddPerformerDialog({
   }
 
   return (
-    <Dialog label="Add a performer" onClose={onClose}>
+    <Dialog
+      heading="Add a performer"
+      onClose={onClose}
+      actions={
+        picked && (
+          <button type="button" className={styles.primaryButton} onClick={() => void add()}>
+            Add
+          </button>
+        )
+      }
+    >
       {picked ? (
         <div className={styles.entry}>
           <div className={`${styles.rowHead} ${styles.wide}`}>
@@ -96,14 +106,6 @@ export default function AddPerformerDialog({
               onChange={(e) => setAmount(e.target.value)}
             />
           </label>
-          <div className={`${styles.buttons} ${styles.wide}`}>
-            <button type="button" className={styles.primaryButton} onClick={() => void add()}>
-              Add
-            </button>
-            <button type="button" className={styles.button} onClick={onClose}>
-              Cancel
-            </button>
-          </div>
           {error && (
             <p role="alert" className={`${styles.error} ${styles.wide}`}>
               {error}
@@ -111,14 +113,7 @@ export default function AddPerformerDialog({
           )}
         </div>
       ) : (
-        <>
-          <PerformerPicker eventId={eventId} onPicked={setPicked} />
-          <div className={styles.buttons}>
-            <button type="button" className={styles.button} onClick={onClose}>
-              Cancel
-            </button>
-          </div>
-        </>
+        <PerformerPicker eventId={eventId} onPicked={setPicked} />
       )}
     </Dialog>
   );

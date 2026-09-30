@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { EventModal } from "@/app/(admin)/_modals/EventModal";
 
@@ -169,16 +169,16 @@ describe("cancelling a dance from the hub", () => {
     expect(screen.queryByRole("button", { name: /cancel this dance/i })).toBeNull();
   });
 
-  // 087 walk-through, second round: one row at the foot of the form, in this order, wrapping on a phone.
-  it("puts cancel, delete, save and close on one row, in that order", () => {
+  // 087 walk-through, second round: one row at the foot of the form. Feature 089 made that row the
+  // dialog's action bar: Close first, the dance's own actions, and Save last — bottom right.
+  it("puts close, cancel, delete and save in the action bar, in that order (089)", () => {
     stub();
     open();
-    const names = [/cancel this dance/i, /delete this dance/i, /^save$/i, /^close$/i];
-    const buttons = names.map((n) => screen.getByRole("button", { name: n }));
-    const rowEl = buttons[0]!.parentElement!;
-    expect(buttons.every((b) => b.parentElement === rowEl)).toBe(true);
-    const order: HTMLElement[] = Array.from(rowEl.querySelectorAll("button"));
-    expect(buttons.map((b) => order.indexOf(b))).toEqual([0, 1, 2, 3]);
-    expect(rowEl.style.flexWrap).toBe("wrap");
+    const bar = within(screen.getByRole("dialog")).getByRole("group", { name: "Actions" });
+    expect(
+      within(bar)
+        .getAllByRole("button")
+        .map((b) => b.textContent),
+    ).toEqual(["Close", "Cancel this dance…", "Delete this dance…", "Save"]);
   });
 });

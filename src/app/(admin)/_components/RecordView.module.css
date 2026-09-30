@@ -29,6 +29,11 @@
   flex-wrap: wrap;
 }
 
+/* In a dialog the dialog is the frame: no second border, no second title. */
+.inDialog {
+  display: grid;
+}
+
 /* Fields/sections stack — never forces horizontal scroll on a narrow screen. */
 .body {
   display: grid;

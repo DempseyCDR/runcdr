@@ -1,7 +1,8 @@
 "use client";
 import { apiFetch } from "@/app/apiFetch";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
+import { DialogActions, useInDialog } from "@/app/_components/Dialog";
 import { PROMO_LINK_TYPES, STYLE_TAGS, type PromoLink } from "@/server/domain/public/promoLinks";
 import styles from "./hub.module.css";
 
@@ -63,6 +64,8 @@ export default function BandRoster({
   onSaved,
   onClose,
 }: Props) {
+  const formId = useId();
+  const inDialog = useInDialog();
   const [name, setName] = useState(initialName ?? "");
   const [bio, setBio] = useState("");
   const [photoUrl, setPhotoUrl] = useState("");
@@ -217,7 +220,7 @@ export default function BandRoster({
   const listed = new Set(roster.map((m) => m.performerId));
 
   return (
-    <form onSubmit={save} className={styles.roster}>
+    <form id={formId} onSubmit={save} className={styles.roster}>
       <label>
         Band name{" "}
         <input value={name} disabled={readOnly} onChange={(e) => setName(e.target.value)} />
@@ -386,15 +389,27 @@ export default function BandRoster({
 
       {error && <p role="alert">{error}</p>}
 
+      {/* Feature 089: in a dialog these join its action bar — Archive before Save, and the bar's Close
+          stands for Cancel. The Save stays this form's submit button through its `form` attribute. */}
       <div className={styles.member}>
-        {!readOnly && <button type="submit">{bandId ? "Save band" : "Create band"}</button>}
-        <button type="button" onClick={onClose}>
-          {readOnly ? "Close" : "Cancel"}
-        </button>
-        {bandId && !readOnly && (
-          <button type="button" onClick={() => void archive(!!archivedAt)}>
-            {archivedAt ? "Restore band" : "Archive band"}
+        {!inDialog && (
+          <button type="button" onClick={onClose}>
+            {readOnly ? "Close" : "Cancel"}
           </button>
+        )}
+        {bandId && !readOnly && (
+          <DialogActions secondary>
+            <button type="button" onClick={() => void archive(!!archivedAt)}>
+              {archivedAt ? "Restore band" : "Archive band"}
+            </button>
+          </DialogActions>
+        )}
+        {!readOnly && (
+          <DialogActions>
+            <button type="submit" form={formId}>
+              {bandId ? "Save band" : "Create band"}
+            </button>
+          </DialogActions>
         )}
       </div>
       {archivedAt && <p>This band is archived.</p>}

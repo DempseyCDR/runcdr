@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "@/app/apiFetch";
 import RecordView from "@/app/(admin)/_components/RecordView";
+import Dialog from "@/app/_components/Dialog";
 import styles from "../contacts.module.css";
 
 export type HeldReason =
@@ -182,71 +183,60 @@ export default function HeldMergeChooser({
     : "Held merge";
 
   return (
-    <div className={styles.backdrop}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={label}
-        className={styles.modalPanel}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") onClose();
-        }}
-      >
-        <RecordView title="Held merge">
-          {!detail ? (
-            <p className={styles.rowMeta}>Loading…</p>
-          ) : (
-            <>
-              <p className={styles.dupName}>
-                Keep {detail.canonical.displayName}, retire {detail.merged.displayName}
+    <Dialog
+      heading={label}
+      onClose={onClose}
+      actions={
+        <button
+          type="button"
+          className={styles.dupButton}
+          disabled={busy}
+          onClick={() => void decline()}
+        >
+          Don&apos;t merge
+        </button>
+      }
+    >
+      <RecordView title={label}>
+        {!detail ? (
+          <p className={styles.rowMeta}>Loading…</p>
+        ) : (
+          <>
+            <p className={styles.dupName}>
+              Keep {detail.canonical.displayName}, retire {detail.merged.displayName}
+            </p>
+            <p className={styles.dupHousehold}>{HOLD_REASON_TEXT[detail.reason]}</p>
+
+            {detail.answered.length > 0 && (
+              <p className={styles.rowMeta}>
+                Already decided: {detail.answered.map((r) => DECIDED_TEXT[r]).join("; ")}.
               </p>
-              <p className={styles.dupHousehold}>{HOLD_REASON_TEXT[detail.reason]}</p>
+            )}
 
-              {detail.answered.length > 0 && (
-                <p className={styles.rowMeta}>
-                  Already decided: {detail.answered.map((r) => DECIDED_TEXT[r]).join("; ")}.
-                </p>
-              )}
+            {message && <p className={styles.warning}>{message}</p>}
 
-              {message && <p className={styles.warning}>{message}</p>}
-
-              {/* FR-006: someone who cannot answer still sees what is being decided — read-only. */}
-              <AnswerPanel
-                detail={detail}
-                busy={busy}
-                readOnly={!detail.canAnswer}
-                onAnswer={answer}
-              />
-              {!detail.canAnswer && (
-                <p className={styles.hint}>
-                  <em>{WAITING_TEXT[detail.answerableBy]}</em>
-                </p>
-              )}
-
-              {/* FR-007: say the safety net exists BEFORE the decision, as the queue row already does. */}
+            {/* FR-006: someone who cannot answer still sees what is being decided — read-only. */}
+            <AnswerPanel
+              detail={detail}
+              busy={busy}
+              readOnly={!detail.canAnswer}
+              onAnswer={answer}
+            />
+            {!detail.canAnswer && (
               <p className={styles.hint}>
-                Whatever is decided, the merge can be undone afterwards from the kept contact&apos;s
-                merge history.
+                <em>{WAITING_TEXT[detail.answerableBy]}</em>
               </p>
-            </>
-          )}
+            )}
 
-          <div className={styles.dupActions}>
-            <button
-              type="button"
-              className={styles.dupButton}
-              disabled={busy}
-              onClick={() => void decline()}
-            >
-              Don&apos;t merge
-            </button>
-            <button type="button" className={styles.dupButton} onClick={onClose}>
-              Close
-            </button>
-          </div>
-        </RecordView>
-      </div>
-    </div>
+            {/* FR-007: say the safety net exists BEFORE the decision, as the queue row already does. */}
+            <p className={styles.hint}>
+              Whatever is decided, the merge can be undone afterwards from the kept contact&apos;s
+              merge history.
+            </p>
+          </>
+        )}
+      </RecordView>
+    </Dialog>
   );
 }
 

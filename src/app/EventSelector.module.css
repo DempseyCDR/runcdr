@@ -1,0 +1,37 @@
+/* Feature 089: the event picker on check-in, the gate, payments and the gate report — its controls were
+   the browser's defaults (19–22px high) until then; each now meets the tap minimum (FR-001). */
+
+.selector {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* A long event name must not widen the page: the label holds to the screen, and the select shrinks within
+   it (a <select> is otherwise as wide as its longest option) — FR-021. */
+.selector label {
+  align-items: center;
+  display: inline-flex;
+  gap: var(--space-1);
+  max-width: 100%;
+}
+
+.selector select,
+.selector input {
+  box-sizing: border-box;
+  flex: 1 1 auto;
+  font-size: 1rem; /* 16px or more stops iOS zooming into the field */
+  max-width: 100%;
+  min-block-size: var(--tap-min);
+  min-width: 0;
+}
+
+/* Its field labels were <small> (13px); on a volunteer page no text is under 16px (FR-022). */
+.selector small {
+  font-size: 1rem;
+}
+
+.none {
+  color: #888;
+}

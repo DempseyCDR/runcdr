@@ -45,15 +45,18 @@ export default function EventConfirm({
 
   return (
     <section aria-label="Event" className={styles.event}>
+      <h1 className={styles.eventHeading}>
+        {event
+          ? // Feature 081: the series first, then the label, the date and the time.
+            [seriesName, event.label, event.eventDate, to12Hour(event.startTime)]
+              .filter(Boolean)
+              .join(" · ")
+          : "No event selected"}
+      </h1>
+      {/* Feature 089 (Rich's Galaxy test, 2026-09-30): the warning and Change share one line under the
+          heading. The date is already in the heading, so the warning no longer repeats it. */}
       <div className={styles.eventLine}>
-        <h1 className={styles.eventHeading}>
-          {event
-            ? // Feature 081: the series first, then the label, the date and the time.
-              [seriesName, event.label, event.eventDate, to12Hour(event.startTime)]
-                .filter(Boolean)
-                .join(" · ")
-            : "No event selected"}
-        </h1>
+        {notToday ? <p className={styles.warning}>Not today</p> : <span />}
         <button
           type="button"
           className={styles.linkButton}
@@ -63,9 +66,6 @@ export default function EventConfirm({
           Change
         </button>
       </div>
-      {notToday && (
-        <p className={styles.warning}>Not today — this event is on {event.eventDate}.</p>
-      )}
       <div hidden={!changing && !!event}>
         <EventSelector
           defaultToMySeries={defaultToMySeries}

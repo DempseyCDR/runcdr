@@ -1,4 +1,5 @@
 "use client";
+import { DialogActions, useInDialog } from "@/app/_components/Dialog";
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/app/apiFetch";
 import ArchiveControl from "@/app/(admin)/ArchiveControl";
@@ -65,6 +66,7 @@ const coord = (typed: string): number | null => (typed.trim() === "" ? null : Nu
  * other (clarification Q1).
  */
 export default function VenueForm({ venue, readOnly = false, onSaved, onClose }: Props) {
+  const inDialog = useInDialog();
   const initial = draftOf(venue);
   const [draft, setDraft] = useState<Draft>(initial);
   const [error, setError] = useState<string | null>(null);
@@ -285,15 +287,21 @@ export default function VenueForm({ venue, readOnly = false, onSaved, onClose }:
       )}
 
       {error && <p role="alert">{error}</p>}
+      {/* Feature 089: in a dialog, Save joins its action bar and the bar's Close stands for Cancel. On the
+          venues page the form stands on its own, with both. */}
       <div>
         {!readOnly && (
-          <button type="button" disabled={saving} onClick={() => void save()}>
-            {venue ? "Save" : "Create"}
+          <DialogActions>
+            <button type="button" disabled={saving} onClick={() => void save()}>
+              {venue ? "Save" : "Create"}
+            </button>
+          </DialogActions>
+        )}
+        {!inDialog && (
+          <button type="button" onClick={onClose}>
+            {readOnly ? "Close" : "Cancel"}
           </button>
         )}
-        <button type="button" onClick={onClose}>
-          {readOnly ? "Close" : "Cancel"}
-        </button>
       </div>
     </div>
   );

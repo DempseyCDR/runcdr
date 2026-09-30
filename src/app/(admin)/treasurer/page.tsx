@@ -4,9 +4,10 @@ import { EventSelector } from "@/app/EventSelector";
 import AttendanceBreakdownView from "@/app/_components/AttendanceBreakdownView";
 import { to12Hour } from "@/app/_components/EventConfirm";
 import type { TreasurerReport } from "@/server/domain/treasurer/reportService";
+import ActionBar from "@/app/_components/ActionBar";
 import styles from "./treasurer.module.css";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
 type Report = Pick<
   TreasurerReport,
@@ -177,7 +178,7 @@ function Expenses({ expenses }: { expenses: Report["expenses"] }) {
             <tr>
               <th>Role</th>
               <th>Name</th>
-              <th>Check #</th>
+              <th className={styles.checkNumber}>Check #</th>
               <th className={styles.amount}>Amount</th>
             </tr>
           </thead>
@@ -289,7 +290,34 @@ function Notes({ report }: { report: Report }) {
 // (in-page state — the event is no longer a `[eventId]` URL param; the old `/treasurer/latest` nav entry is
 // fixed to point here). The selector defaults to the most recent event ≤ today; the report loads on select
 // and reloads when the selected event changes.
+/**
+ * Feature 089 (Rich's iPhone tests, 2026-09-30): Safari on the iPhone lays a printout out at the phone's
+ * width and would not print this report as landscape letter, whatever the stylesheet said. Desktop Safari,
+ * and Chrome on the iPhone, Android and the desktop, all print it properly — so only there is Print held
+ * back. The iPhone's other browsers name themselves (Chrome as CriOS); Safari does not. A PDF that prints
+ * the same everywhere is backlog B67.
+ */
+function isIPhoneSafari(userAgent: string): boolean {
+  return (
+    /iPhone|iPod/.test(userAgent) &&
+    /Version\/[\d.]+.*Safari/.test(userAgent) &&
+    !/CriOS|FxiOS|EdgiOS|OPiOS/.test(userAgent)
+  );
+}
+
+const noSubscription = () => () => {};
+
+/** Whether this browser can print the report — read after hydration, so the server's page always matches. */
+function useCanPrint(): boolean {
+  return useSyncExternalStore(
+    noSubscription,
+    () => !isIPhoneSafari(navigator.userAgent),
+    () => true,
+  );
+}
+
 export default function TreasurerReportPage() {
+  const canPrint = useCanPrint();
   const [eventId, setEventId] = useState("");
   const [report, setReport] = useState<Report | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -328,21 +356,33 @@ export default function TreasurerReportPage() {
         <>
           <article aria-label="Gate report" data-printable-report className={styles.report}>
             <Heading report={report} />
+            {/* Feature 089 (Rich, 2026-09-30): a fixed two-by-two layout that never moves with the data —
+                Receipts beside Expenses, then Deposits beside Notes, the second row starting below the
+                taller of the first; each held to its own half. Written row by row, so a phone shows them
+                in the same order, one under another. */}
             <div className={styles.columns}>
-              <div role="group" aria-label="Receipts and deposits" data-column="left">
-                <Receipts receipts={report.receipts} />
-                <Deposits report={report} />
-              </div>
-              <div role="group" aria-label="Expenses and notes" data-column="right">
-                <Expenses expenses={report.expenses} />
-                <Notes report={report} />
-              </div>
+              <Receipts receipts={report.receipts} />
+              <Expenses expenses={report.expenses} />
+              <Deposits report={report} />
+              <Notes report={report} />
             </div>
           </article>
 
-          <button type="button" onClick={() => window.print()} className={styles.printButton}>
-            Print
-          </button>
+          {/* Feature 089 (FR-016, FR-024): Print is pinned to the bottom of the screen — a phone's own
+              print is buried in a menu. It sits outside the report, so the report's print rules leave it
+              off the paper. On iPhone Safari, which cannot print the report properly, a note instead. */}
+          {canPrint ? (
+            <ActionBar pinned>
+              <button type="button" onClick={() => window.print()}>
+                Print
+              </button>
+            </ActionBar>
+          ) : (
+            <p className={styles.quiet}>
+              Safari on the iPhone cannot print this report properly — print it from Chrome or a
+              computer.
+            </p>
+          )}
         </>
       )}
     </main>

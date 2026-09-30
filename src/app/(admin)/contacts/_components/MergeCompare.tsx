@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/app/apiFetch";
 import RecordView from "@/app/(admin)/_components/RecordView";
+import Dialog from "@/app/_components/Dialog";
 import { formatPhone } from "@/server/domain/contacts/phone";
 import type { DupContact, DupPair, PairPermissions } from "./DuplicatePair";
 import styles from "../contacts.module.css";
@@ -159,134 +160,121 @@ export default function MergeCompare({
   }
 
   return (
-    <div className={styles.backdrop}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Compare ${a.displayName} and ${b.displayName}`}
-        className={styles.modalPanel}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") onClose();
-        }}
-      >
-        {/* `modalPanel` only SIZES the panel — the surface comes from RecordView, the shell the record
-            modal uses. Without it the content sits straight on the backdrop scrim and is unreadable. */}
-        <RecordView title="Are these one person?">
-          {message && <p className={styles.empty}>{message}</p>}
-          <div className={styles.dupSides}>
-            <Column c={a} />
-            <Column c={b} />
-          </div>
+    // Feature 089: the answers (keep one, share an email, not duplicates) stay beside the text that
+    // explains each — they are the choices this dialog asks for, not a form's actions. The bar holds Close.
+    <Dialog heading={`Are ${a.displayName} and ${b.displayName} one person?`} onClose={onClose}>
+      <RecordView title="Are these one person?">
+        {message && <p className={styles.empty}>{message}</p>}
+        <div className={styles.dupSides}>
+          <Column c={a} />
+          <Column c={b} />
+        </div>
 
-          {pair.heldMergeId ? (
-            // Feature 078: merging a held pair again would only stop at the same question. The way forward
-            // is the hold, answered by whoever its question belongs to.
-            <div className={styles.dupActions}>
-              <p className={styles.mergeNote}>
-                Their merge is held, waiting on a decision. It is answered in the held merge, not
-                here.
-              </p>
-              {permissions.seeHolds && (
-                <button
-                  type="button"
-                  className={styles.dupButton}
-                  onClick={() => onOpenHold(pair.heldMergeId!)}
-                >
-                  Open held merge
-                </button>
-              )}
-            </div>
-          ) : permissions.merge ? (
-            <>
-              <p className={styles.mergeNote}>
-                Merging keeps one contact and retires the other. The one you keep inherits every
-                address shown above — active, transitioning or retired — along with the other&apos;s
-                phone, membership and history. It can be undone afterwards from the kept
-                contact&apos;s merge history.
-              </p>
-
-              <div className={styles.dupActions}>
-                <button
-                  type="button"
-                  className={styles.destructiveButton}
-                  onClick={() => void onMerged(a.id, b.id)}
-                >
-                  Keep {a.displayName}, retire {b.displayName}
-                </button>
-                <button
-                  type="button"
-                  className={styles.destructiveButton}
-                  onClick={() => void onMerged(b.id, a.id)}
-                >
-                  Keep {b.displayName}, retire {a.displayName}
-                </button>
-              </div>
-            </>
-          ) : (
-            <p className={styles.mergeNote}>
-              You cannot merge or separate these contacts — that is for the mailing-list manager or
-              an officer who manages duplicates. You can still compare them here.
-            </p>
-          )}
-
-          {/* The two reversible answers. Feature 067 (M-R26): different people, one household address. */}
+        {pair.heldMergeId ? (
+          // Feature 078: merging a held pair again would only stop at the same question. The way forward
+          // is the hold, answered by whoever its question belongs to.
           <div className={styles.dupActions}>
-            {permissions.share && (
-              <>
-                <button
-                  type="button"
-                  className={styles.dupButton}
-                  onClick={() => proposeShare(a, b)}
-                >{`Share ${a.displayName}'s email`}</button>
-                <button
-                  type="button"
-                  className={styles.dupButton}
-                  onClick={() => proposeShare(b, a)}
-                >{`Share ${b.displayName}'s email`}</button>
-              </>
-            )}
-            {permissions.merge && (
-              <button type="button" className={styles.dupButton} onClick={() => void onRejected()}>
-                Not duplicates
+            <p className={styles.mergeNote}>
+              Their merge is held, waiting on a decision. It is answered in the held merge, not
+              here.
+            </p>
+            {permissions.seeHolds && (
+              <button
+                type="button"
+                className={styles.dupButton}
+                onClick={() => onOpenHold(pair.heldMergeId!)}
+              >
+                Open held merge
               </button>
             )}
-            <button type="button" className={styles.dupButton} onClick={onClose}>
-              Cancel
-            </button>
           </div>
+        ) : permissions.merge ? (
+          <>
+            <p className={styles.mergeNote}>
+              Merging keeps one contact and retires the other. The one you keep inherits every
+              address shown above — active, transitioning or retired — along with the other&apos;s
+              phone, membership and history. It can be undone afterwards from the kept
+              contact&apos;s merge history.
+            </p>
 
-          {pending && (
-            <div
-              role="region"
-              aria-label="Shared email confirmation"
-              className={styles.confirmRegion}
-            >
-              <p>
-                {pending.referrerName} will be reached at <strong>{pending.address}</strong> (
-                {pending.ownerName}&apos;s address). They stay separate contacts.
-              </p>
-              {pending.retireAddress && (
-                <p>
-                  This retires {pending.referrerName}&apos;s own address{" "}
-                  <strong>{pending.retireAddress}</strong>.
-                </p>
-              )}
-              <div className={styles.dupActions}>
-                <button
-                  type="button"
-                  className={styles.dupButton}
-                  onClick={() => void confirmShare()}
-                >
-                  Confirm shared email
-                </button>
-                <button type="button" className={styles.dupButton} onClick={() => setPending(null)}>
-                  Cancel
-                </button>
-              </div>
+            <div className={styles.dupActions}>
+              <button
+                type="button"
+                className={styles.destructiveButton}
+                onClick={() => void onMerged(a.id, b.id)}
+              >
+                Keep {a.displayName}, retire {b.displayName}
+              </button>
+              <button
+                type="button"
+                className={styles.destructiveButton}
+                onClick={() => void onMerged(b.id, a.id)}
+              >
+                Keep {b.displayName}, retire {a.displayName}
+              </button>
             </div>
+          </>
+        ) : (
+          <p className={styles.mergeNote}>
+            You cannot merge or separate these contacts — that is for the mailing-list manager or an
+            officer who manages duplicates. You can still compare them here.
+          </p>
+        )}
+
+        {/* The two reversible answers. Feature 067 (M-R26): different people, one household address. */}
+        <div className={styles.dupActions}>
+          {permissions.share && (
+            <>
+              <button
+                type="button"
+                className={styles.dupButton}
+                onClick={() => proposeShare(a, b)}
+              >{`Share ${a.displayName}'s email`}</button>
+              <button
+                type="button"
+                className={styles.dupButton}
+                onClick={() => proposeShare(b, a)}
+              >{`Share ${b.displayName}'s email`}</button>
+            </>
           )}
-        </RecordView>
-      </div>
-    </div>
+          {permissions.merge && (
+            <button type="button" className={styles.dupButton} onClick={() => void onRejected()}>
+              Not duplicates
+            </button>
+          )}
+        </div>
+
+        {pending && (
+          <div
+            role="region"
+            aria-label="Shared email confirmation"
+            className={styles.confirmRegion}
+          >
+            <p>
+              {pending.referrerName} will be reached at <strong>{pending.address}</strong> (
+              {pending.ownerName}&apos;s address). They stay separate contacts.
+            </p>
+            {pending.retireAddress && (
+              <p>
+                This retires {pending.referrerName}&apos;s own address{" "}
+                <strong>{pending.retireAddress}</strong>.
+              </p>
+            )}
+            <div className={styles.dupActions}>
+              <button
+                type="button"
+                className={styles.dupButton}
+                onClick={() => void confirmShare()}
+              >
+                Confirm shared email
+              </button>
+              <button type="button" className={styles.dupButton} onClick={() => setPending(null)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </RecordView>
+    </Dialog>
   );
 }

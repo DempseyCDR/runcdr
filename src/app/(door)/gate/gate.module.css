@@ -31,7 +31,7 @@
 
 .figures dt {
   color: var(--text-muted);
-  font-size: var(--fs-sm);
+  font-size: 1rem;
 }
 
 .figures dd {
@@ -47,13 +47,15 @@
 .fields {
   display: grid;
   gap: var(--space-2);
-  grid-template-columns: 1fr 1fr;
+  /* Feature 089: as many columns as fit, each at least 9rem — no page-specific breakpoint, and it
+     follows enlarged text. */
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
 }
 
 .fields label,
 .field {
   display: grid;
-  font-size: var(--fs-sm);
+  font-size: 1rem;
   gap: 2px;
 }
 
@@ -64,7 +66,7 @@
 .input {
   box-sizing: border-box;
   font-size: 1rem; /* 16px or more stops iOS zooming into the field */
-  min-height: 2.75rem;
+  min-height: var(--tap-min);
   padding: var(--space-1) var(--space-2);
   width: 100%;
 }
@@ -72,7 +74,7 @@
 .hint,
 .quiet {
   color: var(--text-muted);
-  font-size: var(--fs-sm);
+  font-size: 1rem;
   margin: 0;
 }
 
@@ -104,7 +106,7 @@
 }
 
 .note {
-  font-size: var(--fs-sm);
+  font-size: 1rem;
   font-style: italic;
   margin: 0;
 }
@@ -117,8 +119,8 @@
 
 .button,
 .primaryButton {
-  font-size: 0.95rem;
-  min-height: 2.75rem;
+  font-size: 1rem;
+  min-height: var(--tap-min);
   padding: var(--space-1) var(--space-3);
 }
 
@@ -138,13 +140,23 @@
   padding: var(--space-1) var(--space-2) var(--space-1) var(--space-4);
 }
 
-@media (max-width: 22.5rem) {
-  .fields {
-    grid-template-columns: 1fr;
-  }
+/* The counting dialog (FR-010): one row per denomination, then a phone-style keypad.
+   Feature 089 (Rich's iPhone test, 2026-09-30): the keypad ran below the action bar, so counting meant
+   scrolling. The denominations now sit two to a row wherever two fit ($100 $50 / $20 $10 / $5 $1 /
+   Coins) — four rows instead of seven, every row still 48px — and the total loses its margins. */
+.faces {
+  display: grid;
+  gap: var(--space-2);
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
 
-/* The counting dialog (FR-010): one row per denomination, then a phone-style keypad. */
+.countTotal {
+  margin: 0;
+}
+
 .faceRow {
   align-items: center;
   background: none;
@@ -152,13 +164,17 @@
   border-radius: 6px;
   display: grid;
   font-size: 1rem;
-  gap: var(--space-2);
-  grid-template-columns: 4rem 1fr auto;
-  margin-bottom: 4px;
-  min-height: 2.75rem;
+  gap: var(--space-1);
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-height: var(--tap-min);
   padding: 0 var(--space-2);
   text-align: left;
   width: 100%;
+}
+
+/* The count sits in the middle of its row, between the face and what it is worth. */
+.faceRow > :nth-child(2) {
+  text-align: center;
 }
 
 .faceChosen {
@@ -175,5 +191,5 @@
 
 .key {
   font-size: 1.15rem;
-  min-height: 3rem;
+  min-height: var(--tap-min);
 }

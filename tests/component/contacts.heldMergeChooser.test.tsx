@@ -63,8 +63,8 @@ describe("the held-merge chooser", () => {
     stub(() => DETAIL());
     openChooser();
     const dialog = await screen.findByRole("dialog", { name: /held merge/i });
-    expect(within(dialog).getByText(/Robert Jones/)).toBeInTheDocument();
-    expect(within(dialog).getByText(/Rob Jones/)).toBeInTheDocument();
+    expect(dialog).toHaveAccessibleName("Held merge: Robert Jones and Rob Jones");
+    expect(within(dialog).getByText("Keep Robert Jones, retire Rob Jones")).toBeInTheDocument();
     expect(within(dialog).getByText(/can be undone afterwards/i)).toBeInTheDocument();
   });
 
@@ -372,6 +372,6 @@ describe("the super-user panel", () => {
       within(dialog)
         .getAllByRole("button")
         .map((b) => b.textContent),
-    ).toEqual(["Don't merge", "Close"]);
+    ).toEqual(["Close", "Don't merge"]); // 089: the action bar — Close first, the answer last
   });
 });

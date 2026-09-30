@@ -4,6 +4,7 @@ import { apiFetch } from "@/app/apiFetch";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { localToday } from "@/app/localToday";
 import AdminPage from "../_components/AdminPage";
+import Dialog from "@/app/_components/Dialog";
 import { BookingModal } from "../_modals/BookingModal";
 import { EventModal } from "../_modals/EventModal";
 import VenueForm, { type Venue } from "../venues/VenueForm";
@@ -108,39 +109,6 @@ const NEED_REASON = { none: "no contact", archived: "contact archived", merged: 
 const MUSIC = new Set(["lead_musician", "musician"]);
 
 const COLUMNS = ["Date", "Time", "Dance", "Venue", "Caller", "Music", "Sound"];
-
-/** A panel over the page. Every record the row opens appears here — the Booker never navigates away. */
-function Panel({
-  label,
-  onClose,
-  children,
-}: {
-  label: string;
-  onClose: () => void;
-  children: React.ReactNode;
-}) {
-  // A panel that opens on a search box puts the cursor in it, so the Booker can type at once (087
-  // walk-through). Only on opening: a panel's content changing must not steal the cursor back.
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    ref.current?.querySelector<HTMLElement>('input[type="search"]')?.focus();
-  }, []);
-  return (
-    <div className={styles.backdrop} onClick={onClose}>
-      <div
-        ref={ref}
-        role="dialog"
-        aria-modal="true"
-        aria-label={label}
-        className={styles.panel}
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => e.key === "Escape" && onClose()}
-      >
-        {children}
-      </div>
-    </div>
-  );
-}
 
 export default function BookingCentralPage() {
   const [series, setSeries] = useState<Series[]>([]);
@@ -533,8 +501,7 @@ export default function BookingCentralPage() {
       )}
 
       {venueOpen && (
-        <Panel label={venueOpen.name} onClose={() => setVenueOpen(null)}>
-          <h2>{venueOpen.name}</h2>
+        <Dialog heading={venueOpen.name} onClose={() => setVenueOpen(null)}>
           <VenueForm
             venue={venueOpen}
             readOnly={!caps.venueWrite}
@@ -544,17 +511,14 @@ export default function BookingCentralPage() {
             }}
             onClose={() => setVenueOpen(null)}
           />
-        </Panel>
+        </Dialog>
       )}
 
       {lineup && (
-        <Panel
-          label={`${lineup.row.band ?? "Music"} — ${lineup.row.date}`}
+        <Dialog
+          heading={`${lineup.row.band ?? "Music"} — ${lineup.row.date}`}
           onClose={() => setLineup(null)}
         >
-          <h2>
-            {lineup.row.band ?? "Music"} — {lineup.row.date}
-          </h2>
           <Lineup
             eventId={lineup.row.eventId}
             band={lineup.row.band}
@@ -588,14 +552,12 @@ export default function BookingCentralPage() {
               saved();
               void refreshLineup(lineup.row.eventId);
             }}
-            onClose={() => setLineup(null)}
           />
-        </Panel>
+        </Dialog>
       )}
 
       {needingOpen && (
-        <Panel label="Performers needing a contact" onClose={() => setNeedingOpen(false)}>
-          <h2>Performers needing a contact</h2>
+        <Dialog heading="Performers needing a contact" onClose={() => setNeedingOpen(false)}>
           <p>Open one to settle it: link a contact, create one, or archive the performer.</p>
           <ul aria-label="Performers who need a contact" className={styles.results}>
             {needing.map((n) => (
@@ -615,12 +577,12 @@ export default function BookingCentralPage() {
             ))}
           </ul>
           {needing.length === 0 && <p>None — every performer can be reached.</p>}
-        </Panel>
+        </Dialog>
       )}
 
       {performerCard && (
-        <Panel
-          label={performerCard.performer?.displayName ?? "New performer"}
+        <Dialog
+          heading={performerCard.performer?.displayName ?? "New performer"}
           onClose={() => setPerformerCard(null)}
         >
           <PerformerCard
@@ -637,12 +599,14 @@ export default function BookingCentralPage() {
               setBandCard(b);
             }}
           />
-        </Panel>
+        </Dialog>
       )}
 
       {bandCard && (
-        <Panel label={bandCard.id ? bandCard.name : "New band"} onClose={() => setBandCard(null)}>
-          <h2>{bandCard.id ? bandCard.name : "New band"}</h2>
+        <Dialog
+          heading={bandCard.id ? bandCard.name : "New band"}
+          onClose={() => setBandCard(null)}
+        >
           <BandRoster
             bandId={bandCard.id}
             initialName={bandCard.id ? undefined : bandCard.name}
@@ -658,15 +622,14 @@ export default function BookingCentralPage() {
             }}
             onClose={() => setBandCard(null)}
           />
-        </Panel>
+        </Dialog>
       )}
 
       {callerFor && (
-        <Panel
-          label={`Caller or instructor for ${callerFor.date}`}
+        <Dialog
+          heading={`Caller or instructor for ${callerFor.date}`}
           onClose={() => setCallerFor(null)}
         >
-          <h2>Caller or instructor for {callerFor.date}</h2>
           <div className={styles.choices}>
             {(["caller", "instructor"] as const).map((role) => (
               <button
@@ -686,20 +649,19 @@ export default function BookingCentralPage() {
               </button>
             ))}
           </div>
-        </Panel>
+        </Dialog>
       )}
 
       {musicFor && (
         // 087 walk-through: booking music is ONE search, the hub's own — performers and bands together.
         // A band picked is booked in one act; a performer picked opens their booking, already chosen.
-        <Panel
-          label={`Book music for ${musicFor.date}`}
+        <Dialog
+          heading={`Book music for ${musicFor.date}`}
           onClose={() => {
             setMusicFor(null);
             setMusicQ("");
           }}
         >
-          <h2>Book music for {musicFor.date}</h2>
           <HubSearch
             q={musicQ}
             onQ={setMusicQ}
@@ -745,7 +707,7 @@ export default function BookingCentralPage() {
                 : undefined
             }
           />
-        </Panel>
+        </Dialog>
       )}
     </AdminPage>
   );

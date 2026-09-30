@@ -1,14 +1,16 @@
 /* Feature 082 (FR-035, research R18, R19): the gate report, laid out as the paper one — a two-line
-   heading, then receipts and deposits on the left, expenses and notes on the right. On a laptop and in
-   print the two columns sit side by side; on a phone they stack. Printed, only the report region prints,
-   on landscape letter, black on white, with no section split across two sheets (SC-007). Follows the
-   printable calendar (feature 058). */
+   heading, then Receipts beside Expenses, then Deposits beside Notes (feature 089, Rich 2026-09-30: a
+   fixed two-by-two layout that never moves with the data; each is held to its own half). Phone first:
+   on a phone the four stack in that order; the columns begin at the second named width,
+   48rem, and in print always. The text no longer shrinks on a phone (FR-022). Printed, only the report
+   region prints, on landscape letter, black on white, with no section split across two sheets
+   (SC-007). Follows the printable calendar (feature 058). */
 
 .page {
   box-sizing: border-box;
   margin: 0 auto;
   max-width: 64rem;
-  padding: var(--space-3) var(--space-4) var(--space-5);
+  padding: var(--space-2) var(--space-3) var(--space-4);
 }
 
 .heading {
@@ -30,8 +32,8 @@
 
 .columns {
   display: grid;
-  gap: var(--space-4);
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-2);
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .report h2 {
@@ -44,15 +46,19 @@
   margin: var(--space-3) 0 var(--space-1);
 }
 
+/* On a phone a wide table scrolls inside its own frame; the page never scrolls sideways (FR-021). */
 .table {
   border-collapse: collapse;
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
   width: 100%;
 }
 
 .table th,
 .table td {
   border-bottom: 1px solid var(--hairline);
-  padding: 4px var(--space-2);
+  padding: 2px var(--space-1);
   text-align: left;
 }
 
@@ -63,7 +69,30 @@
 
 .table .qty {
   text-align: right;
-  width: 2.5rem;
+  width: 6%;
+}
+
+/* The figures' columns as shares of the table, not fixed lengths: with a fixed table layout the name
+   column takes what is left and wraps within it, so a table can never be wider than its half of the
+   page — at any width a browser lays the page out at, on any device (Rich, 2026-09-30). */
+/* 17% of a half-page on landscape letter holds "$1,234.00" at 10pt on one line. */
+.table th.amount {
+  width: 17%;
+}
+
+.table .checkNumber {
+  width: 15%;
+}
+
+.table th,
+.table td {
+  overflow-wrap: anywhere;
+}
+
+/* An amount is read as one figure: it never breaks across lines (Rich, 2026-09-30). */
+.table .amount {
+  overflow-wrap: normal;
+  white-space: nowrap;
 }
 
 .table tfoot th {
@@ -96,7 +125,7 @@
 
 .list {
   margin: 0;
-  padding-left: var(--space-4);
+  padding-left: var(--space-3);
 }
 
 .eveningNote {
@@ -107,15 +136,71 @@
   color: var(--text-muted);
 }
 
-.printButton {
-  font-size: 0.95rem;
-  margin-top: var(--space-3);
-  min-height: 2.75rem;
-  padding: var(--space-1) var(--space-3);
+@media (min-width: 48rem) {
+  .page {
+    padding: var(--space-3) var(--space-4) var(--space-5);
+  }
+
+  .columns {
+    gap: var(--space-4);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .table {
+    display: table;
+    overflow-x: visible;
+    table-layout: fixed; /* never wider than its half of the page, whatever the names */
+  }
+
+  .table th,
+  .table td {
+    padding: 4px var(--space-2);
+  }
+
+  .list {
+    padding-left: var(--space-4);
+  }
 }
 
 /* ── Print: the report alone, landscape letter, black on white. ── */
 @media print {
+  /* The printed page is governed by US Letter, landscape — never by the screen it was printed from
+     (Rich, 2026-09-30). None of the phone or desktop rules above decide it: the layout is restated
+     here in full, sized in paper units and in shares of the page. Receipts beside Expenses, then
+     Deposits beside Notes, each held to its own half; the second row starts below the taller of the
+     first, whatever the evening's data. */
+  .columns {
+    gap: 0.25in;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .table {
+    display: table;
+    max-width: none;
+    overflow-x: visible;
+    table-layout: fixed;
+    width: 100%;
+  }
+
+  .table th,
+  .table td {
+    padding: 2pt 4pt;
+  }
+
+  .report h2 {
+    font-size: 12pt;
+    margin: 10pt 0 3pt;
+  }
+
+  .report h3 {
+    font-size: 10pt;
+    margin: 8pt 0 2pt;
+  }
+
+  .list {
+    padding-left: 12pt;
+  }
+
   @page {
     size: letter landscape;
     margin: 0.4in;
@@ -164,35 +249,5 @@
 
   .table td {
     border-bottom-color: #999;
-  }
-}
-
-/* Feature 082 (FR-037, US7 — nice to have): the report on a phone held sideways, 844 × 390 and narrower.
-   The columns stack; smaller type; a table too wide for the screen scrolls within itself, so the page
-   never scrolls sideways. Screen only — print keeps the landscape-letter rules above. */
-@media screen and (max-width: 52.75rem) {
-  .page {
-    font-size: 0.875rem;
-    padding: var(--space-2) var(--space-3) var(--space-4);
-  }
-
-  .columns {
-    gap: var(--space-2);
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .table {
-    display: block;
-    max-width: 100%;
-    overflow-x: auto;
-  }
-
-  .table th,
-  .table td {
-    padding: 2px var(--space-1);
-  }
-
-  .list {
-    padding-left: var(--space-3);
   }
 }

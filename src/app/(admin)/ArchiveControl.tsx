@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { DialogActions } from "@/app/_components/Dialog";
 import { apiFetch } from "@/app/apiFetch";
 
 type Props = {
@@ -46,9 +47,11 @@ export default function ArchiveControl({ base, what, archived, onChanged }: Prop
     return (
       <div>
         <span>Archived.</span>{" "}
-        <button type="button" disabled={busy} onClick={() => void send("restore")}>
-          Restore
-        </button>
+        <DialogActions secondary>
+          <button type="button" disabled={busy} onClick={() => void send("restore")}>
+            Restore
+          </button>
+        </DialogActions>
         {error && <p role="alert">{error}</p>}
       </div>
     );
@@ -67,9 +70,12 @@ export default function ArchiveControl({ base, what, archived, onChanged }: Prop
           </button>
         </div>
       ) : (
-        <button type="button" disabled={busy} onClick={() => void send("archive")}>
-          Archive
-        </button>
+        // Feature 089: in a dialog, Archive joins the action bar, before its Save.
+        <DialogActions secondary>
+          <button type="button" disabled={busy} onClick={() => void send("archive")}>
+            Archive
+          </button>
+        </DialogActions>
       )}
       {error && <p role="alert">{error}</p>}
     </div>

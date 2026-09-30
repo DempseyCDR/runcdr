@@ -40,7 +40,20 @@ export default function SubstituteDialog({
   }
 
   return (
-    <Dialog label="Substitute a performer" onClose={onClose}>
+    <Dialog
+      heading="Substitute a performer"
+      onClose={onClose}
+      actions={
+        <button
+          type="button"
+          className={styles.primaryButton}
+          disabled={!slot || !picked}
+          onClick={() => void substitute()}
+        >
+          Substitute
+        </button>
+      }
+    >
       <label className={styles.entry}>
         <span className={styles.wide}>Booking to replace</span>
         <select
@@ -71,19 +84,6 @@ export default function SubstituteDialog({
       ) : (
         <PerformerPicker eventId={eventId} onPicked={setPicked} />
       )}
-      <div className={styles.buttons}>
-        <button
-          type="button"
-          className={styles.primaryButton}
-          disabled={!slot || !picked}
-          onClick={() => void substitute()}
-        >
-          Substitute
-        </button>
-        <button type="button" className={styles.button} onClick={onClose}>
-          Cancel
-        </button>
-      </div>
       {error && (
         <p role="alert" className={styles.error}>
           {error}

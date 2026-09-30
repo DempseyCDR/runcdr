@@ -31,7 +31,20 @@ export default function VoidDialog({
   }
 
   return (
-    <Dialog label="Void check" onClose={onClose}>
+    <Dialog
+      heading="Void check"
+      onClose={onClose}
+      actions={
+        <button
+          type="button"
+          className={styles.primaryButton}
+          disabled={!reason.trim()}
+          onClick={() => void voidCheck()}
+        >
+          Void check
+        </button>
+      }
+    >
       <p>{`Void check #${payment.checkNumber} to ${payment.payee}?`}</p>
       <ul className={styles.picks}>
         {payment.lines.map((l) => (
@@ -49,19 +62,6 @@ export default function VoidDialog({
           onChange={(e) => setReason(e.target.value)}
         />
       </label>
-      <div className={styles.buttons}>
-        <button
-          type="button"
-          className={styles.primaryButton}
-          disabled={!reason.trim()}
-          onClick={() => void voidCheck()}
-        >
-          Void check
-        </button>
-        <button type="button" className={styles.button} onClick={onClose}>
-          Cancel
-        </button>
-      </div>
       {error && (
         <p role="alert" className={styles.error}>
           {error}

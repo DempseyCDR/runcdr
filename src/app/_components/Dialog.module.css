@@ -1,28 +1,101 @@
-/* Feature 081, shared by 082: a backdrop and a panel that scrolls within a phone's viewport. */
+/* Feature 089 (contracts/dialog.md, research R10): the one dialog. On a phone it IS the screen; from 40rem
+   it sits centred over the page. Either way it is a column — heading, a body that alone scrolls, and the
+   action bar pinned at the foot. */
 
 .backdrop {
-  background: rgba(0, 0, 0, 0.45);
+  background: var(--surface, #fff);
   inset: 0;
-  overflow-y: auto;
-  padding: var(--space-2);
   position: fixed;
   z-index: 50;
 }
 
 .panel {
+  /* No text under 16px in any dialog (FR-022): the small-print size the pages use is full size here. */
+  --fs-sm: 1rem;
+
   background: var(--surface, #fff);
-  border-radius: 8px;
   box-sizing: border-box;
-  display: grid;
-  gap: var(--space-2);
-  margin: 0 auto;
-  max-height: calc(100dvh - 2 * var(--space-2));
-  max-width: 40rem;
-  overflow-y: auto;
-  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  font-size: 1rem;
+  height: 100dvh;
 }
 
 .heading {
   font-size: 1.15rem;
   margin: 0;
+  padding: var(--space-3) var(--space-4) var(--space-2);
+}
+
+.body {
+  align-content: start;
+  display: grid;
+  flex: 1 1 auto;
+  gap: var(--space-2);
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 var(--space-4) var(--space-3);
+}
+
+/* Every dialog's controls meet the tap minimum and the 16px text floor, however the page that owns the
+   body styles it (FR-001, FR-022). `:where()` keeps this a floor: a body's own rule may still make a
+   control larger. */
+.body
+  :where(button, select, textarea, input:not([type="checkbox"], [type="radio"], [type="hidden"])) {
+  box-sizing: border-box;
+  font-size: 1rem;
+  min-block-size: var(--tap-min);
+  min-inline-size: var(--tap-min);
+}
+
+/* Small print is not small in a dialog: no text under 16px (FR-022). */
+.body :where(small) {
+  font-size: inherit;
+}
+
+.body :where(label:has(> input[type="checkbox"]), label:has(> input[type="radio"])) {
+  align-items: center;
+  display: inline-flex;
+  gap: var(--space-2);
+  min-block-size: var(--tap-min);
+}
+
+.foot {
+  border-block-start: 1px solid var(--hairline);
+  padding: var(--space-2) var(--space-4) max(var(--space-2), env(safe-area-inset-bottom));
+}
+
+.message {
+  margin-block-end: var(--space-2);
+}
+
+.message :where(p) {
+  margin: 0;
+}
+
+.slot {
+  display: contents; /* buttons from <DialogActions> join the bar's row as if placed there directly */
+}
+
+.question {
+  font-weight: 600;
+}
+
+@media (min-width: 40rem) {
+  .backdrop {
+    background: rgba(0, 0, 0, 0.45);
+    box-sizing: border-box;
+    display: grid;
+    padding: var(--space-4);
+    place-items: center;
+  }
+
+  .panel {
+    border-radius: 8px;
+    height: auto;
+    max-height: calc(100dvh - 2 * var(--space-4));
+    max-width: 40rem;
+    width: 100%;
+  }
 }
