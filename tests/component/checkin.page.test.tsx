@@ -94,8 +94,36 @@ async function searchFor(user: ReturnType<typeof userEvent.setup>, text: string)
  * Feature 079, User Story 1 (FR-001–FR-012): the check-in page, rebuilt for a phone. Everything Meg needs for
  * the common dancer sits in one compact region above the results.
  */
+// Feature 089 (Rich's Galaxy test, 2026-09-30): typing a name brings the search box to the top of the
+// screen, so the results beneath it are not hidden by the phone's keyboard.
+describe("the check-in search box on a phone (089)", () => {
+  it("scrolls the search box to the top when a name is typed", async () => {
+    stub();
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll; // jsdom has none
+    try {
+      const user = userEvent.setup();
+      render(<CheckinPage />);
+      const box = await searchBox();
+      await user.type(box, "d");
+      expect(scroll).toHaveBeenCalledWith({ block: "start" });
+      expect(scroll.mock.contexts.at(-1)).toBe(box);
+      // With one result the page was too short to scroll that far (Rich's iPhone, 2026-09-30): while a
+      // name is typed, the part from the search box down is made at least a screen tall.
+      expect(box.parentElement?.className).toMatch(/searching/);
+      await user.clear(box);
+      expect(box.parentElement?.className).not.toMatch(/searching/);
+    } finally {
+      // @ts-expect-error -- put jsdom back as it was: it has no scrollIntoView
+      delete Element.prototype.scrollIntoView;
+    }
+  });
+});
+
 describe("the check-in page (079)", () => {
-  it("lays out the event, search, extras, anonymous check-in and the two dialogs above the results", async () => {
+  // Feature 089 (Rich's Galaxy test, 2026-09-30): the buttons moved below the results, so what is typed
+  // and what it finds stay together above the phone's keyboard.
+  it("lays out the event, search, extras and the results, then anonymous check-in and the two dialogs", async () => {
     stub();
     const user = userEvent.setup();
     render(<CheckinPage />);
@@ -107,10 +135,10 @@ describe("the check-in page (079)", () => {
       screen.getByRole("region", { name: /event/i }),
       box,
       extras(),
+      results,
       screen.getByRole("button", { name: /check in anonymously/i }),
       screen.getByRole("button", { name: /add contact/i }),
       screen.getByRole("button", { name: /show checked in/i }),
-      results,
     ];
     for (let i = 1; i < order.length; i++) {
       expect(

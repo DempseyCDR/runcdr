@@ -18,12 +18,12 @@
 
 .label {
   color: var(--text-muted);
-  font-size: var(--fs-sm);
+  font-size: 1rem;
 }
 
 .warning {
   color: #a15c00;
-  font-size: var(--fs-sm);
+  font-size: 1rem;
   margin-top: var(--space-2);
 }
 

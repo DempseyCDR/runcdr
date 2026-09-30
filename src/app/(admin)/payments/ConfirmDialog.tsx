@@ -54,42 +54,47 @@ export default function ConfirmDialog({
     const canAdd =
       !hooks.noAdd && !d.voided && d.sameEvent && body.lines?.length === 1 && line !== undefined;
     return (
-      <Dialog label="Check number already used" onClose={onClose}>
+      <Dialog
+        heading="Check number already used"
+        onClose={onClose}
+        actions={
+          <>
+            <button
+              type="button"
+              className={styles.button}
+              onClick={() => {
+                onClose();
+                hooks.focusNumber?.();
+              }}
+            >
+              Change the number
+            </button>
+            {canAdd && (
+              <button
+                type="button"
+                className={styles.primaryButton}
+                disabled={busy}
+                onClick={() =>
+                  void finish(
+                    send(`/api/performer-payments/${d.paymentId}/lines`, "POST", {
+                      eventId: body.eventId,
+                      bookingId: line.bookingId,
+                      amount: line.amount,
+                    }),
+                    body,
+                  )
+                }
+              >
+                {`Add this booking to check #${body.checkNumber}`}
+              </button>
+            )}
+          </>
+        }
+      >
         <p>{refusal.message}</p>
         <p className={styles.explain}>
           {`From a duplicate check book? Add a letter, e.g. ${body.checkNumber ?? ""}A.`}
         </p>
-        <div className={styles.buttons}>
-          {canAdd && (
-            <button
-              type="button"
-              className={styles.primaryButton}
-              disabled={busy}
-              onClick={() =>
-                void finish(
-                  send(`/api/performer-payments/${d.paymentId}/lines`, "POST", {
-                    eventId: body.eventId,
-                    bookingId: line.bookingId,
-                    amount: line.amount,
-                  }),
-                  body,
-                )
-              }
-            >
-              {`Add this booking to check #${body.checkNumber}`}
-            </button>
-          )}
-          <button
-            type="button"
-            className={styles.button}
-            onClick={() => {
-              onClose();
-              hooks.focusNumber?.();
-            }}
-          >
-            Change the number
-          </button>
-        </div>
         {error && (
           <p role="alert" className={styles.error}>
             {error}
@@ -100,9 +105,10 @@ export default function ConfirmDialog({
   }
 
   return (
-    <Dialog label="Pay again?" onClose={onClose}>
-      <p>{`${refusal.message} Pay again?`}</p>
-      <div className={styles.buttons}>
+    <Dialog
+      heading="Pay again?"
+      onClose={onClose}
+      actions={
         <button
           type="button"
           className={styles.primaryButton}
@@ -117,10 +123,9 @@ export default function ConfirmDialog({
         >
           Pay again
         </button>
-        <button type="button" className={styles.button} onClick={onClose}>
-          Cancel
-        </button>
-      </div>
+      }
+    >
+      <p>{`${refusal.message} Pay again?`}</p>
       {error && (
         <p role="alert" className={styles.error}>
           {error}

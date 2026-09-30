@@ -271,7 +271,20 @@ export default function SaleOrCheckDialog({
   }
 
   return (
-    <Dialog label={editing ? "Correct a sale" : "Add a sale"} onClose={onClose}>
+    <Dialog
+      heading={editing ? "Correct a sale" : "Add a sale"}
+      onClose={onClose}
+      actions={
+        <button
+          type="button"
+          className={styles.primaryButton}
+          disabled={saving}
+          onClick={() => void record()}
+        >
+          Record
+        </button>
+      }
+    >
       <fieldset className={styles.methods}>
         <legend className={styles.legend}>Paid by</legend>
         {(["cash", "check", "card"] as const).map((m) => (
@@ -480,19 +493,6 @@ export default function SaleOrCheckDialog({
           {error}
         </p>
       )}
-      <div className={styles.buttons}>
-        <button
-          type="button"
-          className={styles.primaryButton}
-          disabled={saving}
-          onClick={() => void record()}
-        >
-          Record
-        </button>
-        <button type="button" className={styles.button} onClick={onClose}>
-          Cancel
-        </button>
-      </div>
     </Dialog>
   );
 }

@@ -77,7 +77,7 @@ describe("booking music — one search box", () => {
     await userEvent.type(within(finder).getByRole("searchbox"), "Ann");
     await userEvent.click(await within(finder).findByRole("button", { name: "Ann Fiddle" }));
 
-    const booking = await screen.findByRole("dialog", { name: /booking/i });
+    const booking = await screen.findByRole("dialog", { name: /^(booking —|book an? )/i });
     expect(within(booking).getByRole("heading")).toHaveTextContent(
       "Book a musician for 2026-10-08",
     );
@@ -98,7 +98,7 @@ describe("booking music — one search box", () => {
       await within(finder).findByRole("button", { name: /new performer “zed quill”/i }),
     );
 
-    const booking = await screen.findByRole("dialog", { name: /booking/i });
+    const booking = await screen.findByRole("dialog", { name: /^(booking —|book an? )/i });
     expect(within(booking).getByRole("searchbox", { name: /find a performer/i })).toHaveValue(
       "Zed Quill",
     );
@@ -178,14 +178,16 @@ describe("a band's lineup, member by member", () => {
     const lineup = await screen.findByRole("dialog", { name: /the trio/i });
     await userEvent.click(within(lineup).getByRole("button", { name: "Bo Piano" }));
 
-    const booking = await screen.findByRole("dialog", { name: /booking/i });
+    const booking = await screen.findByRole("dialog", { name: /^(booking —|book an? )/i });
     const pay = within(booking).getByLabelText(/^pay/i);
     await userEvent.clear(pay);
     await userEvent.type(pay, "120");
     const readsBefore = calls.filter((c) => c.url === "/api/events/e1/bookings").length;
     await userEvent.click(within(booking).getByRole("button", { name: /^save$/i }));
 
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: /booking/i })).toBeNull());
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: /^(booking —|book an? )/i })).toBeNull(),
+    );
     expect(screen.getByRole("dialog", { name: /the trio/i })).toBeInTheDocument();
     await waitFor(() =>
       expect(calls.filter((c) => c.url === "/api/events/e1/bookings").length).toBeGreaterThan(
@@ -203,7 +205,7 @@ describe("a band's lineup, member by member", () => {
     await userEvent.click((await rowFor("Waltz night")).getByRole("button", { name: "The Trio" }));
     const lineup = await screen.findByRole("dialog", { name: /the trio/i });
     await userEvent.click(within(lineup).getByRole("button", { name: "Bo Piano" }));
-    const booking = await screen.findByRole("dialog", { name: /booking/i });
+    const booking = await screen.findByRole("dialog", { name: /^(booking —|book an? )/i });
     await userEvent.click(within(booking).getByRole("button", { name: /^close$/i }));
 
     expect(screen.getByRole("dialog", { name: /the trio/i })).toBeInTheDocument();

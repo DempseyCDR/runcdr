@@ -46,7 +46,7 @@ export default function EarlierBookingDialog({
   }, [performer, eventId]);
 
   return (
-    <Dialog label="Pay an earlier booking" onClose={onClose}>
+    <Dialog heading="Pay an earlier booking" onClose={onClose}>
       {performer ? (
         <>
           <div className={styles.rowHead}>
@@ -92,11 +92,6 @@ export default function EarlierBookingDialog({
       ) : (
         <PerformerPicker eventId={eventId} onPicked={setPerformer} forPaying />
       )}
-      <div className={styles.buttons}>
-        <button type="button" className={styles.button} onClick={onClose}>
-          Cancel
-        </button>
-      </div>
     </Dialog>
   );
 }

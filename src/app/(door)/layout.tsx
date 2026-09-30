@@ -1,4 +1,12 @@
+import type { Viewport } from "next";
 import { requireStaff } from "@/server/auth/currentStaff";
+
+/**
+ * Feature 089 (research R8): on Android the page shrinks when the keyboard opens, so a pinned action bar
+ * rises above the keyboard instead of hiding under it; on an iPhone the page runs under the home
+ * indicator, so the bar can pad itself clear of it. The public site keeps the default.
+ */
+export const viewport: Viewport = { interactiveWidget: "resizes-content", viewportFit: "cover" };
 
 /**
  * Protects /checkin and /gate (feature 015, FR-004).

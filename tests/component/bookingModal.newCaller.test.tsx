@@ -109,7 +109,8 @@ describe("BookingModal — a caller new to the club", () => {
     const save = screen.getByRole("button", { name: /^save$/i });
     await userEvent.click(save);
 
-    const actions = save.parentElement!;
-    expect(within(actions).getByRole("alert")).toHaveTextContent(/choose a performer/i);
+    // Feature 089: Save is in the dialog's pinned action bar; the reason sits just above it.
+    const foot = save.closest('[role="group"]')!.parentElement!;
+    expect(within(foot).getByRole("alert")).toHaveTextContent(/choose a performer/i);
   });
 });

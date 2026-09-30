@@ -8,6 +8,9 @@
 .search {
   composes: touchTarget from "../_components/AdminPage.module.css";
   inline-size: 100%;
+  scroll-margin-top: var(
+    --space-2
+  ); /* 089: where typing scrolls it to — the top, clear of the edge */
   padding: var(--space-3);
   font: inherit;
   color: var(--text);
@@ -209,25 +212,6 @@
   flex-wrap: wrap;
   gap: var(--space-2);
   align-items: center;
-}
-
-/* Feature 063 (FR-020): the record editor as a modal overlay in front of the results lists. */
-.backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding: var(--space-4);
-  overflow-y: auto;
-  background: rgba(0, 0, 0, 0.45);
-}
-
-.modalPanel {
-  inline-size: 100%;
-  max-inline-size: 34rem;
-  margin-block: var(--space-5);
 }
 
 /* Feature 063 (FR-018): a labelled editable field — visible label above its control. */
@@ -535,4 +519,11 @@
   border: 1px solid var(--hairline);
   border-radius: 8px;
   background: var(--surface);
+}
+
+/* Feature 089: while a name is typed, the search box and everything below it are at least a screen
+   tall, so the search box can scroll to the top even when little is found (an iPhone's keyboard lies
+   over the page; it does not shrink it). */
+.searching {
+  min-height: 100dvh;
 }

@@ -1,4 +1,5 @@
 "use client";
+import Dialog from "@/app/_components/Dialog";
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/app/apiFetch";
 import ContactName from "@/app/_components/ContactName";
@@ -50,23 +51,8 @@ export default function CheckedInDialog({
   }, [load]);
 
   return (
-    <div className={styles.backdrop}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Checked in"
-        className={styles.panel}
-        onKeyDown={(e) => {
-          if (e.key === "Escape" && !editing) onClose();
-        }}
-      >
-        <div className={styles.eventLine}>
-          <h2 className={styles.dialogHeading}>Checked in</h2>
-          <button type="button" className={styles.button} onClick={onClose}>
-            Close
-          </button>
-        </div>
-
+    <>
+      <Dialog heading="Checked in" onClose={onClose}>
         {breakdown && <AttendanceBreakdownView breakdown={breakdown} />}
 
         <div className={styles.choices} role="group" aria-label="Sort by">
@@ -111,8 +97,9 @@ export default function CheckedInDialog({
             </li>
           ))}
         </ul>
-      </div>
+      </Dialog>
 
+      {/* The correction opens over this list; the dialog stack gives it Escape, Tab and Back (089). */}
       {editing && (
         <CorrectionModal
           attendee={editing}
@@ -128,6 +115,6 @@ export default function CheckedInDialog({
           }}
         />
       )}
-    </div>
+    </>
   );
 }

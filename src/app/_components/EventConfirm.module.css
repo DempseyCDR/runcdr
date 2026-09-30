@@ -2,14 +2,18 @@
 
 .event {
   display: grid;
-  gap: var(--space-1);
 }
 
+/* The warning at the left, Change at the right. The line is as tall as Change's 48px target; its
+   negative top margin tucks that target's empty upper half under the heading, so the line sits close
+   to it (Rich, 2026-09-30). */
 .eventLine {
-  align-items: baseline;
+  align-items: center;
   display: flex;
-  gap: var(--space-2);
+  flex-wrap: wrap; /* 089: with enlarged text, Change drops below the warning rather than off the screen */
+  gap: 0 var(--space-2);
   justify-content: space-between;
+  margin-top: calc(-1 * var(--space-2));
 }
 
 .eventHeading {
@@ -20,7 +24,7 @@
 
 .warning {
   color: #a15c00;
-  font-size: var(--fs-sm);
+  font-size: 1rem;
   margin: 0;
 }
 
@@ -30,6 +34,8 @@
   color: inherit;
   cursor: pointer;
   font: inherit;
+  min-block-size: var(--tap-min);
+  min-inline-size: var(--tap-min);
   padding: var(--space-1);
   text-decoration: underline;
   white-space: nowrap;

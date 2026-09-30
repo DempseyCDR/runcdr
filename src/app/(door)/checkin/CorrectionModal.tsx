@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/app/apiFetch";
-import styles from "./checkin.module.css";
+import Dialog from "@/app/_components/Dialog";
 
 /** One check-in as the checked-in list shows it (contract §5). */
 export type Attendee = {
@@ -109,9 +109,19 @@ export default function CorrectionModal({
   const name = attendee.displayName ?? "unmatched";
 
   return (
-    <div className={styles.backdrop}>
-      <div role="dialog" aria-modal="true" aria-label="Correct attendance" className={styles.panel}>
-        <h3>Correct: {name}</h3>
+    <Dialog
+      heading={`Correct attendance — ${name}`}
+      onClose={onClose}
+      actions={
+        <button
+          type="button"
+          onClick={() => void call(`/api/attendance/${attendee.id}`, { method: "DELETE" }, true)}
+        >
+          Delete attendance
+        </button>
+      }
+    >
+      <div>
         {error && (
           <p role="alert" style={{ color: "#b00020" }}>
             {error}
@@ -120,7 +130,7 @@ export default function CorrectionModal({
         {note && <p style={{ color: "#2e7d32" }}>{note}</p>}
 
         <div style={{ display: "grid", gap: 8 }}>
-          <div>
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
             <label>
               Children{" "}
               <input
@@ -148,10 +158,10 @@ export default function CorrectionModal({
             Open-band musician
           </label>
 
-          <div>
-            Comp: <button onClick={() => void doorCount("comp", 1)}>Comp +1</button>{" "}
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+            Comp: <button onClick={() => void doorCount("comp", 1)}>Comp +1</button>
             <button onClick={() => void doorCount("comp", -1)}>Comp -1</button>
-            {"  "}Gift: <button onClick={() => void doorCount("gift", 1)}>Gift +1</button>{" "}
+            Gift: <button onClick={() => void doorCount("gift", 1)}>Gift +1</button>
             <button onClick={() => void doorCount("gift", -1)}>Gift -1</button>
           </div>
 
@@ -185,6 +195,7 @@ export default function CorrectionModal({
               <label>
                 Reassign to{" "}
                 <input
+                  type="search"
                   aria-label="Reassign to"
                   value={reassignQ}
                   onChange={(e) => void reassignSearch(e.target.value)}
@@ -201,19 +212,8 @@ export default function CorrectionModal({
               </ul>
             </div>
           )}
-
-          <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-            <button
-              onClick={() =>
-                void call(`/api/attendance/${attendee.id}`, { method: "DELETE" }, true)
-              }
-            >
-              Delete attendance
-            </button>
-            <button onClick={onClose}>Close</button>
-          </div>
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 }

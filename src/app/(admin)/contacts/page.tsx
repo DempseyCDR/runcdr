@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import AdminPage from "@/app/(admin)/_components/AdminPage";
 import TriageList from "@/app/(admin)/_components/TriageList";
 import RecordView from "@/app/(admin)/_components/RecordView";
+import Dialog, { DialogActions } from "@/app/_components/Dialog";
 import EmailEditor, { type EmailRow } from "./_components/EmailEditor";
 import MessageRecipient, { type MessageRecipientRow } from "./_components/MessageRecipient";
 import MembershipAccount, { type MembershipBlock } from "./_components/MembershipAccount";
@@ -168,6 +169,15 @@ export default function ContactsPage() {
   /** Feature 086 (FR-004): a contact was named in the address and could not be opened. */
   const [arrivalError, setArrivalError] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+
+  // Feature 089 (as on check-in): as a name is typed, bring the search box to the top so what it finds
+  // is not hidden by the phone's keyboard. After the render, so the room to scroll into (`.searching`)
+  // is already there. (jsdom has no scrollIntoView.)
+  const typing = q !== "";
+  useEffect(() => {
+    const box = searchRef.current;
+    if (typing && box && "scrollIntoView" in box) box.scrollIntoView({ block: "start" });
+  }, [typing, q]);
   // Feature 063: the opened record editor. `eOverride === ""` means Automatic (no custom name).
   const [record, setRecord] = useState<EditorRecord | null>(null);
   const [eFirst, setEFirst] = useState("");
@@ -534,549 +544,527 @@ export default function ContactsPage() {
 
   return (
     <AdminPage title="Contacts">
-      {/* Launcher: search + a row of task buttons with live counts. Nothing else until Mel chooses. */}
-      <section className={styles.section}>
-        <input
-          ref={searchRef}
-          className={styles.search}
-          placeholder="Search by name…"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
-        {arrivalError && <p role="status">{arrivalError}</p>}
-        <div className={styles.taskRow}>
-          <button type="button" className={styles.button} onClick={() => setShowCreate(true)}>
-            Add contact
-          </button>
-          <button type="button" className={styles.taskButton} onClick={openReviewQueue}>
-            Review queue ({counts.needsReview})
-          </button>
-          <button
-            type="button"
-            className={styles.taskButton}
-            onClick={() => {
-              setShowRejected(false);
-              void openDuplicates(false);
-            }}
-          >
-            Review duplicates ({counts.duplicates})
-          </button>
-          {/* Feature 065: compact toggle to include archived contacts in the search results. */}
-          <button
-            type="button"
-            className={styles.taskButton}
-            aria-pressed={includeArchived}
-            onClick={() => setIncludeArchived((v) => !v)}
-          >
-            + archived
-          </button>
-        </div>
-      </section>
-
-      {/* Single-contact list — the search results or the needs-review queue. Rows open the editor. */}
-      {showList && (
+      {/* Feature 089 (as on check-in, Rich 2026-09-30): from the search box down. While a name is typed this
+          part is at least a screen tall, so the search box can always be scrolled to the top — with one or
+          two matches the page was too short, and they sat under the phone's keyboard. */}
+      <div className={q ? styles.searching : undefined}>
+        {/* Launcher: search + a row of task buttons with live counts. Nothing else until Mel chooses. */}
         <section className={styles.section}>
-          <TriageList
-            items={items}
-            getKey={(c) => c.id}
-            rowLabel={(c) => c.displayName}
-            onOpen={(c) => void openRecord(c.id)}
-            renderRow={(c) => (
-              <span className={styles.rowText}>
-                <span className={styles.rowName}>
-                  {c.displayName}
-                  {c.pronouns ? ` (${c.pronouns})` : ""}
-                </span>
-                <span className={styles.rowMeta}>
-                  {c.membershipStatus}
-                  {c.archivedAt ? " · archived" : ""}
-                </span>
-                {/* Feature 069 (FR-001a): the review queue shows what the decision depends on. */}
-                {view === "review" && (
-                  <span className={styles.rowMeta}>
-                    {c.emails?.length ? c.emails.join(", ") : "no email"} ·{" "}
-                    {c.phone ? formatPhone(c.phone) : "no phone"} · created{" "}
-                    {(c.createdAt ?? "").slice(0, 10)}
-                  </span>
-                )}
-              </span>
-            )}
-            rowActions={
-              view === "review"
-                ? (c) =>
-                    c.safeToClear ? (
-                      <button
-                        type="button"
-                        className={styles.dupButton}
-                        onClick={() => void clearReview(c.id)}
-                      >
-                        Clear
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        className={styles.dupButton}
-                        onClick={() => void openRecord(c.id)}
-                      >
-                        Open to resolve
-                      </button>
-                    )
-                : undefined
-            }
-            emptyState={
-              <span className={styles.empty}>
-                {view === "review" ? "No contacts need review" : "No contacts"}
-              </span>
-            }
+          <input
+            ref={searchRef}
+            className={styles.search}
+            placeholder="Search by name…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
           />
-          {/* Feature 069 (FR-014): held merges, visibly NOT ordinary clean-up. Mel can see one, and can
+          {arrivalError && <p role="status">{arrivalError}</p>}
+          <div className={styles.taskRow}>
+            <button type="button" className={styles.button} onClick={() => setShowCreate(true)}>
+              Add contact
+            </button>
+            <button type="button" className={styles.taskButton} onClick={openReviewQueue}>
+              Review queue ({counts.needsReview})
+            </button>
+            <button
+              type="button"
+              className={styles.taskButton}
+              onClick={() => {
+                setShowRejected(false);
+                void openDuplicates(false);
+              }}
+            >
+              Review duplicates ({counts.duplicates})
+            </button>
+            {/* Feature 065: compact toggle to include archived contacts in the search results. */}
+            <button
+              type="button"
+              className={styles.taskButton}
+              aria-pressed={includeArchived}
+              onClick={() => setIncludeArchived((v) => !v)}
+            >
+              + archived
+            </button>
+          </div>
+        </section>
+
+        {/* Single-contact list — the search results or the needs-review queue. Rows open the editor. */}
+        {showList && (
+          <section className={styles.section}>
+            <TriageList
+              items={items}
+              getKey={(c) => c.id}
+              rowLabel={(c) => c.displayName}
+              onOpen={(c) => void openRecord(c.id)}
+              renderRow={(c) => (
+                <span className={styles.rowText}>
+                  <span className={styles.rowName}>
+                    {c.displayName}
+                    {c.pronouns ? ` (${c.pronouns})` : ""}
+                  </span>
+                  <span className={styles.rowMeta}>
+                    {c.membershipStatus}
+                    {c.archivedAt ? " · archived" : ""}
+                  </span>
+                  {/* Feature 069 (FR-001a): the review queue shows what the decision depends on. */}
+                  {view === "review" && (
+                    <span className={styles.rowMeta}>
+                      {c.emails?.length ? c.emails.join(", ") : "no email"} ·{" "}
+                      {c.phone ? formatPhone(c.phone) : "no phone"} · created{" "}
+                      {(c.createdAt ?? "").slice(0, 10)}
+                    </span>
+                  )}
+                </span>
+              )}
+              rowActions={
+                view === "review"
+                  ? (c) =>
+                      c.safeToClear ? (
+                        <button
+                          type="button"
+                          className={styles.dupButton}
+                          onClick={() => void clearReview(c.id)}
+                        >
+                          Clear
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className={styles.dupButton}
+                          onClick={() => void openRecord(c.id)}
+                        >
+                          Open to resolve
+                        </button>
+                      )
+                  : undefined
+              }
+              emptyState={
+                <span className={styles.empty}>
+                  {view === "review" ? "No contacts need review" : "No contacts"}
+                </span>
+              }
+            />
+            {/* Feature 069 (FR-014): held merges, visibly NOT ordinary clean-up. Mel can see one, and can
               see it is not hers to finish — the resolve action appears only for whoever may act. */}
-          {view === "review" && held.length > 0 && (
-            <ul className={styles.dupList}>
-              {held.map((h) => (
-                <li
-                  key={h.id}
-                  className={styles.heldRow}
-                  aria-label={`Held merge: ${h.canonicalDisplayName} and ${h.mergedDisplayName}`}
-                >
-                  <div className={styles.dupBody}>
-                    <div className={styles.dupName}>
-                      Merge held — {h.canonicalDisplayName} and {h.mergedDisplayName}
+            {view === "review" && held.length > 0 && (
+              <ul className={styles.dupList}>
+                {held.map((h) => (
+                  <li
+                    key={h.id}
+                    className={styles.heldRow}
+                    aria-label={`Held merge: ${h.canonicalDisplayName} and ${h.mergedDisplayName}`}
+                  >
+                    <div className={styles.dupBody}>
+                      <div className={styles.dupName}>
+                        Merge held — {h.canonicalDisplayName} and {h.mergedDisplayName}
+                      </div>
+                      {/* Feature 078: one explanation per reason, shared with the chooser. */}
+                      <p className={styles.dupHousehold}>{HOLD_REASON_TEXT[h.reason]}</p>
                     </div>
-                    {/* Feature 078: one explanation per reason, shared with the chooser. */}
-                    <p className={styles.dupHousehold}>{HOLD_REASON_TEXT[h.reason]}</p>
-                  </div>
-                  <span className={styles.dupActions}>
-                    {/* Feature 078 (FR-001, FR-006): every hold opens its chooser. Whoever can answer
+                    <span className={styles.dupActions}>
+                      {/* Feature 078 (FR-001, FR-006): every hold opens its chooser. Whoever can answer
                         gets Resolve; anyone else can still View what is being decided. */}
-                    {h.canAnswer ? (
-                      <button
-                        type="button"
-                        className={styles.dupButton}
-                        onClick={() => setChoosing(h.id)}
-                      >
-                        Resolve
-                      </button>
-                    ) : (
-                      <>
-                        <em className={styles.dupHousehold}>{WAITING_TEXT[h.answerableBy]}</em>
+                      {h.canAnswer ? (
                         <button
                           type="button"
                           className={styles.dupButton}
                           onClick={() => setChoosing(h.id)}
                         >
-                          View
+                          Resolve
                         </button>
-                      </>
-                    )}
-                    {/* FR-017: always available to whoever could attempt the merge — otherwise the queue
+                      ) : (
+                        <>
+                          <em className={styles.dupHousehold}>{WAITING_TEXT[h.answerableBy]}</em>
+                          <button
+                            type="button"
+                            className={styles.dupButton}
+                            onClick={() => setChoosing(h.id)}
+                          >
+                            View
+                          </button>
+                        </>
+                      )}
+                      {/* FR-017: always available to whoever could attempt the merge — otherwise the queue
                         fills with items the person working it has no way to clear. */}
-                    <button
-                      type="button"
-                      className={styles.dupButton}
-                      onClick={() => void abandonHeld(h.id)}
-                    >
-                      Don&apos;t merge
-                    </button>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-          {searchTruncated && (
-            <p className={styles.hint}>More matches — refine your search to narrow the list.</p>
-          )}
-        </section>
-      )}
+                      <button
+                        type="button"
+                        className={styles.dupButton}
+                        onClick={() => void abandonHeld(h.id)}
+                      >
+                        Don&apos;t merge
+                      </button>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {searchTruncated && (
+              <p className={styles.hint}>More matches — refine your search to narrow the list.</p>
+            )}
+          </section>
+        )}
 
-      {/* Feature 072 (FR-018): why a merge did not complete, said at the moment it happens. */}
-      {choosing && (
-        <HeldMergeChooser
-          holdId={choosing}
-          onClose={() => setChoosing(null)}
-          onDone={async (message) => {
-            setChoosing(null);
-            setMergeNotice(message);
-            await refreshView();
-            await refreshCounts();
-          }}
-        />
-      )}
-      {mergeNotice && (
-        <p role="status" className={styles.warning}>
-          {mergeNotice}
-        </p>
-      )}
+        {/* Feature 072 (FR-018): why a merge did not complete, said at the moment it happens. */}
+        {choosing && (
+          <HeldMergeChooser
+            holdId={choosing}
+            onClose={() => setChoosing(null)}
+            onDone={async (message) => {
+              setChoosing(null);
+              setMergeNotice(message);
+              await refreshView();
+              await refreshCounts();
+            }}
+          />
+        )}
+        {mergeNotice && (
+          <p role="status" className={styles.warning}>
+            {mergeNotice}
+          </p>
+        )}
 
-      {/* Potential duplicates — query-scoped alongside search, or the global queue via the button. */}
-      {showPairs && (
-        <section className={styles.section}>
-          <h2 className={styles.h2}>Potential duplicates</h2>
-          {(suppressed > 0 || showRejected) && (
-            <button type="button" className={styles.dupButton} onClick={toggleRejected}>
-              {showRejected ? "Hide rejected" : `Show rejected (${suppressed})`}
-            </button>
-          )}
-          {dupTruncated && (
-            <p className={styles.empty}>
-              Showing the {dupPairs.length} closest matches — narrow with a search to see the rest.
-            </p>
-          )}
-          {dupPairs.length === 0 ? (
-            <p className={styles.empty}>No potential duplicates</p>
-          ) : (
-            <ul className={styles.dupList}>
-              {dupPairs.map((p) => (
-                <DuplicatePair
-                  key={`${p.a.id}-${p.b.id}`}
-                  pair={p}
-                  onReject={() => rejectPair(p.a.id, p.b.id)}
-                  onUndoReject={() => rejectPair(p.a.id, p.b.id, true)}
-                  onOpen={(id) => void openRecord(id)}
-                  onCompare={() => setComparing(p)}
-                  onMerge={(canonicalId, mergedId) => void merge(canonicalId, mergedId)}
-                  onOpenHold={setChoosing}
-                  permissions={pairPermissions}
-                />
-              ))}
-            </ul>
-          )}
-        </section>
-      )}
+        {/* Potential duplicates — query-scoped alongside search, or the global queue via the button. */}
+        {showPairs && (
+          <section className={styles.section}>
+            <h2 className={styles.h2}>Potential duplicates</h2>
+            {(suppressed > 0 || showRejected) && (
+              <button type="button" className={styles.dupButton} onClick={toggleRejected}>
+                {showRejected ? "Hide rejected" : `Show rejected (${suppressed})`}
+              </button>
+            )}
+            {dupTruncated && (
+              <p className={styles.empty}>
+                Showing the {dupPairs.length} closest matches — narrow with a search to see the
+                rest.
+              </p>
+            )}
+            {dupPairs.length === 0 ? (
+              <p className={styles.empty}>No potential duplicates</p>
+            ) : (
+              <ul className={styles.dupList}>
+                {dupPairs.map((p) => (
+                  <DuplicatePair
+                    key={`${p.a.id}-${p.b.id}`}
+                    pair={p}
+                    onReject={() => rejectPair(p.a.id, p.b.id)}
+                    onUndoReject={() => rejectPair(p.a.id, p.b.id, true)}
+                    onOpen={(id) => void openRecord(id)}
+                    onCompare={() => setComparing(p)}
+                    onMerge={(canonicalId, mergedId) => void merge(canonicalId, mergedId)}
+                    onOpenHold={setChoosing}
+                    permissions={pairPermissions}
+                  />
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
 
-      {/* Feature 069 (FR-008): the comparison a pair opens — the three answers to one question. */}
-      {comparing && (
-        <MergeCompare
-          pair={comparing}
-          onClose={() => setComparing(null)}
-          onMerged={(canonicalId, mergedId) => merge(canonicalId, mergedId)}
-          permissions={pairPermissions}
-          onOpenHold={(id) => {
-            setComparing(null);
-            setChoosing(id);
-          }}
-          onRejected={async () => {
-            const p = comparing;
-            setComparing(null);
-            await rejectPair(p.a.id, p.b.id);
-          }}
-        />
-      )}
+        {/* Feature 069 (FR-008): the comparison a pair opens — the three answers to one question. */}
+        {comparing && (
+          <MergeCompare
+            pair={comparing}
+            onClose={() => setComparing(null)}
+            onMerged={(canonicalId, mergedId) => merge(canonicalId, mergedId)}
+            permissions={pairPermissions}
+            onOpenHold={(id) => {
+              setComparing(null);
+              setChoosing(id);
+            }}
+            onRejected={async () => {
+              const p = comparing;
+              setComparing(null);
+              await rejectPair(p.a.id, p.b.id);
+            }}
+          />
+        )}
+      </div>
 
       {/* Record editor modal (feature 063) — opened from a result/queue row. */}
       {record && (
-        <div className={styles.backdrop}>
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label={record.displayName}
-            className={styles.modalPanel}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") closeRecord();
-            }}
-          >
-            <RecordView
-              title={
-                /* Feature 086 (FR-003): an archived record says so on its face. Until now the only
-                   sign was the Restore button, which is gated on `contact.write` — so a viewer who
-                   could not restore could not tell. The state is a fact, not a control. */
-                record.archivedAt ? `${record.displayName} · archived` : record.displayName
-              }
-              actions={
-                <>
-                  {record.needsReview && (
-                    <button type="button" className={styles.button} onClick={markReviewed}>
-                      Mark reviewed
-                    </button>
-                  )}
-                  {/* Feature 065: archive/restore (reversible) and delete (confirmed, gated). */}
-                  {caps.contactWrite &&
-                    (record.archivedAt ? (
-                      <button
-                        type="button"
-                        className={styles.button}
-                        onClick={() => archiveOrRestore("restore")}
-                      >
-                        Restore
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        className={styles.button}
-                        onClick={() => archiveOrRestore("archive")}
-                      >
-                        Archive
-                      </button>
-                    ))}
-                  {caps.contactDelete &&
-                    (confirmDelete ? (
-                      <button
-                        type="button"
-                        className={styles.dangerButton}
-                        onClick={() => deleteRecord(false)}
-                      >
-                        Confirm delete
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        className={styles.dangerButton}
-                        onClick={() => setConfirmDelete(true)}
-                      >
-                        Delete
-                      </button>
-                    ))}
-                  <button type="button" className={styles.button} onClick={closeRecord}>
-                    Cancel
+        <Dialog
+          heading={
+            /* Feature 086 (FR-003): an archived record says so on its face. Until now the only
+               sign was the Restore button, which is gated on `contact.write` — so a viewer who
+               could not restore could not tell. The state is a fact, not a control. */
+            record.archivedAt ? `${record.displayName} · archived` : record.displayName
+          }
+          onClose={closeRecord}
+        >
+          <RecordView
+            title={record.archivedAt ? `${record.displayName} · archived` : record.displayName}
+            actions={
+              <>
+                {record.needsReview && (
+                  <button type="button" className={styles.button} onClick={markReviewed}>
+                    Mark reviewed
                   </button>
-                </>
-              }
-            >
-              {/* Feature 065: a refused safe delete explains why (references) and, for a super-user,
-                  offers the unrestricted override. Rendered FIRST, directly under the action row — it
-                  used to sit below the read-only context list, i.e. below the fold on a scrolling
-                  modal, so Mel pressed Confirm delete and appeared to get no response at all. */}
-              {deleteError && (
-                <div className={styles.error}>
-                  <p>{deleteError}</p>
-                  {caps.contactDeleteUnrestricted && (
+                )}
+                {/* Feature 065: archive/restore (reversible) and delete (confirmed, gated). */}
+                {caps.contactWrite &&
+                  (record.archivedAt ? (
+                    <button
+                      type="button"
+                      className={styles.button}
+                      onClick={() => archiveOrRestore("restore")}
+                    >
+                      Restore
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className={styles.button}
+                      onClick={() => archiveOrRestore("archive")}
+                    >
+                      Archive
+                    </button>
+                  ))}
+                {caps.contactDelete &&
+                  (confirmDelete ? (
                     <button
                       type="button"
                       className={styles.dangerButton}
-                      onClick={() => deleteRecord(true)}
+                      onClick={() => deleteRecord(false)}
                     >
-                      Force delete (super-user)
+                      Confirm delete
                     </button>
-                  )}
-                </div>
-              )}
-              <form onSubmit={saveRecord} className={styles.form}>
-                <label className={styles.field}>
-                  <span className={styles.fieldLabel}>First name</span>
-                  <input
-                    ref={firstFieldRef}
-                    className={styles.input}
-                    value={eFirst}
-                    onChange={(e) => setEFirst(e.target.value)}
-                  />
-                </label>
-                <label className={styles.field}>
-                  <span className={styles.fieldLabel}>Last name</span>
-                  <input
-                    className={styles.input}
-                    value={eLast}
-                    onChange={(e) => setELast(e.target.value)}
-                  />
-                </label>
-                {(() => {
-                  const isCustom = eOverride.trim() !== "";
-                  const autoName = `${eFirst.trim()} ${eLast.trim()}`.trim();
-                  return (
-                    <div className={styles.field}>
-                      <label className={styles.fieldLabel} htmlFor="edit-display-name">
-                        Display name
-                      </label>
-                      <div className={styles.nameControl}>
-                        <input
-                          id="edit-display-name"
-                          className={styles.input}
-                          value={isCustom ? eOverride : autoName}
-                          readOnly={!isCustom}
-                          onChange={(e) => setEOverride(e.target.value)}
-                        />
-                        <button
-                          type="button"
-                          className={styles.button}
-                          onClick={() => setEOverride(isCustom ? "" : autoName)}
-                        >
-                          {isCustom ? "Reset to automatic" : "Set custom name"}
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })()}
-                <label className={styles.field}>
-                  <span className={styles.fieldLabel}>Pronouns</span>
-                  <input
-                    className={styles.input}
-                    value={ePronouns}
-                    onChange={(e) => setEPronouns(e.target.value)}
-                  />
-                </label>
-                <label className={styles.field}>
-                  <span className={styles.fieldLabel}>Phone</span>
-                  <input
-                    className={styles.input}
-                    value={ePhone}
-                    onChange={(e) => setEPhone(e.target.value)}
-                  />
-                </label>
-                <button type="submit" className={styles.button}>
-                  Save
-                </button>
-                {saveError && <p className={styles.error}>{saveError}</p>}
-              </form>
-              <div className={styles.flags}>
-                <span className={styles.flag}>
-                  Volunteer: <strong>{record.isVolunteer ? "Yes" : "No"}</strong>
-                </span>
-                <span className={styles.flag}>
-                  On mailing list: <strong>{record.listMember ? "Yes" : "No"}</strong>
-                </span>
-                <span className={styles.flag}>
-                  Needs review: <strong>{record.needsReview ? "Yes" : "No"}</strong>
-                </span>
+                  ) : (
+                    <button
+                      type="button"
+                      className={styles.dangerButton}
+                      onClick={() => setConfirmDelete(true)}
+                    >
+                      Delete
+                    </button>
+                  ))}
+              </>
+            }
+          >
+            {/* Feature 065: a refused safe delete explains why (references) and, for a super-user,
+                  offers the unrestricted override. Rendered FIRST, directly under the action row — it
+                  used to sit below the read-only context list, i.e. below the fold on a scrolling
+                  modal, so Mel pressed Confirm delete and appeared to get no response at all. */}
+            {deleteError && (
+              <div className={styles.error}>
+                <p>{deleteError}</p>
+                {caps.contactDeleteUnrestricted && (
+                  <button
+                    type="button"
+                    className={styles.dangerButton}
+                    onClick={() => deleteRecord(true)}
+                  >
+                    Force delete (super-user)
+                  </button>
+                )}
               </div>
-              <dl className={styles.context}>
-                <div>
-                  <dt>Membership</dt>
-                  <dd>{record.membershipStatus}</dd>
-                </div>
-              </dl>
-              {/* Feature 066: the contact's emails, editable below the scalar fields. */}
-              {caps.contactMailingWrite && (
-                <EmailEditor
-                  key={record.id}
-                  contactId={record.id}
-                  emails={record.emails ?? []}
-                  canDeleteUnrestricted={caps.contactDeleteUnrestricted}
-                  onChanged={() => openRecord(record.id)}
+            )}
+            <form onSubmit={saveRecord} className={styles.form}>
+              <label className={styles.field}>
+                <span className={styles.fieldLabel}>First name</span>
+                <input
+                  ref={firstFieldRef}
+                  className={styles.input}
+                  value={eFirst}
+                  onChange={(e) => setEFirst(e.target.value)}
                 />
-              )}
-              {/* Feature 068 (FR-018/FR-019/FR-020): the MEMBERSHIP household. Rendered as its own block,
+              </label>
+              <label className={styles.field}>
+                <span className={styles.fieldLabel}>Last name</span>
+                <input
+                  className={styles.input}
+                  value={eLast}
+                  onChange={(e) => setELast(e.target.value)}
+                />
+              </label>
+              {(() => {
+                const isCustom = eOverride.trim() !== "";
+                const autoName = `${eFirst.trim()} ${eLast.trim()}`.trim();
+                return (
+                  <div className={styles.field}>
+                    <label className={styles.fieldLabel} htmlFor="edit-display-name">
+                      Display name
+                    </label>
+                    <div className={styles.nameControl}>
+                      <input
+                        id="edit-display-name"
+                        className={styles.input}
+                        value={isCustom ? eOverride : autoName}
+                        readOnly={!isCustom}
+                        onChange={(e) => setEOverride(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className={styles.button}
+                        onClick={() => setEOverride(isCustom ? "" : autoName)}
+                      >
+                        {isCustom ? "Reset to automatic" : "Set custom name"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
+              <label className={styles.field}>
+                <span className={styles.fieldLabel}>Pronouns</span>
+                <input
+                  className={styles.input}
+                  value={ePronouns}
+                  onChange={(e) => setEPronouns(e.target.value)}
+                />
+              </label>
+              <label className={styles.field}>
+                <span className={styles.fieldLabel}>Phone</span>
+                <input
+                  className={styles.input}
+                  value={ePhone}
+                  onChange={(e) => setEPhone(e.target.value)}
+                />
+              </label>
+              <button type="submit" className={styles.button}>
+                Save
+              </button>
+              {saveError && <p className={styles.error}>{saveError}</p>}
+            </form>
+            <div className={styles.flags}>
+              <span className={styles.flag}>
+                Volunteer: <strong>{record.isVolunteer ? "Yes" : "No"}</strong>
+              </span>
+              <span className={styles.flag}>
+                On mailing list: <strong>{record.listMember ? "Yes" : "No"}</strong>
+              </span>
+              <span className={styles.flag}>
+                Needs review: <strong>{record.needsReview ? "Yes" : "No"}</strong>
+              </span>
+            </div>
+            <dl className={styles.context}>
+              <div>
+                <dt>Membership</dt>
+                <dd>{record.membershipStatus}</dd>
+              </div>
+            </dl>
+            {/* Feature 066: the contact's emails, editable below the scalar fields. */}
+            {caps.contactMailingWrite && (
+              <EmailEditor
+                key={record.id}
+                contactId={record.id}
+                emails={record.emails ?? []}
+                canDeleteUnrestricted={caps.contactDeleteUnrestricted}
+                onChanged={() => openRecord(record.id)}
+              />
+            )}
+            {/* Feature 068 (FR-018/FR-019/FR-020): the MEMBERSHIP household. Rendered as its own block,
                   labelled and styled apart from the shared-email block below — they overlap often and are
                   different facts. Write controls need membership authority (FR-017), which Mel lacks. */}
-              {record.membership && (
-                <MembershipAccount
-                  key={`ma-${record.id}`}
-                  contactId={record.id}
-                  membership={record.membership}
-                  canWrite={caps.membershipWrite}
-                  onChanged={() => openRecord(record.id)}
-                />
-              )}
-              {/* Feature 074 (FR-026): the merges that produced this record, each with an honest
+            {record.membership && (
+              <MembershipAccount
+                key={`ma-${record.id}`}
+                contactId={record.id}
+                membership={record.membership}
+                canWrite={caps.membershipWrite}
+                onChanged={() => openRecord(record.id)}
+              />
+            )}
+            {/* Feature 074 (FR-026): the merges that produced this record, each with an honest
                   verdict on whether it can still be undone. Only shown to a duplicate-management
                   holder, since that is who may act on it. */}
-              {caps.dedupWrite && (
-                <MergeHistory
-                  key={`mh-${record.id}`}
-                  contactId={record.id}
-                  onChanged={() => openRecord(record.id)}
-                />
-              )}
-              {(record.messageRecipient || (record.sharedWith ?? []).length > 0) && (
-                <MessageRecipient
-                  key={`mr-${record.id}`}
-                  contactId={record.id}
-                  messageRecipient={record.messageRecipient ?? null}
-                  sharedWith={record.sharedWith ?? []}
-                  hasOwnActiveEmail={(record.emails ?? []).some((e) => e.status === "active")}
-                  canWrite={caps.contactMailingWrite}
-                  onChanged={() => openRecord(record.id)}
-                />
-              )}
-            </RecordView>
-          </div>
-        </div>
+            {caps.dedupWrite && (
+              <MergeHistory
+                key={`mh-${record.id}`}
+                contactId={record.id}
+                onChanged={() => openRecord(record.id)}
+              />
+            )}
+            {(record.messageRecipient || (record.sharedWith ?? []).length > 0) && (
+              <MessageRecipient
+                key={`mr-${record.id}`}
+                contactId={record.id}
+                messageRecipient={record.messageRecipient ?? null}
+                sharedWith={record.sharedWith ?? []}
+                hasOwnActiveEmail={(record.emails ?? []).some((e) => e.status === "active")}
+                canWrite={caps.contactMailingWrite}
+                onChanged={() => openRecord(record.id)}
+              />
+            )}
+          </RecordView>
+        </Dialog>
       )}
 
       {/* Add-contact modal (feature 064) — the create form, no longer always-visible. */}
       {showCreate && (
-        <div className={styles.backdrop}>
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Add contact"
-            className={styles.modalPanel}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") setShowCreate(false);
-            }}
-          >
-            <RecordView
-              title="Add contact"
-              actions={
-                <button
-                  type="button"
-                  className={styles.button}
-                  onClick={() => setShowCreate(false)}
-                >
-                  Cancel
-                </button>
-              }
-            >
-              <form onSubmit={createContact} className={styles.form}>
-                <input
-                  className={styles.input}
-                  placeholder="First name"
-                  value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
-                />
-                <input
-                  className={styles.input}
-                  placeholder="Last name (optional)"
-                  value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
-                />
-                <input
-                  className={styles.input}
-                  placeholder="Display name override (optional)"
-                  value={displayNameOverride}
-                  onChange={(e) => setDisplayNameOverride(e.target.value)}
-                />
-                <input
-                  className={styles.input}
-                  placeholder="Pronouns (optional)"
-                  value={pronouns}
-                  onChange={(e) => setPronouns(e.target.value)}
-                />
-                <input
-                  className={styles.input}
-                  placeholder="Email address (optional)"
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                />
-                <input
-                  className={styles.input}
-                  placeholder="Phone (optional)"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                />
-                <fieldset className={styles.fieldset}>
-                  <legend>Purposes</legend>
-                  {PURPOSES.map((p) => (
-                    <label key={p} className={styles.check}>
-                      <input
-                        type="checkbox"
-                        checked={purposes.includes(p)}
-                        onChange={() => toggle(purposes, p, setPurposes)}
-                      />{" "}
-                      {p}
-                    </label>
-                  ))}
-                </fieldset>
-                <fieldset className={styles.fieldset}>
-                  <legend>Consent topics</legend>
-                  {TOPICS.map((t) => (
-                    <label key={t} className={styles.check}>
-                      <input
-                        type="checkbox"
-                        checked={topics.includes(t)}
-                        onChange={() => toggle(topics, t, setTopics)}
-                      />{" "}
-                      {t}
-                    </label>
-                  ))}
-                </fieldset>
-                <button type="submit" className={styles.button}>
+        <Dialog heading="Add contact" onClose={() => setShowCreate(false)}>
+          <RecordView title="Add contact">
+            <form id="add-contact-form" onSubmit={createContact} className={styles.form}>
+              <input
+                className={styles.input}
+                placeholder="First name"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+              />
+              <input
+                className={styles.input}
+                placeholder="Last name (optional)"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+              />
+              <input
+                className={styles.input}
+                placeholder="Display name override (optional)"
+                value={displayNameOverride}
+                onChange={(e) => setDisplayNameOverride(e.target.value)}
+              />
+              <input
+                className={styles.input}
+                placeholder="Pronouns (optional)"
+                value={pronouns}
+                onChange={(e) => setPronouns(e.target.value)}
+              />
+              <input
+                className={styles.input}
+                placeholder="Email address (optional)"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+              />
+              <input
+                className={styles.input}
+                placeholder="Phone (optional)"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+              />
+              <fieldset className={styles.fieldset}>
+                <legend>Purposes</legend>
+                {PURPOSES.map((p) => (
+                  <label key={p} className={styles.check}>
+                    <input
+                      type="checkbox"
+                      checked={purposes.includes(p)}
+                      onChange={() => toggle(purposes, p, setPurposes)}
+                    />{" "}
+                    {p}
+                  </label>
+                ))}
+              </fieldset>
+              <fieldset className={styles.fieldset}>
+                <legend>Consent topics</legend>
+                {TOPICS.map((t) => (
+                  <label key={t} className={styles.check}>
+                    <input
+                      type="checkbox"
+                      checked={topics.includes(t)}
+                      onChange={() => toggle(topics, t, setTopics)}
+                    />{" "}
+                    {t}
+                  </label>
+                ))}
+              </fieldset>
+              {error && <p className={styles.error}>{error}</p>}
+              {warning && <p className={styles.warning}>{warning}</p>}
+              {/* Feature 089: Create joins the dialog's action bar; it still submits this form. */}
+              <DialogActions>
+                <button type="submit" form="add-contact-form" className={styles.button}>
                   Create
                 </button>
-                {error && <p className={styles.error}>{error}</p>}
-                {warning && <p className={styles.warning}>{warning}</p>}
-              </form>
-            </RecordView>
-          </div>
-        </div>
+              </DialogActions>
+            </form>
+          </RecordView>
+        </Dialog>
       )}
     </AdminPage>
   );

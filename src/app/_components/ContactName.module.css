@@ -6,5 +6,5 @@
    answers "who is this really" rather than naming the row. */
 .structuredName {
   color: var(--text-muted);
-  font-size: var(--fs-sm);
+  font-size: 1rem;
 }

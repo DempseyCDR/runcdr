@@ -277,9 +277,24 @@ export function BookingModal({
 
   return (
     <Dialog
-      label="Booking"
       heading={mode === "create" ? bookTitle(role, eventDate) : `Booking — ${performerName}`}
       onClose={onClose}
+      message={
+        // Feature 087 walk-through: the reason Save refused sits beside Save. At the top of a dialog
+        // scrolled to its foot it was never seen, and the page looked frozen.
+        error && (
+          <p role="alert" style={{ color: "#b00020" }}>
+            {error}
+          </p>
+        )
+      }
+      actions={
+        !readOnly && (
+          <button type="button" onClick={() => void save()}>
+            Save
+          </button>
+        )
+      }
     >
       {mode === "create" && (
         <div>
@@ -452,31 +467,6 @@ export function BookingModal({
           </ul>
         </div>
       )}
-
-      <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 8 }}>
-        {/* Feature 087 walk-through: the reason Save refused sits beside Save. At the top of a dialog
-            scrolled to its foot it was never seen, and the page looked frozen. */}
-        {error && (
-          <p role="alert" style={{ flexBasis: "100%", margin: 0, color: "#b00020" }}>
-            {error}
-          </p>
-        )}
-        {readOnly ? (
-          <button type="button" onClick={onClose}>
-            Close
-          </button>
-        ) : (
-          <>
-            <button type="button" onClick={() => void save()}>
-              Save
-            </button>
-            {/* "Close", not "Cancel": cancelling is something done to a booking or a dance. */}
-            <button type="button" onClick={onClose}>
-              Close
-            </button>
-          </>
-        )}
-      </div>
     </Dialog>
   );
 }

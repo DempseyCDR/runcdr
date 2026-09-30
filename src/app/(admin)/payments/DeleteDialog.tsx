@@ -34,7 +34,22 @@ export default function DeleteDialog({
   }
 
   return (
-    <Dialog label="Delete payment" onClose={onClose}>
+    <Dialog
+      heading="Delete payment"
+      onClose={onClose}
+      actions={
+        <>
+          {isCheck && (
+            <button type="button" className={styles.button} onClick={onVoidInstead}>
+              Void
+            </button>
+          )}
+          <button type="button" className={styles.primaryButton} onClick={() => void remove()}>
+            Delete
+          </button>
+        </>
+      }
+    >
       <p>
         {isCheck
           ? `This erases check #${payment.checkNumber} as never written. If you wrote it, void it instead.`
@@ -45,19 +60,6 @@ export default function DeleteDialog({
           The treasurer report for this event has been generated. It may already be in the ledger.
         </p>
       )}
-      <div className={styles.buttons}>
-        <button type="button" className={styles.primaryButton} onClick={() => void remove()}>
-          Delete
-        </button>
-        {isCheck && (
-          <button type="button" className={styles.button} onClick={onVoidInstead}>
-            Void
-          </button>
-        )}
-        <button type="button" className={styles.button} onClick={onClose}>
-          Cancel
-        </button>
-      </div>
       {error && (
         <p role="alert" className={styles.error}>
           {error}

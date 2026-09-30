@@ -68,7 +68,15 @@ export default function SeveralPerformersDialog({
   }
 
   return (
-    <Dialog label="One check, several performers" onClose={onClose}>
+    <Dialog
+      heading="One check, several performers"
+      onClose={onClose}
+      actions={
+        <button type="button" className={styles.primaryButton} onClick={() => void record()}>
+          Record check
+        </button>
+      }
+    >
       <div className={styles.entry}>
         <label className={styles.wide}>
           Payee
@@ -124,14 +132,6 @@ export default function SeveralPerformersDialog({
             />
           </label>
         )}
-      </div>
-      <div className={styles.buttons}>
-        <button type="button" className={styles.primaryButton} onClick={() => void record()}>
-          Record check
-        </button>
-        <button type="button" className={styles.button} onClick={onClose}>
-          Cancel
-        </button>
       </div>
       {error && (
         <p role="alert" className={styles.error}>

@@ -97,7 +97,7 @@ describe("Booking Central — the row's targets (087 US2)", () => {
 
     await userEvent.click(rowFor("Waltz night").getByRole("button", { name: "Pat Caller" }));
 
-    const dialog = await screen.findByRole("dialog", { name: /booking/i });
+    const dialog = await screen.findByRole("dialog", { name: /^(booking —|book an? )/i });
     expect(within(dialog).getByDisplayValue("prefers the long set")).toBeInTheDocument();
   });
 
@@ -184,7 +184,7 @@ describe("Booking Central — filling a gap (087 US2, FR-013a)", () => {
 
     // The booking editor heads a new booking with its role. That it is for THIS dance is the same routing
     // the band case below proves by what it POSTs — the editor does not print the date itself.
-    const dialog = await screen.findByRole("dialog", { name: /booking/i });
+    const dialog = await screen.findByRole("dialog", { name: /^(booking —|book an? )/i });
     expect(
       within(dialog).getByRole("heading", { name: "Book a caller for 2026-09-24" }),
     ).toBeInTheDocument();

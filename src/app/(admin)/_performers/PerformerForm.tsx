@@ -3,6 +3,7 @@ import { useState } from "react";
 import { apiFetch } from "@/app/apiFetch";
 import ArchiveControl from "@/app/(admin)/ArchiveControl";
 import LinkQuestion from "./LinkQuestion";
+import { DialogActions } from "@/app/_components/Dialog";
 import { PROMO_LINK_TYPES, STYLE_TAGS, type PromoLink } from "@/server/domain/public/promoLinks";
 
 /** A performer as the page holds it, with the linked contact's name for the link out. */
@@ -469,16 +470,14 @@ export default function PerformerForm({
       )}
 
       {error && <p role="alert">{error}</p>}
-      <div>
-        {!readOnly && (
+      {/* Feature 089: the Save joins the dialog's action bar; the bar's Close replaces Cancel. */}
+      {!readOnly && (
+        <DialogActions>
           <button type="button" disabled={saving} onClick={() => void save()}>
             {performer ? "Save" : "Create"}
           </button>
-        )}
-        <button type="button" onClick={onClose}>
-          {readOnly ? "Close" : "Cancel"}
-        </button>
-      </div>
+        </DialogActions>
+      )}
     </div>
   );
 }

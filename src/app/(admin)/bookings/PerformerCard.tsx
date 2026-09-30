@@ -53,8 +53,6 @@ export default function PerformerCard({
 
   return (
     <>
-      <h2>{performer?.displayName ?? "New performer"}</h2>
-
       {performer && (
         <div className={styles.choices}>
           <button type="button" aria-expanded={!!dances} onClick={() => void toggleDances()}>

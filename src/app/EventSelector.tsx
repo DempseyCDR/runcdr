@@ -3,6 +3,7 @@ import { apiFetch } from "@/app/apiFetch";
 
 import { useEffect, useRef, useState } from "react";
 import { localToday } from "@/app/localToday";
+import styles from "./EventSelector.module.css";
 
 // Feature 028 (P5-R1): the shared event selector for every single-event surface (check-in, gate, payments,
 // treasurer). Owns the event/series fetch, the series + date-range filters, and the default; reports the
@@ -114,7 +115,7 @@ export function EventSelector({
   }
 
   return (
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+    <div className={styles.selector}>
       <label>
         Event:{" "}
         <select aria-label="Event" value={value} onChange={(e) => pick(e.target.value)}>
@@ -160,9 +161,9 @@ export function EventSelector({
         />
       </label>
       {events.length > 0 && filtered.length === 0 && (
-        <span style={{ color: "#888" }}>No events match.</span>
+        <span className={styles.none}>No events match.</span>
       )}
-      {events.length === 0 && <span style={{ color: "#888" }}>No events.</span>}
+      {events.length === 0 && <span className={styles.none}>No events.</span>}
     </div>
   );
 }

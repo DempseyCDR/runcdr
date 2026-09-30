@@ -37,7 +37,7 @@
 .meta,
 .quiet {
   color: var(--text-muted);
-  font-size: var(--fs-sm);
+  font-size: 1rem;
 }
 
 .quiet {
@@ -49,7 +49,7 @@
 }
 
 .note {
-  font-size: var(--fs-sm);
+  font-size: 1rem;
   font-style: italic;
   margin: 0;
 }
@@ -57,12 +57,14 @@
 .entry {
   display: grid;
   gap: var(--space-2);
-  grid-template-columns: 1fr 1fr;
+  /* Feature 089: as many columns as fit, each at least 9rem — no page-specific breakpoint, and it
+     follows enlarged text. */
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
 }
 
 .entry label {
   display: grid;
-  font-size: var(--fs-sm);
+  font-size: 1rem;
   gap: 2px;
 }
 
@@ -84,13 +86,13 @@
   display: flex;
   font-size: 1rem;
   gap: var(--space-1);
-  min-height: 2.75rem;
+  min-height: var(--tap-min);
 }
 
 .input {
   box-sizing: border-box;
   font-size: 1rem; /* 16px or more stops iOS zooming into the field */
-  min-height: 2.75rem;
+  min-height: var(--tap-min);
   padding: var(--space-1) var(--space-2);
   width: 100%;
 }
@@ -103,8 +105,8 @@
 
 .button,
 .primaryButton {
-  font-size: 0.95rem;
-  min-height: 2.75rem;
+  font-size: 1rem;
+  min-height: var(--tap-min);
   padding: var(--space-1) var(--space-3);
 }
 
@@ -117,8 +119,9 @@
   background: none;
   border: none;
   color: var(--link, inherit);
-  font-size: 0.9rem;
-  min-height: 2.75rem;
+  font-size: 1rem;
+  min-height: var(--tap-min);
+  min-width: var(--tap-min);
   padding: 0 var(--space-2);
   text-decoration: underline;
 }
@@ -126,19 +129,19 @@
 .actions {
   display: grid;
   gap: var(--space-2);
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
   margin-top: var(--space-4);
 }
 
 .error {
   color: #b00020;
-  font-size: var(--fs-sm);
+  font-size: 1rem;
   margin: 0;
 }
 
 .explain {
   color: var(--text-muted);
-  font-size: var(--fs-sm);
+  font-size: 1rem;
   margin: 0;
 }
 
@@ -159,14 +162,7 @@
   display: flex;
   gap: var(--space-2);
   justify-content: space-between;
-  min-height: 2.75rem;
-}
-
-@media (max-width: 22.5rem) {
-  .entry,
-  .actions {
-    grid-template-columns: 1fr;
-  }
+  min-height: var(--tap-min);
 }
 
 .visuallyHidden {
@@ -191,5 +187,5 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-1);
-  min-height: 2.75rem;
+  min-height: var(--tap-min);
 }

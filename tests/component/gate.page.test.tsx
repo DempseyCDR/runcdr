@@ -50,7 +50,7 @@ describe("GatePage — the evening's money (082 US1)", () => {
 
   it("warns when the event is not today's", async () => {
     await open({ events: [OTHER_EVENT] });
-    await screen.findByText(`Not today — this event is on ${OTHER_EVENT.eventDate}.`);
+    await screen.findByText("Not today");
   });
 
   it("runs the summary first, then the sections in Mary's order (FR-003, FR-004)", async () => {
@@ -402,5 +402,16 @@ describe("GatePage — carried over from the old page's tests", () => {
   it("has no substitute-a-performer control — that is /payments' (043 R12)", async () => {
     await open();
     expect(screen.queryByRole("button", { name: /substitute/i })).toBeNull();
+  });
+});
+
+/** Feature 089 (FR-016): the gate's Save sits in the page's action bar, pinned to the bottom. */
+describe("GatePage — the pinned Save (089)", () => {
+  it("puts Save last in a pinned action bar", async () => {
+    await open();
+    const bar = screen.getByRole("group", { name: "Actions" });
+    expect(bar).toHaveAttribute("data-pinned");
+    const buttons = within(bar).getAllByRole("button");
+    expect(buttons.at(-1)).toHaveTextContent("Save");
   });
 });

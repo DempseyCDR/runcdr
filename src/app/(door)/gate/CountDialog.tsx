@@ -74,8 +74,23 @@ export default function CountDialog({
   };
 
   return (
-    <Dialog label="Count the cash" onClose={close}>
-      <ul className={styles.list}>
+    <Dialog
+      heading="Count the cash"
+      onClose={close}
+      actions={
+        <button
+          type="button"
+          className={styles.primaryButton}
+          onClick={() => {
+            keep();
+            onUse(totalCents / 100);
+          }}
+        >
+          Use as gross cash
+        </button>
+      }
+    >
+      <ul className={styles.faces}>
         {FACES.map((f, i) => (
           <li key={f}>
             <button
@@ -92,7 +107,7 @@ export default function CountDialog({
           </li>
         ))}
       </ul>
-      <p className={styles.total} aria-live="polite">
+      <p className={`${styles.total} ${styles.countTotal}`} aria-live="polite">
         Total {money(totalCents / 100)}
       </p>
       <div className={styles.keypad}>
@@ -122,21 +137,6 @@ export default function CountDialog({
         <span />
         <button type="button" className={styles.key} onClick={() => move(at + 1)}>
           Next
-        </button>
-      </div>
-      <div className={styles.buttons}>
-        <button
-          type="button"
-          className={styles.primaryButton}
-          onClick={() => {
-            keep();
-            onUse(totalCents / 100);
-          }}
-        >
-          Use as gross cash
-        </button>
-        <button type="button" className={styles.button} onClick={close}>
-          Close
         </button>
       </div>
     </Dialog>

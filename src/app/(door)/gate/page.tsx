@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/app/apiFetch";
 import type { EventRow } from "@/app/EventSelector";
+import ActionBar from "@/app/_components/ActionBar";
 import EventConfirm from "@/app/_components/EventConfirm";
 import PaymentSummaryView from "@/app/_components/PaymentSummaryView";
 import type { AttendanceBreakdown } from "@/server/domain/attendance/breakdownService";
@@ -354,16 +355,6 @@ export default function GatePage() {
           </section>
 
           <div className={styles.save}>
-            {canWrite && (
-              <button
-                type="button"
-                className={styles.primaryButton}
-                onClick={() => void save()}
-                disabled={saving}
-              >
-                Save
-              </button>
-            )}
             {warnings.length > 0 && (
               <ul aria-label="Warnings" className={styles.warnings}>
                 {warnings.map((w) => (
@@ -375,6 +366,21 @@ export default function GatePage() {
               {status}
             </p>
           </div>
+
+          {/* Feature 089 (FR-016): Save is pinned to the bottom of the screen, clear of the home
+              indicator, however far down the form Mary has scrolled. */}
+          {canWrite && (
+            <ActionBar pinned>
+              <button
+                type="button"
+                className={styles.primaryButton}
+                onClick={() => void save()}
+                disabled={saving}
+              >
+                Save
+              </button>
+            </ActionBar>
+          )}
         </>
       )}
     </main>

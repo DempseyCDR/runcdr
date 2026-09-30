@@ -86,9 +86,9 @@ describe("BookingModal — a new person, or one already in the directory?", () =
     const save = screen.getByRole("button", { name: /^save$/i });
     await userEvent.click(save);
 
-    expect(within(save.parentElement!).getByRole("alert")).toHaveTextContent(
-      /link .* or create a new contact/i,
-    );
+    // Feature 089: Save is in the dialog's pinned action bar; the reason sits just above it.
+    const foot = save.closest('[role="group"]')!.parentElement!;
+    expect(within(foot).getByRole("alert")).toHaveTextContent(/link .* or create a new contact/i);
     expect(writes(calls)).toHaveLength(0);
   });
 

@@ -118,7 +118,7 @@ describe("PaymentsPage — number taken, second payment (081 US2)", () => {
 
     let dialog = await screen.findByRole("dialog", { name: "Pay again?" });
     expect(dialog).toHaveTextContent("Payee Piano already has check #9031 tonight. Pay again?");
-    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await user.click(within(dialog).getByRole("button", { name: "Close" }));
     expect(writesTo(calls, "POST", "/api/performer-payments")).toHaveLength(1);
 
     await user.click(row().getByRole("button", { name: "Record" }));

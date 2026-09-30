@@ -4,7 +4,10 @@ import { render, screen, within } from "@testing-library/react";
 import TreasurerReportPage from "@/app/(admin)/treasurer/page";
 import { REPORT } from "./fixtures/treasurerReport";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 const EVENTS = [
   { id: "e_recent", eventDate: "2020-06-15", seriesId: "s1", startTime: "19:30:00", label: null },
@@ -142,6 +145,44 @@ describe("the gate report", () => {
     expect(screen.getByRole("button", { name: /print/i })).toBeInTheDocument();
   });
 
+  // Feature 089 (FR-016, FR-024, research R12): on screen, Print sits in a bar pinned to the bottom —
+  // a phone's own print is buried in a menu — and the bar is outside the report, so the report's print
+  // rules (hide everything, then reveal only the report) leave it off the paper.
+  it("puts Print in a pinned action bar, outside what prints, and prints when pressed (089)", async () => {
+    const report = await open(EVENING);
+    const bar = screen.getByRole("group", { name: "Actions" });
+    expect(bar).toHaveAttribute("data-pinned");
+    expect(within(bar).getByRole("button", { name: "Print" })).toBeInTheDocument();
+    expect(report).not.toContainElement(bar);
+
+    const print = vi.fn();
+    vi.stubGlobal("print", print);
+    within(bar).getByRole("button", { name: "Print" }).click();
+    expect(print).toHaveBeenCalledTimes(1);
+  });
+
+  // Feature 089 (Rich's iPhone tests, 2026-09-30): iPhone Safari lays a printout out at the phone's width
+  // and would not print the report as landscape letter, whatever the stylesheet said. Desktop Safari, and
+  // Chrome on the iPhone, Android and the desktop, all print it properly. So on iPhone Safari the Print
+  // button gives way to a note saying where to print it; a PDF that prints the same everywhere is B67.
+  const IPHONE_SAFARI =
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
+  const IPHONE_CHROME =
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/129.0.6668.46 Mobile/15E148 Safari/604.1";
+
+  it("offers no Print on iPhone Safari, and says where to print instead", async () => {
+    vi.spyOn(navigator, "userAgent", "get").mockReturnValue(IPHONE_SAFARI);
+    await open(EVENING);
+    expect(screen.queryByRole("button", { name: "Print" })).toBeNull();
+    expect(screen.getByText(/print it from Chrome or a computer/i)).toBeInTheDocument();
+  });
+
+  it("offers Print in Chrome on the iPhone", async () => {
+    vi.spyOn(navigator, "userAgent", "get").mockReturnValue(IPHONE_CHROME);
+    await open(EVENING);
+    expect(screen.getByRole("button", { name: "Print" })).toBeInTheDocument();
+  });
+
   it("heads the report with the evening, whose it was, who recorded it and who came", async () => {
     await open(EVENING);
     const header = within(screen.getByRole("group", { name: "The evening" }));
@@ -221,13 +262,15 @@ describe("the gate report", () => {
     expect(rows("Expenses")).toContain("Performersbooked $460.00 · paid $460.00outstanding$0.00");
   });
 
-  it("sets receipts and expenses side by side, with deposits under receipts and notes under expenses", async () => {
-    await open(EVENING);
-    const [left, right] = screen.getAllByRole("group").filter((g) => g.dataset.column);
-    expect(within(left!).getByRole("table", { name: "Receipts" })).toBeInTheDocument();
-    expect(within(left!).getByRole("region", { name: "Deposits" })).toBeInTheDocument();
-    expect(within(right!).getByRole("table", { name: "Expenses" })).toBeInTheDocument();
-    expect(within(right!).getByRole("region", { name: "Notes" })).toBeInTheDocument();
+  // Feature 089 (Rich, 2026-09-30): the printed layout never moves with the data — Receipts beside
+  // Expenses, then Deposits beside Notes, each in its own half. Written row by row, so the two-column
+  // grid fills it in that order and a phone shows the same order, one under another.
+  it("sets out receipts, expenses, deposits, notes — row by row in one grid", async () => {
+    const report = await open(EVENING);
+    const sections = ["Receipts", "Expenses", "Deposits", "Notes"].map((name) =>
+      within(report).getByRole("region", { name }),
+    );
+    expect([...sections[0]!.parentElement!.children]).toEqual(sections);
   });
 
   it("lists each deposit with what makes it up, and the card", async () => {

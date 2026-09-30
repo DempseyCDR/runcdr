@@ -95,7 +95,15 @@ export default function EditPaymentDialog({
   }
 
   return (
-    <Dialog label="Edit payment" onClose={onClose}>
+    <Dialog
+      heading="Edit payment"
+      onClose={onClose}
+      actions={
+        <button type="button" className={styles.primaryButton} onClick={() => void save()}>
+          Save
+        </button>
+      }
+    >
       <div className={styles.entry}>
         {isCheck && (
           <label className={styles.wide}>
@@ -176,14 +184,6 @@ export default function EditPaymentDialog({
             />
           </label>
         )}
-      </div>
-      <div className={styles.buttons}>
-        <button type="button" className={styles.primaryButton} onClick={() => void save()}>
-          Save
-        </button>
-        <button type="button" className={styles.button} onClick={onClose}>
-          Cancel
-        </button>
       </div>
       {error && (
         <p role="alert" className={styles.error}>

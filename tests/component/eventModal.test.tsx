@@ -202,7 +202,10 @@ describe("EventModal", () => {
       description: "",
     };
     render(<EventModal mode="edit" event={event} venues={VENUES} onClose={() => {}} />);
-    expect(screen.getByRole("dialog", { name: "Event" })).toHaveAttribute("aria-modal", "true");
+    expect(screen.getByRole("dialog", { name: "Event — 2026-06-18" })).toHaveAttribute(
+      "aria-modal",
+      "true",
+    );
   });
 
   // Feature 087 walk-through: the public blurb was a one-line box that could not be resized, beside a

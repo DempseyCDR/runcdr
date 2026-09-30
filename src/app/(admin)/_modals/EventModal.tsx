@@ -201,9 +201,36 @@ export function EventModal({
 
   return (
     <Dialog
-      label="Event"
       heading={mode === "create" ? "New event" : `Event — ${eventDate}`}
       onClose={onClose}
+      actions={
+        (lifecycle || !readOnly) && (
+          // One bar, in this order (087 walk-through): the dance's own actions, then Save. The bar's
+          // "Close" is the only close — on this form, "cancel" means the DANCE.
+          <>
+            {lifecycle &&
+              (cancelled ? (
+                <button type="button" onClick={() => void setStatus("scheduled")}>
+                  Revive this dance
+                </button>
+              ) : (
+                <button type="button" onClick={() => setConfirming("cancel")}>
+                  Cancel this dance…
+                </button>
+              ))}
+            {lifecycle && (
+              <button type="button" onClick={() => setConfirming("delete")}>
+                Delete this dance…
+              </button>
+            )}
+            {!readOnly && (
+              <button type="button" onClick={() => void save()}>
+                Save
+              </button>
+            )}
+          </>
+        )
+      }
     >
       {error && <p role="alert">{error}</p>}
       <div style={{ display: "grid", gap: 6 }}>
@@ -317,34 +344,6 @@ export function EventModal({
           </button>
         </div>
       )}
-
-      {/* One row at the foot, in this order, wrapping on a phone (087 walk-through). "Close", not
-          "Cancel": on this form, cancel means the DANCE. */}
-      <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 8 }}>
-        {lifecycle &&
-          (cancelled ? (
-            <button type="button" onClick={() => void setStatus("scheduled")}>
-              Revive this dance
-            </button>
-          ) : (
-            <button type="button" onClick={() => setConfirming("cancel")}>
-              Cancel this dance…
-            </button>
-          ))}
-        {lifecycle && (
-          <button type="button" onClick={() => setConfirming("delete")}>
-            Delete this dance…
-          </button>
-        )}
-        {!readOnly && (
-          <button type="button" onClick={() => void save()}>
-            Save
-          </button>
-        )}
-        <button type="button" onClick={onClose}>
-          Close
-        </button>
-      </div>
     </Dialog>
   );
 }

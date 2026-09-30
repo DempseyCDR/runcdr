@@ -48,7 +48,7 @@ describe("Booking Central — a booking's note (087 T028)", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Pat Caller" }));
 
-    const dialog = await screen.findByRole("dialog", { name: /booking/i });
+    const dialog = await screen.findByRole("dialog", { name: /^(booking —|book an? )/i });
     expect(within(dialog).getByLabelText("Notes")).toHaveValue("prefers the long set");
   });
 });

@@ -1,4 +1,4 @@
-/* Feature 060 (X-R2): Triage mode — worklist rows. Each row is a 48px-min touch target. */
+/* Feature 060 (X-R2): Triage mode — worklist rows. Each row is a touch target of at least --tap-min. */
 
 .list {
   list-style: none;
@@ -34,8 +34,8 @@
   align-items: center;
   gap: var(--space-3);
   inline-size: 100%;
-  box-sizing: border-box; /* 48px min is the TOTAL height — padding sits inside, not added on top */
-  min-block-size: var(--space-7); /* 48px touch target (FR-008) */
+  box-sizing: border-box; /* the minimum is the TOTAL height — padding sits inside, not added on top */
+  min-block-size: var(--tap-min); /* touch target (FR-008; 44px since feature 089) */
   padding: var(--space-3);
   background: var(--surface);
   border: 1px solid var(--hairline);

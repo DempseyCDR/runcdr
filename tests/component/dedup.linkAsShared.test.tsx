@@ -81,7 +81,7 @@ function stub(records: Record<string, unknown>): Call[] {
 async function openComparison(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole("button", { name: /review duplicates/i }));
   await user.click(await screen.findByRole("button", { name: /open to resolve/i }));
-  return screen.findByRole("dialog", { name: /compare/i });
+  return screen.findByRole("dialog", { name: /one person/i });
 }
 
 /**
