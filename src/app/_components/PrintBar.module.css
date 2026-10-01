@@ -1,0 +1,38 @@
+/* Feature 090 (research R10): what every printed report shares — landscape letter, and only the report on
+   the paper. Scoped to a page that HAS a printable report (`body:has(...)`), so these rules — which may
+   stay loaded as a volunteer moves between pages — never blank the printout of any other page. */
+
+.note {
+  color: var(--text-muted);
+  font-size: 1rem;
+}
+
+@media print {
+  @page {
+    size: letter landscape;
+    margin: 0.4in;
+  }
+
+  /* Hide everything, then reveal the report and pin it to the top — the menus, the report's own
+     controls and Print all drop away. `:global(...)` because CSS Modules reject bare element and
+     attribute selectors. Both rules are !important, so the reveal must be the more specific: the
+     scope sits in `:where()`, which counts for nothing — a bare `:has()` counts its argument, which
+     outranked the reveal and printed a blank page (tests/unit/printRules.test.ts). */
+  :global(:where(body:has([data-printable-report])) *) {
+    visibility: hidden !important;
+  }
+
+  :global([data-printable-report]),
+  :global([data-printable-report] *) {
+    visibility: visible !important;
+  }
+
+  :global([data-printable-report]) {
+    background: #fff;
+    color: #000;
+    left: 0;
+    position: absolute;
+    top: 0;
+    width: 100%;
+  }
+}

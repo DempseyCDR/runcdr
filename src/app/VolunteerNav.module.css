@@ -1,0 +1,229 @@
+/* Feature 090 (B55, contracts/menu.md): the volunteer bar — one coloured bar on every volunteer page,
+   the destinations grouped by the kind of work. The band colour lives here, so every volunteer page is
+   marked by it (pages no longer opt in, research R6). Every control meets the tap minimum.
+
+   Phone first. On a phone the bar is "Volunteer", the volunteer's name and a Menu button, on one line;
+   the Menu opens beneath it as a full-width list — Tonight first, every group open under its heading,
+   then Sign out and Club site. From 48rem the Menu button and the headings go, the destinations sit in
+   the bar, and each group becomes a button whose list opens beneath it. */
+
+.bar {
+  align-items: center;
+  background: var(--band);
+  color: var(--link-on-dark);
+  display: flex;
+  flex-wrap: wrap;
+  font-family: var(--font-body);
+  font-size: 1rem;
+  gap: 0 var(--space-3);
+  padding: 0 var(--space-4);
+  position: relative;
+}
+
+.home {
+  align-items: center;
+  color: inherit;
+  display: inline-flex;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  min-block-size: var(--tap-min);
+  min-inline-size: var(--tap-min);
+  text-decoration: none;
+}
+
+/* Whose session this is — the name alone on a phone ("Signed in as …" from 48rem). */
+.name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-align: end;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menuButton {
+  align-items: center;
+  background: transparent;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  justify-content: center;
+  min-block-size: var(--tap-min);
+  min-inline-size: var(--tap-min);
+  padding: 0 var(--space-3);
+}
+
+/* The Menu: closed on a phone until opened; it flows beneath the bar, full width. */
+.menu {
+  display: none;
+  flex-direction: column;
+  padding-block-end: var(--space-2);
+  width: 100%;
+}
+
+.menuOpen {
+  display: flex;
+}
+
+.destinations,
+.plainItems,
+.groupPanel {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.groupHeading {
+  font-size: 1rem;
+  letter-spacing: 0.04em;
+  margin: var(--space-2) 0 0;
+  opacity: 0.85;
+  text-transform: uppercase;
+}
+
+/* On a phone a group's button is not needed: its list is always shown under its heading. */
+.groupButton {
+  display: none;
+}
+
+.link {
+  align-items: center;
+  border-radius: 4px;
+  color: inherit;
+  display: flex;
+  min-block-size: var(--tap-min);
+  min-inline-size: var(--tap-min);
+  padding: 0 var(--space-2);
+  text-decoration: none;
+}
+
+.link[aria-current="page"] {
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.signedIn {
+  display: none;
+}
+
+.signOut {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  min-block-size: var(--tap-min);
+  min-inline-size: var(--tap-min);
+  padding: 0 var(--space-2);
+  text-align: start;
+  text-decoration: underline;
+}
+
+.home:focus-visible,
+.link:focus-visible,
+.menuButton:focus-visible,
+.groupButton:focus-visible,
+.signOut:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+@media (min-width: 48rem) {
+  .name,
+  .menuButton,
+  .groupHeading {
+    display: none;
+  }
+
+  .menu {
+    align-items: center;
+    display: flex;
+    /* A zero basis keeps it beside "Volunteer": the bar breaks lines on the basis, before shrinking,
+       so an "auto" basis (its full content width) would drop the whole Menu to a line of its own. It
+       grows to fill the line and wraps within itself. */
+    flex: 1 1 0;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0 var(--space-3);
+    min-width: 0;
+    padding-block-end: 0;
+    width: auto;
+  }
+
+  .destinations,
+  .plainItems {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 var(--space-1);
+  }
+
+  .plainGroup {
+    display: contents;
+  }
+
+  .link {
+    display: inline-flex;
+  }
+
+  .group {
+    position: relative;
+  }
+
+  .groupButton {
+    align-items: center;
+    background: none;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    display: inline-flex;
+    font: inherit;
+    gap: var(--space-1);
+    min-block-size: var(--tap-min);
+    min-inline-size: var(--tap-min);
+    padding: 0 var(--space-2);
+  }
+
+  .groupButton::after {
+    content: "▾";
+  }
+
+  .groupButton[aria-expanded="true"] {
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+
+  /* A group's list opens beneath its button, over the page. */
+  .groupPanel {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgb(0 0 0 / 0.15);
+    color: var(--link);
+    display: none;
+    left: 0;
+    padding: var(--space-1) 0;
+    position: absolute;
+    top: 100%;
+    width: max-content;
+    z-index: 30;
+  }
+
+  .groupPanel.open {
+    display: block;
+  }
+
+  .groupPanel .link {
+    display: flex;
+    padding: 0 var(--space-3);
+  }
+
+  .signedIn {
+    display: inline;
+    margin-inline-start: auto;
+  }
+}

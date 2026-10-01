@@ -1,0 +1,71 @@
+/* Feature 090 US3: the volunteer home page — the menu as a page. Exactly two equal columns at every
+   width (Rich, 2026-09-30: one column is too long on a phone), so the groups pair off in rows — each
+   pair starting on one line, its cards level across — rather than flowing into ragged columns. A flat
+   menu's cards take the same two columns. Every destination meets the tap minimum.
+
+   Phone first. On a phone a column leaves a label little room, and some wrap to two lines; every card
+   is then made tall enough for two, so a wrapped label never pushes its column out of line with the
+   other. From 40rem the labels fit on one line and the cards drop to the tap minimum. */
+
+.groups,
+.flat {
+  align-items: start;
+  column-gap: var(--space-3);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.groups {
+  row-gap: var(--space-4);
+}
+
+.heading {
+  font-size: 1.15rem;
+  margin: 0 0 var(--space-1);
+}
+
+.list {
+  display: grid;
+  list-style: none;
+  row-gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+}
+
+.link {
+  align-items: center;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  box-sizing: border-box;
+  color: var(--link);
+  display: flex;
+  font-size: 1rem;
+  line-height: 1.25;
+  /* Two lines of label: 2 × 1.25 × 1rem, plus a little breathing room. */
+  min-block-size: max(var(--tap-min), 3.25rem);
+  min-inline-size: var(--tap-min);
+  overflow-wrap: anywhere;
+  padding: 0 var(--space-2);
+  text-decoration: none;
+}
+
+.link:hover {
+  color: var(--link-hover);
+}
+
+.link:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
+}
+
+@media (min-width: 40rem) {
+  .groups,
+  .flat {
+    column-gap: var(--space-5);
+  }
+
+  .link {
+    min-block-size: var(--tap-min);
+    padding: 0 var(--space-3);
+  }
+}

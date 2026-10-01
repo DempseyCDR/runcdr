@@ -5,7 +5,7 @@ import { jsonReqAs, ctx } from "./helpers/http";
 import { db } from "@/server/db/client";
 import { roleGrants, series } from "@/server/db/schema";
 import { makeActor, makeBaseActor } from "./helpers/factories";
-import { navItemsFor } from "@/server/auth/nav";
+import { menuFor, navItemsFor } from "@/server/auth/nav";
 import { loadActor } from "@/server/auth/actor";
 import { readSession } from "@/server/auth/session";
 import { apiInventory, uiInventory } from "@/server/lib/routeInventory";
@@ -53,7 +53,7 @@ describe("US5: role-aware navigation", () => {
     const nav = hrefs(navItemsFor(await actorFromToken(token)));
 
     expect(nav).toContain("/checkin");
-    expect(nav).toContain("/organizer/tnc"); // oversight is the base
+    expect(nav).toContain("/organizer"); // oversight is the base
     expect(nav).not.toContain("/gate");
     expect(nav).not.toContain("/treasurer");
     expect(nav).not.toContain("/access");
@@ -78,7 +78,7 @@ describe("US5: role-aware navigation", () => {
     const nav = hrefs(navItemsFor(await actorFromToken(token)));
 
     expect(nav).toEqual([
-      "/organizer/tnc",
+      "/organizer",
       "/contacts",
       "/events",
       "/bookings", // Booking Central — the report, performers and bands are in it now (087 US3)
@@ -144,7 +144,7 @@ describe("US5: role-aware navigation", () => {
     const baseNav = hrefs(navItemsFor(await actorFromToken(base)));
     expect(baseNav).not.toContain("/access");
     // ...but the base still sees the oversight reports and the directory.
-    expect(baseNav).toContain("/organizer/tnc");
+    expect(baseNav).toContain("/organizer");
     expect(baseNav).toContain("/contacts");
   });
 
@@ -160,6 +160,55 @@ describe("US5: role-aware navigation", () => {
       grants: [{ role: "treasurer" }],
     });
     expect(hrefs(navItemsFor(await actorFromToken(treas)))).not.toContain("/dev/routes");
+  });
+
+  /**
+   * Feature 090 (FR-004–FR-007, SC-003): the same destinations, grouped by the kind of work. Six or fewer
+   * stay flat; more are grouped, Tonight first. Nothing is added or taken away.
+   */
+  it("gives a Door Attendant a flat menu of three (090 FR-005)", async () => {
+    const { token } = await makeActor({
+      email: "door.menu090@cdrochester.org",
+      grants: [{ role: "door_attendant" }],
+    });
+    const menu = menuFor(await actorFromToken(token));
+    expect(menu).toEqual({ kind: "flat", items: expect.any(Array) });
+    if (menu.kind === "flat")
+      expect(hrefs(menu.items)).toEqual(["/organizer", "/contacts", "/checkin"]);
+  });
+
+  it("keeps the Financial Secretary's six destinations flat (090 FR-005)", async () => {
+    const { token } = await makeActor({
+      email: "fs.menu090@cdrochester.org",
+      grants: [{ role: "financial_secretary" }],
+    });
+    const actor = await actorFromToken(token);
+    const menu = menuFor(actor);
+    if (menu.kind !== "flat") throw new Error("expected a flat menu");
+    expect(hrefs(menu.items)).toEqual(hrefs(navItemsFor(actor)));
+    expect(menu.items).toHaveLength(6);
+  });
+
+  it("groups the Treasurer's menu, Tonight first, the same destinations (090 FR-004)", async () => {
+    const { token } = await makeActor({
+      email: "treas.menu090@cdrochester.org",
+      grants: [{ role: "treasurer" }],
+    });
+    const actor = await actorFromToken(token);
+    const menu = menuFor(actor);
+    if (menu.kind !== "grouped") throw new Error("expected a grouped menu");
+    expect(menu.groups[0]!.key).toBe("tonight");
+    const offered = menu.groups.flatMap((g) => hrefs(g.items)).sort();
+    expect(offered).toEqual(hrefs(navItemsFor(actor)).sort());
+  });
+
+  it('names the gate report "Gate report" in every menu (090 FR-006)', async () => {
+    const { token } = await makeActor({
+      email: "fs.label090@cdrochester.org",
+      grants: [{ role: "financial_secretary" }],
+    });
+    const items = navItemsFor(await actorFromToken(token));
+    expect(items.find((i) => i.href === "/treasurer")?.label).toBe("Gate report");
   });
 
   it("a hidden destination is STILL refused when requested directly (US5.3, FR-039)", async () => {

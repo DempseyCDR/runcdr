@@ -7,7 +7,7 @@ import { NAV } from "@/server/auth/nav";
 // guard. Two documented exception sets:
 //   - dynamic [param] routes: cannot map to one static href (represented by a concrete NAV href);
 //   - outside-the-groups allowlist: NAV entries whose page lives outside (admin)/(door).
-const DYNAMIC_EXCLUSIONS = ["/organizer/[seriesKey]"]; // represented by the /organizer/tnc entry
+const DYNAMIC_EXCLUSIONS = ["/organizer/[seriesKey]"]; // reached from /organizer, which redirects to it (090)
 const OUTSIDE_GROUP_ALLOWLIST = ["/dev/routes"]; // src/app/dev/routes/page.tsx — super-user dev index
 
 describe("volunteer nav completeness (D1-class guard)", () => {
@@ -17,9 +17,19 @@ describe("volunteer nav completeness (D1-class guard)", () => {
   const staticRoutes = routes.filter((r) => !r.dynamic).map((r) => r.path);
   const dynamicRoutes = routes.filter((r) => r.dynamic).map((r) => r.path);
 
+  // Feature 090 (FR-003, FR-014): the volunteer home page is reached from the bar's "Volunteer" link and
+  // from signing in — it is the menu laid out as a page, so it is not an entry in it.
+  const REACHED_FROM_THE_BAR = ["/volunteer"];
+
   it("has no orphaned static staff page (every one is a NAV href)", () => {
-    const orphans = staticRoutes.filter((p) => !navHrefSet.has(p));
+    const orphans = staticRoutes.filter(
+      (p) => !navHrefSet.has(p) && !REACHED_FROM_THE_BAR.includes(p),
+    );
     expect(orphans).toEqual([]);
+  });
+
+  it("has the volunteer home page among the staff pages (090)", () => {
+    expect(staticRoutes).toContain("/volunteer");
   });
 
   it("the dynamic staff routes are exactly the documented excluded set", () => {

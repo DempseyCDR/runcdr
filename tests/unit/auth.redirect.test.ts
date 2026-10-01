@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { safeNextPath } from "@/server/auth/redirect";
+import { landingAfterSignIn, safeNextPath } from "@/server/auth/redirect";
 
 /**
  * Contracts §1: the `?next=` open-redirect guard.
@@ -36,5 +36,27 @@ describe("safeNextPath (open-redirect guard)", () => {
 
   it("uses the supplied fallback", () => {
     expect(safeNextPath("https://evil.com", "/login")).toBe("/login");
+  });
+});
+
+/** Feature 090 (FR-015, research R7): where a volunteer lands after signing in. */
+describe("landingAfterSignIn (090)", () => {
+  it("lands on the volunteer home page when no page was asked for", () => {
+    expect(landingAfterSignIn(undefined)).toBe("/volunteer");
+    expect(landingAfterSignIn("")).toBe("/volunteer");
+  });
+
+  // Found in the browser (2026-09-30): the sign-in start filled in "/" when no page was asked for, so the
+  // callback honoured it and landed on the public home. The public home is never a volunteer's destination.
+  it("treats the public home as no page asked for", () => {
+    expect(landingAfterSignIn("/")).toBe("/volunteer");
+  });
+
+  it("returns to the volunteer page the sign-in started from", () => {
+    expect(landingAfterSignIn("/payments")).toBe("/payments");
+  });
+
+  it("never follows an unsafe next — it lands on the volunteer home page instead", () => {
+    expect(landingAfterSignIn("https://evil.com")).toBe("/volunteer");
   });
 });

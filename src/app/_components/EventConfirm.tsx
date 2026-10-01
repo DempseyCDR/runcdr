@@ -70,8 +70,10 @@ export default function EventConfirm({
         <EventSelector
           defaultToMySeries={defaultToMySeries}
           value={event?.id ?? ""}
-          onSelect={(e) => {
-            setChanging(false);
+          onSelect={(e, by) => {
+            // Feature 090 (FR-024): a new series selects its most recent dance but leaves the chooser
+            // open, so an earlier evening of that series can still be picked; a pick closes it.
+            if (by === "picked") setChanging(false);
             onSelect(e);
           }}
         />

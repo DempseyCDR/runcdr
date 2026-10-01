@@ -13,6 +13,14 @@ Galaxy S23 Ultra, Rich set the tap minimum to **44px** (it had been decided at 4
 Q1). The frame and the later conversions use these, and add their style files to 089's style guard
 (`tests/unit/volunteerStyle.test.ts`) as each page is converted.
 
+**Update, 2026-09-30 — the volunteer frame shipped as feature 090** (`specs/090-volunteer-frame/`):
+one coloured volunteer bar on every volunteer page, the destinations grouped by the kind of work
+(Tonight first, flat when there are six or fewer), and on a phone the volunteer's name and a Menu
+button (Q9: Tonight sits inside the Menu). Each area's layout now draws its own bars, so a volunteer
+page no longer shows the public bar. Sign-in lands on a new volunteer home page (`/volunteer`), the
+sign-in page wears the club's look, and the Organizer report opens on the viewer's own series and
+shares the Gate report's Print bar. This closes B55.
+
 ## 1. Units: why dips and points are not a problem here
 
 These are web pages, so the unit is the **CSS pixel**, which is already density-independent. With
@@ -227,6 +235,9 @@ about 12, a Door Attendant 3.
   public menu does (046), Tonight's pages stay visible outside the collapsed menu for those who hold
   them, and Sign out moves inside the collapsed menu. The signed-in volunteer stays **in plain
   view**, shortened at phone width from "Signed in as {name}" to just the **name** (§7 item 2).
+  **Changed 2026-09-30 (feature 090 planning):** Tonight's pages move **inside** the Menu, listed
+  first — the name, three Tonight links and Menu do not fit one line on a phone. The bar is the
+  name and Menu.
 - **Q10 — where a volunteer lands** — *decided 2026-09-28*: **yes — the "home-page staff nav"**:
   sign-in no longer returns a volunteer to the public home page. *As read on 2026-09-28, to confirm
   at review:* a volunteer lands on a **volunteer home page** that lays out their own grouped

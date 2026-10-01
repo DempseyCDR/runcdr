@@ -201,31 +201,9 @@
     padding-left: 12pt;
   }
 
-  @page {
-    size: letter landscape;
-    margin: 0.4in;
-  }
-
-  /* Hide everything, then reveal the report and pin it to the top — the site and volunteer navigation,
-     the event selector and the Print button all drop away. `:global(...)` because CSS Modules reject bare
-     element and attribute selectors. */
-  :global(body *) {
-    visibility: hidden !important;
-  }
-
-  :global([data-printable-report]),
-  :global([data-printable-report] *) {
-    visibility: visible !important;
-  }
-
-  :global([data-printable-report]) {
-    background: #fff;
-    color: #000;
+  /* The shared rules — landscape letter, only the report on the paper — are PrintBar's (feature 090). */
+  .report {
     font-size: 10pt;
-    left: 0;
-    position: absolute;
-    top: 0;
-    width: 100%;
   }
 
   /* SC-007: a section is kept to one sheet where it fits, and a row never splits. */

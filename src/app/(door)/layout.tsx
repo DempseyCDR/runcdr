@@ -1,5 +1,6 @@
 import type { Viewport } from "next";
 import { requireStaff } from "@/server/auth/currentStaff";
+import Nav from "@/app/Nav";
 
 /**
  * Feature 089 (research R8): on Android the page shrinks when the keyboard opens, so a pinned action bar
@@ -15,10 +16,15 @@ export const viewport: Viewport = { interactiveWidget: "resizes-content", viewpo
  * boundary — Door Attendant must NOT write /gate — is enforced by the routes and the gate service
  * (feature 016), not here.
  *
- * ⚠️ The role-aware volunteer nav moved to the ROOT layout in feature 035 (P6-R2) — it renders on every
- * page when signed in, so it is no longer rendered here.
+ * Feature 090: the volunteer bar is rendered here — and the public bar is not — so a volunteer page shows
+ * one bar, the volunteer's (it had moved to the root layout in feature 035).
  */
 export default async function DoorLayout({ children }: { children: React.ReactNode }) {
   await requireStaff();
-  return <>{children}</>;
+  return (
+    <>
+      <Nav />
+      {children}
+    </>
+  );
 }

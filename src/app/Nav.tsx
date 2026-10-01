@@ -1,5 +1,5 @@
 import { getActor } from "@/server/auth/currentStaff";
-import { navItemsFor } from "@/server/auth/nav";
+import { menuFor } from "@/server/auth/nav";
 import VolunteerNav from "@/app/VolunteerNav";
 
 /**
@@ -15,9 +15,13 @@ import VolunteerNav from "@/app/VolunteerNav";
  *
  * Feature 083 (B53): it also hands the presenter the signed-in volunteer's name, for the sign-out control
  * to stand beside. The name is resolved here, on the server, so the presenter still loads nothing.
+ *
+ * Feature 090: rendered by the (admin), (door), dev and (public) layouts — no longer the root, so a
+ * volunteer page shows this bar alone. It hands the presenter the actor's menu, grouped by the kind of
+ * work (`menuFor`), so the bar and the volunteer home page arrange it the same way.
  */
 export default async function Nav() {
   const actor = await getActor();
   if (!actor) return null;
-  return <VolunteerNav items={navItemsFor(actor)} signedInAs={actor.staff.displayName} />;
+  return <VolunteerNav menu={menuFor(actor)} signedInAs={actor.staff.displayName} />;
 }

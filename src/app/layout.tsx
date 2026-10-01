@@ -1,8 +1,6 @@
 import type { ReactNode } from "react";
 import { Raleway, Open_Sans } from "next/font/google";
 import "./globals.css";
-import PublicNav from "./PublicNav";
-import Nav from "./Nav";
 
 export const metadata = {
   title: "CDR Platform",
@@ -26,15 +24,10 @@ const openSans = Open_Sans({ subsets: ["latin"], variable: "--font-open-sans", d
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`${raleway.variable} ${openSans.variable}`}>
-      {/* Feature 045: styling now comes from globals.css tokens (imported above); the inline body font is
-          gone. Feature 034 (P6-R1): the public menu is the topmost bar on EVERY page. Feature 035 (P6-R2):
-          the volunteer menu is the second bar, on every page when signed in (Nav returns null when
-          anonymous). Both bars keep their current look — PublicNav's own restyle is P7-R2. */}
-      <body>
-        <PublicNav />
-        <Nav />
-        {children}
-      </body>
+      {/* Feature 045: styling now comes from globals.css tokens (imported above). Feature 090: the root
+          renders no bar. Each part of the site renders its own: public pages the public bar and, when a
+          volunteer is signed in, the volunteer bar beneath it; volunteer pages the volunteer bar alone. */}
+      <body>{children}</body>
     </html>
   );
 }

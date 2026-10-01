@@ -1,0 +1,99 @@
+/* Feature 090 US4 (FR-016–FR-019): the sign-in page, in the club's look. Phone first: the logotype above
+   the sign-in; from 40rem the two blocks sit side by side, about the same height. */
+
+.page {
+  box-sizing: border-box;
+  color: var(--text);
+  display: grid;
+  font-family: var(--font-body);
+  font-size: 1rem;
+  gap: var(--space-5);
+  line-height: var(--lh-body);
+  margin: 0 auto;
+  max-width: 56rem;
+  padding: var(--space-5) var(--space-4);
+}
+
+.brand {
+  display: flex;
+  justify-content: center;
+}
+
+/* Never wider than the screen. */
+.logotype {
+  height: auto;
+  max-width: 100%;
+}
+
+.signIn {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+
+.signIn p {
+  margin: 0;
+}
+
+.title {
+  font-family: var(--font-heading);
+  font-size: var(--fs-h1);
+  line-height: var(--lh-heading);
+  margin: 0;
+}
+
+.refused {
+  background: #f8d7da;
+  border: 1px solid #f5c2c7;
+  border-radius: 6px;
+  padding: var(--space-3);
+}
+
+/* Google's standard light button: white face, grey border, their "G" and "Sign in with Google". */
+.google {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #747775;
+  border-radius: 4px;
+  box-sizing: border-box;
+  color: #1f1f1f;
+  display: inline-flex;
+  font-size: 1rem;
+  font-weight: 500;
+  gap: var(--space-3);
+  margin-block: var(--space-2);
+  min-block-size: var(--tap-min);
+  min-inline-size: var(--tap-min);
+  padding: 0 var(--space-4);
+  text-decoration: none;
+}
+
+.google:hover {
+  background: #f8f9fa;
+}
+
+.google:focus-visible,
+.help:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
+}
+
+.note {
+  color: var(--text-muted);
+}
+
+.help {
+  align-items: center;
+  color: var(--link);
+  display: inline-flex;
+  min-block-size: var(--tap-min);
+  min-inline-size: var(--tap-min);
+}
+
+@media (min-width: 40rem) {
+  .page {
+    align-items: center;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    padding-block-start: var(--space-6);
+  }
+}
