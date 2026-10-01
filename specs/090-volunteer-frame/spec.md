@@ -43,6 +43,15 @@ only signposts, and every page still decides for itself who may use it.
   (Reverses the review's Q9 "Tonight stays visible outside the collapsed menu"; decided during
   planning.)
 
+### Session 2026-10-01
+
+- Q: With every group open, the Menu is too long on a phone for a role with many pages (the
+  Treasurer). Does "two taps to anything" still hold? → A: **Relaxed.** In a grouped menu, Tonight's
+  pages stay open at the top — still two taps — and each other group is listed **collapsed**; a tap
+  opens it in place, so its pages are three taps away. A flat menu (six or fewer: the Door
+  Attendant, the Financial Secretary) still shows everything. *(Rich, after using 090; supersedes
+  the 2026-09-30 "every group listed open".)*
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - A grouped, coloured volunteer menu (Priority: P1)
@@ -103,8 +112,10 @@ Secretary; the bar is one line; the Menu opens with Tonight's pages first; Sign 
    pages are listed first, under "Tonight" — two taps from anywhere (Menu, then the page).
 3. **Given** the collapsed bar, **When** it is shown, **Then** the signed-in volunteer's **name**
    stays in plain view (shortened from "Signed in as {name}"), and **Sign out** is inside the Menu.
-4. **Given** the Menu open, **When** it is shown, **Then** every group is listed open — each
-   destination under its group's heading, in the menu's order — so any destination is the next tap.
+4. **Given** a grouped menu and the Menu open, **When** it is shown, **Then** Tonight's pages are
+   listed open and each other group is listed collapsed, in the menu's order; **When** a group is
+   tapped, **Then** its pages open beneath it (one group open at a time). A flat menu lists every
+   destination — any is the next tap.
 5. **Given** the Menu open, **When** a destination is chosen, or Escape is pressed, or the Menu
    button is pressed again, **Then** the Menu closes.
 6. **Given** a phone, **When** the bar is shown, **Then** it fits on one line at 320 px and never
@@ -252,9 +263,12 @@ as a club-wide volunteer, open it; switch series with the selector.
   Sign out MUST be inside the Menu.
 - **FR-011**: At phone width the signed-in label MUST shorten from "Signed in as {name}" to the
   **name**; it MUST never be hidden.
-- **FR-012**: The open Menu MUST list every group open — each destination under its group's
-  heading, in the menu's order — with no group to open first; and it MUST close when a destination
-  is chosen, on Escape, or when the Menu button is pressed again.
+- **FR-012**: In a grouped menu, the open Menu MUST list Tonight's pages open, first, under their
+  heading, and each other group of two or more **collapsed**, in the menu's order; tapping a group
+  MUST open its pages in place, one group at a time; a group of one MUST be a plain link. A flat
+  menu MUST list every destination. The Menu MUST close when a destination is chosen, on Escape
+  (an open group closes first), or when the Menu button is pressed again; it MUST reopen with its
+  groups collapsed. *(Amended 2026-10-01: groups were listed open.)*
 - **FR-013**: The bar MUST fit on one line at 320 px, MUST NOT cause sideways scroll at any
   supported width, and every control in it MUST meet the tap minimum (feature 089).
 
@@ -303,7 +317,8 @@ as a club-wide volunteer, open it; switch series with the selector.
 ### Measurable Outcomes
 
 - **SC-001**: A signed-in volunteer reaches any of their destinations in at most two taps from any
-  volunteer page — on a phone and on a computer; on a computer, Tonight's pages in one.
+  volunteer page on a computer (Tonight's pages in one). On a phone: Tonight's pages, and every
+  destination of a flat menu, in two; any other destination in three (amended 2026-10-01).
 - **SC-002**: At 390 px wide the volunteer bar is one line high on every volunteer page (from a
   block of several lines for a Super-user today).
 - **SC-003**: For every role in the club, the set of destinations offered is identical before and

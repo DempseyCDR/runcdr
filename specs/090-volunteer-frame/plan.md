@@ -12,7 +12,8 @@ Give volunteers a frame of their own.
   `menuFor(actor)` groups the same destinations `navItemsFor` offers today: Tonight, Booking,
   Reports, People, Settings, Website; six or fewer stay flat. On a computer each group is a
   disclosure that opens on click and works fully by keyboard. Below 48rem the bar is the name and a
-  Menu button; the Menu lists every group open, Tonight first, then Sign out.
+  Menu button; the Menu lists Tonight first, then each other group collapsed, opened by a tap
+  (amended 2026-10-01: every group was open), then Sign out.
 - **Bars:** the public bar moves out of the root layout, into the public layout and the sign-in
   page, so volunteer pages show only the volunteer bar.
 - **Landing:** sign-in with no page asked for lands on a new **volunteer home page** (`/volunteer`),

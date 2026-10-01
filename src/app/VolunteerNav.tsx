@@ -21,8 +21,10 @@ import styles from "./VolunteerNav.module.css";
  *   it and returns focus to its button. A click outside, a chosen link or a new page closes it. Hover
  *   opens nothing (touch, not hover).
  * - **On a phone** (below 48rem) the bar is the volunteer's name and a Menu button, one line. The Menu
- *   lists Tonight first, then every group open under its heading, then Sign out and Club site — one
- *   list, so each destination is in the page once (the stylesheet decides which layout shows).
+ *   lists Tonight's pages first, open; then each other group collapsed, opened by a tap, one at a time
+ *   (Rich, 2026-10-01 — all open was too long for a role with many pages); then Sign out and Club site.
+ *   A flat menu lists everything. One list, so each destination is in the page once (the stylesheet
+ *   decides which layout shows); closing the Menu closes its open group.
  * - **Without JavaScript** every group's list, and the Menu, are shown open.
  *
  * ⚠️ Presentation, not a control: it renders whatever it is given; each destination enforces its own
@@ -127,7 +129,9 @@ export default function VolunteerNav({
   const heading = (label: string) => <h2 className={styles.groupHeading}>{label}</h2>;
 
   const group = (g: MenuGroup) => {
-    // Tonight and a group of one are plain links on a computer; on a phone they still sit under a heading.
+    // Tonight and a group of one are plain links on a computer; on a phone they sit under a heading,
+    // always open. Every other group is a button that opens its list — beneath it on a computer, in
+    // place inside the Menu on a phone.
     if (g.key === "tonight" || g.items.length === 1) {
       return (
         <li key={g.key} className={styles.plainGroup}>
@@ -144,7 +148,6 @@ export default function VolunteerNav({
     return (
       <li key={g.key}>
         <div className={styles.group} onKeyDown={(e) => onGroupKey(e, g.key)}>
-          {heading(g.label)}
           <button
             type="button"
             className={styles.groupButton}
@@ -191,7 +194,11 @@ export default function VolunteerNav({
         className={styles.menuButton}
         aria-expanded={menuOpen}
         aria-controls={`${idBase}-menu`}
-        onClick={() => setMenuOpen((o) => !o)}
+        onClick={() => {
+          // Opening or closing the Menu starts its groups collapsed.
+          setOpen(null);
+          setMenuOpen((o) => !o);
+        }}
       >
         Menu
       </button>

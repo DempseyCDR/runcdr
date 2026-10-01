@@ -198,9 +198,11 @@ describe("VolunteerNav — groups open by mouse and keyboard (FR-008)", () => {
 });
 
 /**
- * Feature 090 US2 (FR-010–FR-012, contracts/menu.md M5–M7): below 48rem the bar is the volunteer's name
- * and a Menu button; the Menu lists Tonight first, then every group open under its heading, then Sign out
- * and Club site. (Which part shows at which width is the stylesheet's; the structure is tested here.)
+ * Feature 090 US2 (FR-010–FR-012, contracts/menu.md M5–M9): below 48rem the bar is the volunteer's name
+ * and a Menu button. The Menu lists Tonight's pages first, open; then each other group collapsed, opened
+ * by a tap (Rich, 2026-10-01: a long menu all open is too long on a phone); then Sign out and Club site.
+ * A flat menu lists everything. (Which part shows at which width is the stylesheet's; the structure and
+ * state are tested here.)
  */
 describe("VolunteerNav — the Menu on a phone (090 US2)", () => {
   const menuButton = () => screen.getByRole("button", { name: "Menu" });
@@ -211,16 +213,51 @@ describe("VolunteerNav — the Menu on a phone (090 US2)", () => {
     expect(menuButton()).toHaveAttribute("aria-expanded", "false");
   });
 
-  it("puts Tonight first, then every group under its heading, then Sign out and Club site (FR-010, FR-012)", () => {
+  it("puts Tonight's pages first, then the groups, then Sign out and Club site (FR-010, FR-012)", () => {
     show();
     const panel = panelOf(menuButton());
-    const headings = within(panel)
-      .getAllByRole("heading")
-      .map((h) => h.textContent);
-    expect(headings).toEqual(["Tonight", "Reports", "People", "Settings"]);
-    expect(within(panel).getByRole("link", { name: "Access control" })).toBeInTheDocument();
+    expect(within(panel).getAllByRole("heading")[0]).toHaveTextContent("Tonight");
+    expect(within(panel).getByRole("link", { name: "Gate money" })).toBeInTheDocument();
+    expect(within(panel).getByRole("button", { name: "Settings" })).toBeInTheDocument();
     expect(within(panel).getByRole("button", { name: "Sign out" })).toBeInTheDocument();
     expect(within(panel).getByRole("link", { name: "Club site" })).toBeInTheDocument();
+  });
+
+  it("lists each other group collapsed, and a tap opens it (FR-012, M9)", async () => {
+    const user = show();
+    await user.click(menuButton());
+    const panel = panelOf(menuButton());
+    for (const name of ["Reports", "Settings"]) {
+      expect(within(panel).getByRole("button", { name })).toHaveAttribute("aria-expanded", "false");
+    }
+    // A group of one is not worth a tap: it stays a plain link.
+    expect(within(panel).queryByRole("button", { name: "People" })).toBeNull();
+    expect(within(panel).getByRole("link", { name: "Contacts" })).toBeInTheDocument();
+
+    await user.click(group("Settings"));
+    expect(group("Settings")).toHaveAttribute("aria-expanded", "true");
+    expect(panelOf(group("Settings")).className).toMatch(/open/);
+    expect(menuButton()).toHaveAttribute("aria-expanded", "true"); // the Menu stays open
+  });
+
+  it("reopens with every group collapsed after the Menu is closed (M5)", async () => {
+    const user = show();
+    await user.click(menuButton());
+    await user.click(group("Settings"));
+    await user.click(menuButton());
+    await user.click(menuButton());
+    expect(group("Settings")).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("closes an open group on the first Escape and the Menu on the second (M3, M6, M9)", async () => {
+    const user = show();
+    await user.click(menuButton());
+    await user.click(group("Settings"));
+    await user.keyboard("{Escape}");
+    expect(group("Settings")).toHaveAttribute("aria-expanded", "false");
+    expect(menuButton()).toHaveAttribute("aria-expanded", "true");
+    await user.keyboard("{Escape}");
+    expect(menuButton()).toHaveAttribute("aria-expanded", "false");
   });
 
   it("opens and closes on the Menu button (M5)", async () => {

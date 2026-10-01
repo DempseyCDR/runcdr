@@ -3,9 +3,10 @@
    marked by it (pages no longer opt in, research R6). Every control meets the tap minimum.
 
    Phone first. On a phone the bar is "Volunteer", the volunteer's name and a Menu button, on one line;
-   the Menu opens beneath it as a full-width list — Tonight first, every group open under its heading,
-   then Sign out and Club site. From 48rem the Menu button and the headings go, the destinations sit in
-   the bar, and each group becomes a button whose list opens beneath it. */
+   the Menu opens beneath it as a full-width list — Tonight's pages first, open under their heading;
+   then each other group as a row that opens its list in place, one at a time (Rich, 2026-10-01); then
+   Sign out and Club site. From 48rem the Menu button and the headings go, the destinations sit in the
+   bar, and each group's list opens beneath its button, over the page. */
 
 .bar {
   align-items: center;
@@ -84,9 +85,42 @@
   text-transform: uppercase;
 }
 
-/* On a phone a group's button is not needed: its list is always shown under its heading. */
+/* On a phone a group is a full-width row that reads like Tonight's heading, marked ▸ closed and ▾
+   open; its list opens in place beneath it. */
 .groupButton {
+  align-items: center;
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  font-weight: 700;
+  justify-content: space-between;
+  letter-spacing: 0.04em;
+  min-block-size: var(--tap-min);
+  padding: 0;
+  text-align: start;
+  text-transform: uppercase;
+  width: 100%;
+}
+
+.groupButton::after {
+  content: "▸";
+  font-size: 1.5em;
+  line-height: 1;
+}
+
+.groupButton[aria-expanded="true"]::after {
+  content: "▾";
+}
+
+.groupPanel {
   display: none;
+}
+
+.groupPanel.open {
+  display: block;
 }
 
 .link {
@@ -175,21 +209,20 @@
   }
 
   .groupButton {
-    align-items: center;
-    background: none;
-    border: none;
-    color: inherit;
-    cursor: pointer;
     display: inline-flex;
-    font: inherit;
+    font-weight: inherit;
     gap: var(--space-1);
-    min-block-size: var(--tap-min);
+    justify-content: normal;
+    letter-spacing: normal;
     min-inline-size: var(--tap-min);
     padding: 0 var(--space-2);
+    text-transform: none;
+    width: auto;
   }
 
   .groupButton::after {
     content: "▾";
+    font-size: 1em;
   }
 
   .groupButton[aria-expanded="true"] {
