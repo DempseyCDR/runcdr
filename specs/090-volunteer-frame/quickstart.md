@@ -45,8 +45,10 @@ For each, check that:
 At 320 × 640 and 390 × 844, as the Financial Secretary and as a Door Attendant:
 
 - **One line:** the bar is the name and Menu, with no sideways scroll.
-- **The Menu:** it lists Tonight first, then every group open under its heading, then Sign out and
-  Club site.
+- **The Menu:** it lists every destination (both menus are flat), then Sign out and Club site.
+- **A grouped menu** (the Treasurer, or a Super-user): Tonight's pages first, open; each other group
+  collapsed (▸); tapping one opens its pages beneath it (▾) and closes any other; reopening the Menu
+  finds them all collapsed. *(Amended 2026-10-01.)*
 - **Closing:** choosing a destination closes it and goes there; Escape closes it; pressing Menu
   again closes it.
 - **Tap size:** every control measures at least 44 × 44 (feature 089's quickstart §2 script).

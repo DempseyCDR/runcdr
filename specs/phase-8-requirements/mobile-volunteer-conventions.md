@@ -21,6 +21,11 @@ page no longer shows the public bar. Sign-in lands on a new volunteer home page 
 sign-in page wears the club's look, and the Organizer report opens on the viewer's own series and
 shares the Gate report's Print bar. This closes B55.
 
+**Update, 2026-10-01 — "two taps to anything" relaxed.** With every group open, the Menu was too
+long on a phone for a role with many pages. In a grouped menu, Tonight's pages stay open (two taps)
+and each other group is listed collapsed, opened by a tap (three). A flat menu — six or fewer, the
+Door Attendant and the Financial Secretary — still shows everything.
+
 ## 1. Units: why dips and points are not a problem here
 
 These are web pages, so the unit is the **CSS pixel**, which is already density-independent. With
