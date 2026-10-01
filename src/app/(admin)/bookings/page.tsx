@@ -412,7 +412,7 @@ export default function BookingCentralPage() {
   };
 
   return (
-    <AdminPage title="Booking Central" identity wide>
+    <AdminPage title="Booking Central" wide>
       <div className={styles.head}>
         <h2 className={styles.series}>{heading}</h2>
         <label className={styles.horizon}>

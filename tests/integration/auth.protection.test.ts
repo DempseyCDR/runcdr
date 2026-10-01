@@ -7,6 +7,7 @@ import { contacts, staffIdentities } from "@/server/db/schema";
 import { resolveSignIn } from "@/server/auth/signIn";
 import { contactRow, makeVolunteerContact } from "./helpers/factories";
 import { createSession, SESSION_COOKIE } from "@/server/auth/session";
+import { NEXT_COOKIE } from "@/server/auth/cookies";
 import { GET as LIST_EVENTS } from "@/app/api/events/route";
 import { GET as LIST_CONTACTS } from "@/app/api/contacts/route";
 import { GET as START_SIGNIN } from "@/app/api/auth/google/route";
@@ -61,6 +62,21 @@ describe("API protection (FR-004)", () => {
     const res = await START_SIGNIN(req("/api/auth/google"), ctx());
     expect(res.status).toBe(307);
     expect(res.headers.get("location")).toContain("accounts.google.com");
+  });
+
+  // Feature 090 (FR-015): the page to return to after signing in is set here, when sign-in starts. With
+  // no page asked for it is the volunteer home page — found in the browser, where it was "/", the public
+  // home, which the callback then honoured.
+  it("starts sign-in bound for the volunteer home page when no page was asked for (090)", async () => {
+    const res = await START_SIGNIN(req("/api/auth/google"), ctx());
+    const cookies = res.headers.getSetCookie().join("; ");
+    expect(cookies).toContain(`${NEXT_COOKIE}=${encodeURIComponent("/volunteer")}`);
+  });
+
+  it("starts sign-in bound for the page it was asked for (090)", async () => {
+    const res = await START_SIGNIN(req("/api/auth/google?next=%2Fpayments"), ctx());
+    const cookies = res.headers.getSetCookie().join("; ");
+    expect(cookies).toContain(`${NEXT_COOKIE}=${encodeURIComponent("/payments")}`);
   });
 
   // FR-011 / SC-006 — through the real protection layer, not just the session module.

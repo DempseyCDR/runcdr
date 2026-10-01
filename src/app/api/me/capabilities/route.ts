@@ -1,3 +1,4 @@
+import { mySeries } from "@/server/auth/mySeries";
 import { NextResponse } from "next/server";
 import { withAuth } from "@/server/auth/withAuth";
 import { actorCan } from "@/server/auth/can";
@@ -45,8 +46,6 @@ export const GET = withAuth({ requires: "base" }, async (_req, ctx) => {
      * club-wide holder (a grant with no scope matches every series, so narrowing would be wrong) and a
      * volunteer with no grants. Nothing here permits anything; the routes decide every request.
      */
-    mySeriesIds: ctx.actor.grants.some((g) => g.seriesId === null && g.groupId === null)
-      ? []
-      : [...new Set(ctx.actor.grants.flatMap((g) => (g.seriesId ? [g.seriesId] : [])))],
+    mySeriesIds: mySeries(ctx.actor),
   });
 });

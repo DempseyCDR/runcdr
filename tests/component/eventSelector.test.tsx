@@ -2,9 +2,9 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { localToday } from "@/app/localToday";
 import { useState } from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { EventSelector, type EventRow } from "@/app/EventSelector";
+import { EventSelector, type EventRow, type SelectedBy } from "@/app/EventSelector";
 
 // Feature 028 (P5-R1): one shared selector — default most-recent-≤-today (US1), series + date-range filters
 // (US2), and a selection confirmed by picking (not by adjusting a filter) (US3). Dates far past/future so
@@ -20,26 +20,26 @@ const SERIES = [
   { id: "s2", key: "ecd", name: "ECD" },
 ];
 
-function stub(events = EVENTS) {
+function stub(events = EVENTS, series = SERIES) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
       const u = String(url);
-      const json = async () => (u.includes("/api/series") ? { items: SERIES } : { items: events });
+      const json = async () => (u.includes("/api/series") ? { items: series } : { items: events });
       return { ok: true, status: 200, json };
     }),
   );
 }
 
 /** Harness: holds the controlled value + records every onSelect call. */
-function Harness({ onPick }: { onPick?: (e: EventRow) => void }) {
+function Harness({ onPick }: { onPick?: (e: EventRow, by: SelectedBy) => void }) {
   const [value, setValue] = useState("");
   return (
     <EventSelector
       value={value}
-      onSelect={(e) => {
+      onSelect={(e, by) => {
         setValue(e.id);
-        onPick?.(e);
+        onPick?.(e, by);
       }}
     />
   );
@@ -94,15 +94,19 @@ describe("EventSelector", () => {
     expect(optionValues().filter(Boolean).sort()).toEqual(["ecd", "old", "recent"]);
   });
 
-  it("US3: adjusting a filter does not re-select; only picking an event calls onSelect", async () => {
+  // Feature 090 (FR-024) narrowed this: a SERIES change now selects that series' default (below); the
+  // date range still only narrows the list.
+  it("US3: adjusting the date range does not re-select; picking an event calls onSelect", async () => {
     const picks: EventRow[] = [];
     stub();
     const user = userEvent.setup();
     render(<Harness onPick={(e) => picks.push(e)} />);
     await waitFor(() => expect(picks).toHaveLength(1)); // the default
 
-    // Changing a filter must NOT commit a new selection.
-    await user.selectOptions(screen.getByLabelText(/filter series/i), "s1");
+    // Changing the date range must NOT commit a new selection.
+    fireEvent.change(screen.getByLabelText("From date"), { target: { value: "2020-01-01" } });
+    fireEvent.change(screen.getByLabelText("To date"), { target: { value: "2020-03-01" } });
+    await waitFor(() => expect(optionValues()).toEqual(["", "old"]));
     expect(picks).toHaveLength(1);
 
     // Picking an event commits it.
@@ -259,5 +263,69 @@ describe("EventSelector — the viewer's own series (086)", () => {
 
     await waitFor(() => expect(optionValues().length).toBeGreaterThan(2));
     expect(seriesFilter().value).toBe("");
+  });
+});
+
+/**
+ * Feature 090 (FR-024, Rich 2026-09-30): on every page that uses the selector, choosing a series moves the
+ * evening to that series' most recent dance — the same rule as the first default — so the page never
+ * shows an evening from a series other than the one the filter names. The date range still only narrows
+ * (028 US3, above). Each selection says why it was made, so a page can tell a pick from a default.
+ */
+describe("EventSelector — a new series selects its most recent dance (090)", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("selects the chosen series' most recent dance up to today", async () => {
+    const picks: EventRow[] = [];
+    stub();
+    const user = userEvent.setup();
+    render(<Harness onPick={(e) => picks.push(e)} />);
+    await waitFor(() => expect(picks).toHaveLength(1)); // the first default: "recent" (s1)
+
+    await user.selectOptions(seriesFilter(), "s2");
+    await waitFor(() => expect(picks).toHaveLength(2));
+    expect(picks[1]?.id).toBe("ecd");
+    expect(eventSelect().value).toBe("ecd");
+
+    // Back to s1: its most recent dance up to today, not the 2099 one.
+    await user.selectOptions(seriesFilter(), "s1");
+    await waitFor(() => expect(picks).toHaveLength(3));
+    expect(picks[2]?.id).toBe("recent");
+  });
+
+  it("selects the soonest upcoming dance when the series has none yet", async () => {
+    const picks: EventRow[] = [];
+    // A series whose dances are all still to come (the list arrives newest-first).
+    stub(
+      [
+        { id: "later", eventDate: "2099-05-01", seriesId: "s3", startTime: null, label: null },
+        { id: "next", eventDate: "2098-05-01", seriesId: "s3", startTime: null, label: null },
+        ...EVENTS,
+      ],
+      [...SERIES, { id: "s3", key: "cdob", name: "CDOB" }],
+    );
+    const user = userEvent.setup();
+    render(<Harness onPick={(e) => picks.push(e)} />);
+    await waitFor(() => expect(picks).toHaveLength(1));
+
+    await user.selectOptions(seriesFilter(), "s3");
+    await waitFor(() => expect(picks).toHaveLength(2));
+    expect(picks[1]?.id).toBe("next");
+  });
+
+  it("says why each evening was selected: the first default, a series, or a pick", async () => {
+    const why: SelectedBy[] = [];
+    stub();
+    const user = userEvent.setup();
+    render(<Harness onPick={(_, by) => why.push(by)} />);
+    await waitFor(() => expect(why).toEqual(["default"]));
+
+    await user.selectOptions(seriesFilter(), "s2");
+    await waitFor(() => expect(why).toEqual(["default", "series"]));
+
+    await user.selectOptions(seriesFilter(), "");
+    await waitFor(() => expect(why).toEqual(["default", "series", "series"]));
+    await user.selectOptions(eventSelect(), "old");
+    await waitFor(() => expect(why).toEqual(["default", "series", "series", "picked"]));
   });
 });

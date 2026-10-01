@@ -6,7 +6,7 @@ import { verifyGoogleIdToken } from "@/server/auth/claims";
 import { exchangeCodeForIdToken } from "@/server/auth/google";
 import { resolveSignIn } from "@/server/auth/signIn";
 import { createSession, SESSION_COOKIE } from "@/server/auth/session";
-import { safeNextPath } from "@/server/auth/redirect";
+import { landingAfterSignIn } from "@/server/auth/redirect";
 import {
   NEXT_COOKIE,
   STATE_COOKIE,
@@ -74,7 +74,7 @@ export const GET = withLogging(async (req) => {
   if (!result.ok) return refuse(result.reason);
 
   const { token, expiresAt } = await createSession(db, result.identityId);
-  const next = safeNextPath(readCookie(req, NEXT_COOKIE));
+  const next = landingAfterSignIn(readCookie(req, NEXT_COOKIE));
 
   const res = relativeRedirect(next);
   res.headers.append("Set-Cookie", serializeCookie(SESSION_COOKIE, token, { expires: expiresAt }));

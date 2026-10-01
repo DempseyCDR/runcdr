@@ -6,13 +6,20 @@ import { render, screen } from "@testing-library/react";
 // return null for anonymous visitors (FR-005) and render the role-filtered presenter when signed in.
 // The presenter (VolunteerNav, already tested) and the grants loader are stubbed here.
 vi.mock("@/server/auth/currentStaff", () => ({ getActor: vi.fn() }));
+// Feature 090: the loader hands the presenter the actor's grouped menu, decided on the server.
 vi.mock("@/server/auth/nav", () => ({
-  navItemsFor: vi.fn(() => [{ href: "/gate", label: "Gate money" }]),
+  menuFor: vi.fn(() => ({ kind: "flat", items: [{ href: "/gate", label: "Gate money" }] })),
 }));
 vi.mock("@/app/VolunteerNav", () => ({
-  default: ({ items, signedInAs }: { items: { href: string }[]; signedInAs: string }) => (
+  default: ({
+    menu,
+    signedInAs,
+  }: {
+    menu: { kind: string; items: { href: string }[] };
+    signedInAs: string;
+  }) => (
     <nav data-testid="vnav">
-      {items.length} items for {signedInAs}
+      {menu.kind} {menu.items.length} items for {signedInAs}
     </nav>
   ),
 }));
@@ -40,7 +47,7 @@ describe("Nav — root-layout server loader", () => {
   it("renders the volunteer presenter with role-filtered items when signed in", async () => {
     mockActor.mockResolvedValue(ACTOR);
     render(await Nav());
-    expect(screen.getByTestId("vnav")).toHaveTextContent("1 items");
+    expect(screen.getByTestId("vnav")).toHaveTextContent("flat 1 items");
   });
 
   // Feature 083 (FR-005): the presenter shows whose session it is; the name comes from the server, so

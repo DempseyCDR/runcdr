@@ -1,0 +1,60 @@
+/* Feature 090 US5 (FR-022, FR-023): the organizer report's series and year controls, and its printout.
+   The rest of the page keeps its inline styles until the page is converted. */
+
+.controls {
+  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin-block-end: var(--space-3);
+}
+
+.control {
+  display: grid;
+  font-size: 1rem;
+  gap: var(--space-1);
+}
+
+.control select,
+.control input {
+  box-sizing: border-box;
+  font-size: 1rem; /* 16px or more stops iOS zooming into the field */
+  min-block-size: var(--tap-min);
+  min-inline-size: var(--tap-min);
+}
+
+.control input {
+  inline-size: 7rem;
+}
+
+/* The printout: the report alone (PrintBar's shared rules) on landscape letter, its wide per-dance table
+   fitted to the page. The table's own inline sizes are screen sizes, hence the !important here. */
+@media print {
+  .report {
+    font-size: 9pt;
+  }
+
+  .report h1 {
+    font-size: 14pt;
+    margin: 0 0 6pt;
+  }
+
+  .report h2 {
+    font-size: 11pt;
+    margin: 10pt 0 3pt;
+  }
+
+  .report table {
+    font-size: 8pt !important;
+    width: 100% !important;
+  }
+
+  .report th,
+  .report td {
+    padding: 1pt 3pt !important;
+  }
+
+  .report tr {
+    break-inside: avoid;
+  }
+}

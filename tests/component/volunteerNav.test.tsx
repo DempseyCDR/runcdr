@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 import type { ReactNode } from "react";
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { renderToStaticMarkup } from "react-dom/server";
 
-// Feature 035 (P6-R2): the volunteer menu's client presenter. usePathname drives active-state (FR-008);
-// next/link needs the Next runtime, so stub it to a plain <a> (same approach as PublicNav's test).
+// The volunteer menu's client presenter. usePathname drives the current-page mark; next/link needs the
+// Next runtime, so it is stubbed to a plain <a> (the same approach as PublicNav's test).
 vi.mock("next/navigation", () => ({ usePathname: vi.fn(() => "/gate") }));
 vi.mock("next/link", () => ({
   default: ({
@@ -23,42 +25,230 @@ vi.mock("next/link", () => ({
 }));
 
 import VolunteerNav from "@/app/VolunteerNav";
+import type { Menu } from "@/server/auth/nav";
 import { usePathname } from "next/navigation";
 
 const mockPath = vi.mocked(usePathname);
-const ITEMS = [
-  { href: "/gate", label: "Gate money" },
-  { href: "/payments", label: "Payments" },
-];
-
 afterEach(() => mockPath.mockReturnValue("/gate"));
 
-describe("VolunteerNav — presenter", () => {
-  it("renders a Main nav landmark with one link per item, in order", () => {
-    render(<VolunteerNav items={ITEMS} signedInAs="Meg Door" />);
+const FLAT: Menu = {
+  kind: "flat",
+  items: [
+    { href: "/organizer", label: "Organizer report" },
+    { href: "/contacts", label: "Contacts" },
+    { href: "/checkin", label: "Check-in" },
+  ],
+};
+
+const GROUPED: Menu = {
+  kind: "grouped",
+  groups: [
+    {
+      key: "tonight",
+      label: "Tonight",
+      items: [
+        { href: "/gate", label: "Gate money" },
+        { href: "/payments", label: "Payments" },
+      ],
+    },
+    {
+      key: "reports",
+      label: "Reports",
+      items: [
+        { href: "/organizer", label: "Organizer report" },
+        { href: "/treasurer", label: "Gate report" },
+      ],
+    },
+    {
+      key: "people",
+      label: "People",
+      items: [{ href: "/contacts", label: "Contacts" }],
+    },
+    {
+      key: "settings",
+      label: "Settings",
+      items: [
+        { href: "/rate-parameters", label: "Rate parameters" },
+        { href: "/door-parameters", label: "Door parameters" },
+        { href: "/access", label: "Access control" },
+      ],
+    },
+  ],
+};
+
+function show(menu: Menu = GROUPED) {
+  const user = userEvent.setup();
+  render(<VolunteerNav menu={menu} signedInAs="Meg Door" />);
+  return user;
+}
+
+const group = (name: string) => screen.getByRole("button", { name });
+const panelOf = (button: HTMLElement) => {
+  const id = button.getAttribute("aria-controls");
+  const panel = id ? document.getElementById(id) : null;
+  if (!panel) throw new Error(`no panel for ${button.textContent}`);
+  return panel;
+};
+
+/** Feature 090 (contracts/menu.md): one coloured bar, the destinations grouped by the kind of work. */
+describe("VolunteerNav — the bar (090)", () => {
+  it('is the "Main" landmark, with a way home and a way back to the club\'s site (FR-003)', () => {
+    show();
     const nav = screen.getByRole("navigation", { name: "Main" });
-    expect(nav).toBeInTheDocument();
-    const links = screen.getAllByRole("link");
-    expect(links.map((a) => a.textContent)).toEqual(["Gate money", "Payments"]);
-    expect(screen.getByRole("link", { name: "Payments" })).toHaveAttribute("href", "/payments");
+    expect(within(nav).getByRole("link", { name: "Volunteer" })).toHaveAttribute(
+      "href",
+      "/volunteer",
+    );
+    expect(within(nav).getByRole("link", { name: "Club site" })).toHaveAttribute("href", "/");
   });
 
-  it("marks the current section active (aria-current) and only that one", () => {
-    mockPath.mockReturnValue("/payments");
-    render(<VolunteerNav items={ITEMS} signedInAs="Meg Door" />);
-    expect(screen.getByRole("link", { name: "Payments" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("link", { name: "Gate money" })).not.toHaveAttribute("aria-current");
+  it("shows a flat menu as links, with no groups (FR-005)", () => {
+    show(FLAT);
+    for (const label of ["Organizer report", "Contacts", "Check-in"]) {
+      expect(screen.getByRole("link", { name: label })).toBeInTheDocument();
+    }
+    expect(screen.queryByRole("button", { name: /Reports|People|Settings/ })).toBeNull();
   });
 
-  it("keeps the parent section active on a sub-path", () => {
-    mockPath.mockReturnValue("/payments/anything");
-    render(<VolunteerNav items={ITEMS} signedInAs="Meg Door" />);
-    expect(screen.getByRole("link", { name: "Payments" })).toHaveAttribute("aria-current", "page");
+  it("keeps Tonight's links flat and makes each other group of two or more a disclosure (FR-004)", () => {
+    show();
+    expect(screen.getByRole("link", { name: "Gate money" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Tonight" })).toBeNull();
+    const reports = group("Reports");
+    expect(reports).toHaveAttribute("aria-expanded", "false");
+    expect(within(panelOf(reports)).getByRole("link", { name: "Gate report" })).toBeInTheDocument();
   });
 
-  it("renders no links when items is empty", () => {
-    render(<VolunteerNav items={[]} signedInAs="Meg Door" />);
-    expect(screen.queryAllByRole("link")).toHaveLength(0);
+  it("draws a group of one as a plain link (FR-005)", () => {
+    show();
+    expect(screen.queryByRole("button", { name: "People" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Contacts" })).toBeInTheDocument();
+  });
+
+  it("marks the current page, and only that one (FR-009)", () => {
+    show();
+    expect(screen.getByRole("link", { name: "Gate money" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByRole("link", { name: "Payments" })).not.toHaveAttribute("aria-current");
+  });
+});
+
+describe("VolunteerNav — groups open by mouse and keyboard (FR-008)", () => {
+  it("opens a group on click, and only one at a time (M1)", async () => {
+    const user = show();
+    await user.click(group("Reports"));
+    expect(group("Reports")).toHaveAttribute("aria-expanded", "true");
+    await user.click(group("Settings"));
+    expect(group("Settings")).toHaveAttribute("aria-expanded", "true");
+    expect(group("Reports")).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("opens with Enter and with Space (M1)", async () => {
+    const user = show();
+    group("Reports").focus();
+    await user.keyboard("{Enter}");
+    expect(group("Reports")).toHaveAttribute("aria-expanded", "true");
+    group("Settings").focus();
+    await user.keyboard(" ");
+    expect(group("Settings")).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("moves with Down, Up, Home and End within the open group (M2)", async () => {
+    const user = show();
+    await user.click(group("Settings"));
+    await user.keyboard("{ArrowDown}");
+    expect(screen.getByRole("link", { name: "Rate parameters" })).toHaveFocus();
+    await user.keyboard("{ArrowDown}");
+    expect(screen.getByRole("link", { name: "Door parameters" })).toHaveFocus();
+    await user.keyboard("{ArrowUp}");
+    expect(screen.getByRole("link", { name: "Rate parameters" })).toHaveFocus();
+    await user.keyboard("{End}");
+    expect(screen.getByRole("link", { name: "Access control" })).toHaveFocus();
+    await user.keyboard("{Home}");
+    expect(screen.getByRole("link", { name: "Rate parameters" })).toHaveFocus();
+  });
+
+  it("closes on Escape and puts focus back on the group's button (M3)", async () => {
+    const user = show();
+    await user.click(group("Settings"));
+    await user.keyboard("{ArrowDown}");
+    await user.keyboard("{Escape}");
+    expect(group("Settings")).toHaveAttribute("aria-expanded", "false");
+    expect(group("Settings")).toHaveFocus();
+  });
+
+  it("closes when a link in it is chosen, or on a click outside the bar (M4)", async () => {
+    const user = show();
+    await user.click(group("Reports"));
+    await user.click(screen.getByRole("link", { name: "Gate report" }));
+    expect(group("Reports")).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(group("Reports"));
+    await user.click(document.body);
+    expect(group("Reports")).toHaveAttribute("aria-expanded", "false");
+  });
+
+  // A <noscript>'s contents exist only in the server's HTML, so this reads the server rendering.
+  it("shows every group open without JavaScript (M7)", () => {
+    const html = renderToStaticMarkup(<VolunteerNav menu={GROUPED} signedInAs="Meg Door" />);
+    expect(html).toMatch(/<noscript><style>[^<]*\[data-group-panel\]\{display:block/);
+  });
+});
+
+/**
+ * Feature 090 US2 (FR-010–FR-012, contracts/menu.md M5–M7): below 48rem the bar is the volunteer's name
+ * and a Menu button; the Menu lists Tonight first, then every group open under its heading, then Sign out
+ * and Club site. (Which part shows at which width is the stylesheet's; the structure is tested here.)
+ */
+describe("VolunteerNav — the Menu on a phone (090 US2)", () => {
+  const menuButton = () => screen.getByRole("button", { name: "Menu" });
+
+  it("shows the volunteer's name on its own, beside a Menu button (FR-010, FR-011)", () => {
+    show();
+    expect(screen.getByText("Meg Door")).toBeInTheDocument();
+    expect(menuButton()).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("puts Tonight first, then every group under its heading, then Sign out and Club site (FR-010, FR-012)", () => {
+    show();
+    const panel = panelOf(menuButton());
+    const headings = within(panel)
+      .getAllByRole("heading")
+      .map((h) => h.textContent);
+    expect(headings).toEqual(["Tonight", "Reports", "People", "Settings"]);
+    expect(within(panel).getByRole("link", { name: "Access control" })).toBeInTheDocument();
+    expect(within(panel).getByRole("button", { name: "Sign out" })).toBeInTheDocument();
+    expect(within(panel).getByRole("link", { name: "Club site" })).toBeInTheDocument();
+  });
+
+  it("opens and closes on the Menu button (M5)", async () => {
+    const user = show();
+    await user.click(menuButton());
+    expect(menuButton()).toHaveAttribute("aria-expanded", "true");
+    await user.click(menuButton());
+    expect(menuButton()).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("closes on Escape, with focus back on the Menu button (M6)", async () => {
+    const user = show();
+    await user.click(menuButton());
+    await user.keyboard("{Escape}");
+    expect(menuButton()).toHaveAttribute("aria-expanded", "false");
+    expect(menuButton()).toHaveFocus();
+  });
+
+  it("closes when a destination is chosen (FR-012)", async () => {
+    const user = show();
+    await user.click(menuButton());
+    await user.click(screen.getByRole("link", { name: "Payments" }));
+    expect(menuButton()).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("shows the Menu's contents without JavaScript (M7)", () => {
+    const html = renderToStaticMarkup(<VolunteerNav menu={GROUPED} signedInAs="Meg Door" />);
+    expect(html).toMatch(/\[data-menu-panel\]\{display:flex/);
   });
 });
 
@@ -69,7 +259,7 @@ describe("VolunteerNav — presenter", () => {
  */
 describe("VolunteerNav — signing out", () => {
   it("offers a Sign out button that submits a POST to the sign-out route (FR-001, FR-006)", () => {
-    render(<VolunteerNav items={ITEMS} signedInAs="Meg Door" />);
+    show();
     const button = screen.getByRole("button", { name: "Sign out" });
     expect(button).toHaveAttribute("type", "submit");
     const form = button.closest("form");
@@ -78,22 +268,22 @@ describe("VolunteerNav — signing out", () => {
   });
 
   it("puts it after every destination, where a thumb does not land while working", () => {
-    render(<VolunteerNav items={ITEMS} signedInAs="Meg Door" />);
-    const nav = screen.getByRole("navigation", { name: "Main" });
+    show();
     const form = screen.getByRole("button", { name: "Sign out" }).closest("form");
-    expect(nav.lastElementChild).toBe(form);
+    if (!form) throw new Error("no sign-out form");
+    for (const link of screen.getAllByRole("link")) {
+      if (link.textContent === "Volunteer" || link.textContent === "Club site") continue;
+      expect(
+        link.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING,
+        link.textContent ?? "",
+      ).toBeTruthy();
+    }
   });
 
-  it("gives the button the phone touch target the project asks for (FR-007)", () => {
-    render(<VolunteerNav items={ITEMS} signedInAs="Meg Door" />);
-    expect(screen.getByRole("button", { name: "Sign out" })).toHaveStyle({
-      minHeight: "2.75rem",
-    });
-  });
-
-  // FR-005: the door phone is shared, and what a volunteer records is attributed to whoever is signed in.
-  it("says whose session the device holds, beside the control", () => {
-    render(<VolunteerNav items={ITEMS} signedInAs="Meg Door" />);
+  // FR-005 (083): the door phone is shared, and what a volunteer records is attributed to whoever is
+  // signed in.
+  it("says whose session the device holds", () => {
+    show();
     expect(screen.getByText("Signed in as Meg Door")).toBeInTheDocument();
   });
 });

@@ -18,6 +18,12 @@ export type EventRow = {
 };
 type SeriesRow = { id: string; key: string; name: string };
 
+/**
+ * Why an evening was selected (feature 090): the selector's own first `default`, a new `series` (its
+ * most recent dance), or `picked` from the list — so a page can close its chooser only on a pick.
+ */
+export type SelectedBy = "default" | "series" | "picked";
+
 /** The DB `time` column round-trips as HH:MM:SS; show HH:MM (feature 020 normalization). */
 function toHHMM(t: string | null): string {
   if (!t) return "";
@@ -29,13 +35,24 @@ function eventLabel(e: EventRow): string {
   return [e.eventDate, toHHMM(e.startTime), e.label].filter(Boolean).join(" · ");
 }
 
+/** The default evening of a newest-first list: the most recent with date ≤ today, else the soonest upcoming. */
+function defaultOf(list: EventRow[]): EventRow | undefined {
+  const today = localToday(); // feature 079: the device's date, not UTC's
+  return list.find((e) => e.eventDate <= today) ?? list[list.length - 1];
+}
+
 export function EventSelector({
   value,
   onSelect,
   defaultToMySeries = false,
 }: {
   value: string;
-  onSelect: (event: EventRow) => void;
+  /**
+   * Feature 090 (FR-024): besides the first default and a pick, choosing a series selects that series'
+   * default evening (the same rule), so a page never shows an evening from a series other than the one
+   * the filter names. The date range still only narrows the list (028 US3).
+   */
+  onSelect: (event: EventRow, by: SelectedBy) => void;
   /**
    * Feature 086 (FR-010): start the series filter on the series this viewer works in. Opt-in, because
    * check-in deliberately does not (FR-013) — it is the busiest screen and a changed default costs most
@@ -90,28 +107,40 @@ export function EventSelector({
   }, []);
 
   // The list already arrives newest-first (feature 025). Filter client-side by series + date range.
-  const filtered = events.filter(
-    (e) =>
-      (!seriesId || e.seriesId === seriesId) &&
-      (!from || e.eventDate >= from) &&
-      (!to || e.eventDate <= to),
-  );
+  const within = (series: string) =>
+    events.filter(
+      (e) =>
+        (!series || e.seriesId === series) &&
+        (!from || e.eventDate >= from) &&
+        (!to || e.eventDate <= to),
+    );
+  const filtered = within(seriesId);
 
   // Default ONCE on open (FR-001): the most recent event with date ≤ today within the current filter, else the
-  // soonest upcoming. The ref guard means adjusting a filter never re-defaults (and never re-fires onSelect).
+  // soonest upcoming. The ref guard means this never fires again; after it, only choosing a series
+  // (below) or picking an evening selects one.
   useEffect(() => {
     if (didDefault.current || value || !mySeriesSettled || !filtered.length) return;
-    const today = localToday(); // feature 079: the device's date, not UTC's
-    const def = filtered.find((e) => e.eventDate <= today) ?? filtered[filtered.length - 1];
+    const def = defaultOf(filtered);
     if (def) {
       didDefault.current = true;
-      onSelect(def);
+      onSelect(def, "default");
     }
   }, [filtered, value, onSelect, mySeriesSettled]);
 
   function pick(id: string) {
     const e = events.find((x) => x.id === id);
-    if (e) onSelect(e);
+    if (e) onSelect(e, "picked");
+  }
+
+  // Feature 090 (FR-024): a new series selects its own default evening, by the same rule.
+  function chooseSeries(id: string) {
+    setSeriesId(id);
+    const def = defaultOf(within(id));
+    if (def && def.id !== value) {
+      didDefault.current = true;
+      onSelect(def, "series");
+    }
   }
 
   return (
@@ -132,7 +161,7 @@ export function EventSelector({
         <select
           aria-label="Filter series"
           value={seriesId}
-          onChange={(e) => setSeriesId(e.target.value)}
+          onChange={(e) => chooseSeries(e.target.value)}
         >
           <option value="">any series</option>
           {series.map((s) => (
