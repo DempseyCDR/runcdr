@@ -25,11 +25,11 @@ const writes = (calls: Call[]) => calls.filter((c) => c.method !== "GET");
 const EMPTY = row({ eventId: "e2", date: "2026-10-08", label: "Open night" });
 
 async function rowFor(text: string) {
-  const table = await screen.findByRole("table", { name: /dances/i });
-  await waitFor(() => expect(within(table).getAllByRole("row").length).toBeGreaterThan(1));
+  const table = await screen.findByRole("list", { name: "Dances" });
+  await waitFor(() => expect(within(table).getAllByRole("listitem").length).toBeGreaterThan(0));
   return within(
     within(table)
-      .getAllByRole("row")
+      .getAllByRole("listitem")
       .find((r) => r.textContent?.includes(text)) as HTMLElement,
   );
 }

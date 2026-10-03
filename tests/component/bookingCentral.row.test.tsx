@@ -52,13 +52,13 @@ const FULL_BOOKINGS = {
   ],
 };
 
-const table = () => screen.getByRole("table", { name: /dances/i });
+const table = () => screen.getByRole("list", { name: "Dances" });
 const loaded = () =>
-  waitFor(() => expect(within(table()).getAllByRole("row").length).toBeGreaterThan(1));
+  waitFor(() => expect(within(table()).getAllByRole("listitem").length).toBeGreaterThan(0));
 const rowFor = (text: string) =>
   within(
     within(table())
-      .getAllByRole("row")
+      .getAllByRole("listitem")
       .find((r) => r.textContent?.includes(text)) as HTMLElement,
   );
 
@@ -79,12 +79,12 @@ describe("Booking Central — the row's targets (087 US2)", () => {
     expect(await screen.findByRole("dialog", { name: /event/i })).toBeInTheDocument();
   });
 
-  it("opens the venue when its short code is clicked (T024, FR-008)", async () => {
+  it("opens the venue when its name is clicked (T024, FR-008; 091: the name, not the short code)", async () => {
     const calls = stubHub({ rows: [DANCE] });
     render(<BookingCentralPage />);
     await loaded();
 
-    await userEvent.click(rowFor("Waltz night").getByRole("button", { name: "GH" }));
+    await userEvent.click(rowFor("Waltz night").getByRole("button", { name: "German House" }));
 
     await waitFor(() => expect(calls.some((c) => c.url.endsWith("/api/venues/v1"))).toBe(true));
     expect(await screen.findByRole("dialog", { name: /German House/ })).toBeInTheDocument();
@@ -95,7 +95,7 @@ describe("Booking Central — the row's targets (087 US2)", () => {
     render(<BookingCentralPage />);
     await loaded();
 
-    await userEvent.click(rowFor("Waltz night").getByRole("button", { name: "Pat Caller" }));
+    await userEvent.click(rowFor("Waltz night").getByRole("button", { name: "P. Caller" }));
 
     const dialog = await screen.findByRole("dialog", { name: /^(booking —|book an? )/i });
     expect(within(dialog).getByDisplayValue("prefers the long set")).toBeInTheDocument();

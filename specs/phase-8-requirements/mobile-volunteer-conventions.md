@@ -26,6 +26,18 @@ long on a phone for a role with many pages. In a grouped menu, Tonight's pages s
 and each other group is listed collapsed, opened by a tap (three). A flat menu — six or fewer, the
 Door Attendant and the Financial Secretary — still shows everything.
 
+**Update, 2026-10-01 — Booking Central's cards shipped as feature 091**
+(`specs/091-booking-central-cards/`), the first page conversion. **The card is the basis at every
+width; 087's table is retired.** On a phone each dance is a card (§4.5), its letters shown, not
+pressed, and a tap opens the dance in the shared dialog. From 48rem the card is live, with the time,
+venue (by its full name) and notes, and Caller, Music and Sound in a six-column subgrid shared by
+every card. The hub opens on the **first dance dated today or later** (not check-in's rule —
+corrected in §4.5) and scrolls both ways with no buttons at the ends; "Showing dances from" is
+retired. The volunteer bar and a one-line header are pinned on this page; the header's
+**Performers** button holds the search on a phone or in a window under 450px tall. The hub shows
+every series the viewer's roles name. Its stylesheet joins 089's style guard: every letter, gap mark
+and **+** is a tap-minimum control around a small chip.
+
 ## 1. Units: why dips and points are not a problem here
 
 These are web pages, so the unit is the **CSS pixel**, which is already density-independent. With
@@ -139,8 +151,9 @@ Two consequences follow:
   - **One card per dance**, showing its **date, series key, label, caller and band**.
   - **Where the list opens**: the list keeps the hub's order (newest first) and opens scrolled so
     that the **default dance sits at the bottom of the viewport** — the dances still to come are
-    above it, and the past below. The default is check-in's rule: the most recent dance dated
-    today or earlier, or, if there is none, the soonest one to come.
+    above it, and the past below. The default is the **first dance dated today or later**, or, if
+    there is none, the most recent *(corrected 2026-10-01, feature 091: this had named check-in's
+    rule, the most recent dance dated today or earlier — the Booker works ahead, the door behind)*.
   - **Scrolling both ways** *(decided 2026-09-28)*: the cards sit in one window that scrolls
     without end in both directions — **up into the future, down into the past**. It opens with
     about **ten dances** around the default and loads more as the Booker reaches either end. The

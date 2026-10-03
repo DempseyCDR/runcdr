@@ -2,7 +2,8 @@
 import { apiFetch } from "@/app/apiFetch";
 
 import { useEffect, useId, useState } from "react";
-import { DialogActions, useInDialog } from "@/app/_components/Dialog";
+import Dialog, { DialogActions, useInDialog } from "@/app/_components/Dialog";
+import PerformerForm from "../_performers/PerformerForm";
 import { PROMO_LINK_TYPES, STYLE_TAGS, type PromoLink } from "@/server/domain/public/promoLinks";
 import styles from "./hub.module.css";
 
@@ -78,6 +79,10 @@ export default function BandRoster({
 
   const [q, setQ] = useState("");
   const [found, setFound] = useState<{ id: string; displayName: string }[]>([]);
+  // Feature 091 (Rich, 2026-10-02): the text the search last answered for — a new performer is offered
+  // for it after every answer, as the hub's search does — and the new performer being made.
+  const [answered, setAnswered] = useState("");
+  const [making, setMaking] = useState<string | null>(null);
   // FR-024: the members who can be emailed, asked for only while the band has no lead.
   const [reachable, setReachable] = useState<{ name: string; email: string }[] | null>(null);
 
@@ -136,12 +141,17 @@ export default function BandRoster({
   // Adding a member: search the directory, leaving out whoever is already listed.
   useEffect(() => {
     const needle = q.trim();
-    if (!needle) return setFound([]);
+    if (!needle) {
+      setAnswered("");
+      return setFound([]);
+    }
     let cancelled = false;
     void apiFetch(`/api/performers?q=${encodeURIComponent(needle)}`)
       .then((r) => r.json())
       .then((d) => {
-        if (!cancelled) setFound(d.items ?? []);
+        if (cancelled) return;
+        setFound(d.items ?? []);
+        setAnswered(needle);
       });
     return () => {
       cancelled = true;
@@ -308,9 +318,30 @@ export default function BandRoster({
                   ))}
               </ul>
             )}
+            {/* Feature 091 (Rich, 2026-10-02): someone not yet a performer is made here, with the
+                form that makes one from the hub, then joins the band — offered after every answer,
+                since the Jane Smith wanted may not be the Jane Smithers found. */}
+            {answered && answered === q.trim() && (
+              <button type="button" onClick={() => setMaking(answered)}>
+                New performer “{answered}”
+              </button>
+            )}
           </div>
         )}
       </fieldset>
+
+      {making !== null && (
+        <Dialog heading="New performer" onClose={() => setMaking(null)}>
+          <PerformerForm
+            initialName={making}
+            onSaved={(created) => {
+              setMaking(null);
+              if (created) add(created);
+            }}
+            onClose={() => setMaking(null)}
+          />
+        </Dialog>
+      )}
 
       <label>
         Biography{" "}

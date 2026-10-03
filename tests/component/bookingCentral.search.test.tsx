@@ -3,7 +3,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import BookingCentralPage from "@/app/(admin)/bookings/page";
-import { row } from "./fixtures/bookingCentral";
+import { answerReport, row } from "./fixtures/bookingCentral";
 
 /**
  * Feature 087 US3 (FR-017, FR-018) — one search for performers AND bands.
@@ -28,10 +28,10 @@ function stub() {
           return { items: [{ id: "s1", key: "tnc", name: "Thursday Night Contra" }] };
         }
         if (url.includes("/api/bookings/report")) {
-          return {
-            rows: [row({ eventId: "e1", date: "2026-10-01", label: "Waltz night" })],
-            nextCursor: null,
-          };
+          return answerReport(
+            [row({ eventId: "e1", date: "2026-10-01", label: "Waltz night" })],
+            url,
+          );
         }
         if (url.includes("/api/performers?")) {
           const archived = url.includes("archived=1");

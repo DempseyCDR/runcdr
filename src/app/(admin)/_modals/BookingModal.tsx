@@ -1,6 +1,7 @@
 "use client";
 import { apiFetch } from "@/app/apiFetch";
 import Dialog from "@/app/_components/Dialog";
+import styles from "./BookingModal.module.css";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -297,7 +298,7 @@ export function BookingModal({
       }
     >
       {mode === "create" && (
-        <div>
+        <div className={styles.find}>
           {/* 087 walk-through: the same pattern as the hub's own search — type, pick a result, or make a new
               performer from what was typed. The new one is offered after every answer, not only an empty
               one: the Jane Smith you want may not be the Jane Smithers the search found. */}

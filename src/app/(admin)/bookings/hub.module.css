@@ -1,65 +1,32 @@
 /* Feature 087 — Booking Central. The Booker's spreadsheet, made live.
    Every colour here carries an alternative that is not colour: a gap is a dash, a cancellation is a word,
-   a state is a letter. Colour is emphasis, never the only signal (FR-005). */
+   a state is a letter. Colour is emphasis, never the only signal (FR-005).
 
-.head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-3);
-  margin-block-end: var(--space-4);
-}
+   Feature 091 — converted (feature 089's rules): no text under 16px, every control at the tap minimum.
+   A letter, a gap mark and the + keep their small chips; the control around each is the tap minimum,
+   so the table stays a spreadsheet. Below 48rem the dances are cards; a card opens its dance. */
 
-.series {
-  font-family: var(--font-heading);
-  font-size: var(--fs-h2);
-  margin: 0;
-}
-
+/* Quiet words beside the search (its archived box, "More matched"). */
 .horizon {
-  font-size: var(--fs-sm);
   color: var(--text-muted);
 }
 
-.table {
-  inline-size: 100%;
-  border-collapse: collapse;
-  font-size: var(--fs-body);
+/* Feature 091 (FR-013): on a computer, the "performers need a contact" prompt above the table. */
+.prompt {
+  margin-block: 0 var(--space-4);
 }
 
-.table th {
-  text-align: start;
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  color: var(--text-muted);
-  padding: var(--space-2);
-  border-block-end: 2px solid var(--hairline);
-}
-
-.table td {
-  padding: var(--space-2);
-  vertical-align: top;
-}
-
-/* A dance and its note are one visual unit: the rule falls after the note, not between them. */
-.dance td {
-  border-block-start: 1px solid var(--hairline);
-}
-
-.date {
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-
-/* An orange pastel for a cancelled dance — with the word "Cancelled" beside it, always (FR-005). */
-.cancelled td {
-  background: #fde6d2;
+/* Feature 091 (FR-012): on a phone, the one button above the cards. */
+.performers {
+  flex: none;
+  font: inherit;
+  min-block-size: var(--tap-min);
+  min-inline-size: var(--tap-min);
+  padding: 0 var(--space-4);
 }
 
 .cancelledWord {
   display: inline-block;
-  font-size: var(--fs-sm);
   font-weight: 600;
   color: #8a4b12;
   margin-inline-start: var(--space-2);
@@ -82,12 +49,10 @@
 .state {
   display: inline-grid;
   place-items: center;
-  min-inline-size: 1.5em;
-  block-size: 1.5em;
-  padding-inline: 0.2em;
+  inline-size: 1.75em;
+  block-size: 1.75em;
   border: 1px solid var(--hairline);
   border-radius: 4px;
-  font-size: var(--fs-sm);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   background: var(--ground);
@@ -118,38 +83,91 @@
   line-height: 1;
 }
 
-.note td {
-  padding-block-start: 0;
-  color: var(--text-muted);
-  font-size: var(--fs-sm);
-  white-space: pre-wrap;
+/* Feature 091: the two ends of the list — "Loading…" while more load that way, or a line saying there
+   are none. Reaching an end loads more; there are no buttons (Rich, 2026-10-01). */
+.end {
+  margin-block: var(--space-3);
 }
 
-.more {
-  margin-block-start: var(--space-4);
+.end p {
+  color: var(--text-muted);
+  margin: 0;
+}
+
+/* The page holds its own place when later dances load above (research R3): Safari has no scroll
+   anchoring, and where a browser does, it must not correct the scroll a second time. */
+:global(html):has(.cards) {
+  overflow-anchor: none;
+}
+
+/* Rich's phone check, 2026-10-01 (FR-007): the page opens with the next dance at the bottom of the
+   window — but a phone browser's own bar (Chrome on the iPhone) sits over the bottom of the page. The
+   dance stops this far above the bottom, clear of it. */
+.cards > li {
+  scroll-margin-block-end: calc(6rem + env(safe-area-inset-bottom));
+  /* And clear of the pinned bar and header above (FR-017), when one is scrolled to the top. */
+  scroll-margin-block-start: calc(var(--volunteer-bar-height, 0px) + 10rem);
+}
+
+/* Rich's phone check, 2026-10-01 (FR-016): Booking Central opens scrolled down past the dances to come,
+   so the volunteer bar is pinned to the top of the window here — only here: elsewhere a pinned bar
+   would cover what a page scrolls to the top (check-in's search box). */
+:global(body):has(.cards) :global([data-volunteer-bar]) {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+/* Pinned, the phone's open Menu must scroll inside itself, or a long one could never be read to its end.
+   The phone's only (its cards are not `.wideCards`): on a computer the same element is the bar's row of
+   groups, and a scrolling box clips the lists that drop from it (Settings' list vanished — Rich,
+   2026-10-02). */
+:global(body):has(.cards:not(.wideCards)) :global([data-volunteer-bar] [data-menu-panel]) {
+  max-block-size: calc(100dvh - var(--tap-min));
+  overflow-y: auto;
 }
 
 /* A name that opens its record. Looks like text, behaves like a link — the row stays a spreadsheet. */
 .link {
+  align-items: center;
   background: none;
   border: 0;
-  padding: 0;
-  font: inherit;
   color: var(--link);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  min-block-size: var(--tap-min);
+  min-inline-size: var(--tap-min);
+  padding: 0;
+  text-align: start;
   text-decoration: underline;
   text-underline-offset: 2px;
-  cursor: pointer;
 }
 
 .link:hover {
   color: var(--link-hover);
 }
 
-button.state,
-button.gap {
+/* The control around a letter, a gap mark or the +: the tap minimum, transparent, the chip at its centre. */
+.hit {
+  background: none;
+  border: 0;
+  color: inherit;
   cursor: pointer;
+  display: inline-grid;
   font: inherit;
-  font-weight: 700;
+  min-block-size: var(--tap-min);
+  min-inline-size: var(--tap-min);
+  padding: 0;
+  place-items: center;
+}
+
+.hit:focus-visible,
+.link:focus-visible,
+.cardOpen:focus-visible,
+.danceForm:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
 }
 
 /* Choices inside a dialog the row opens (caller or instructor). */
@@ -170,8 +188,20 @@ button.gap {
   position: relative;
 }
 
+/* One look in every browser (Rich's phone check, 2026-10-01): Safari's engine — which Chrome on the
+   iPhone uses — draws a search box with rounded ends and its own ring, run up against the heading above
+   it when the box takes the cursor on opening. A plain box, with room above for the focus ring. */
+.search {
+  margin-block-start: var(--space-2);
+}
+
 .search input[type="search"] {
-  min-inline-size: 18rem;
+  -webkit-appearance: none;
+  appearance: none;
+  border: 1px solid var(--text-muted);
+  border-radius: 4px;
+  font: inherit;
+  inline-size: min(18rem, 100%);
   padding: var(--space-2);
 }
 
@@ -191,7 +221,6 @@ button.gap {
 
 /* Performer or band — said in words beside every result, never left to be guessed (FR-017). */
 .kind {
-  font-size: var(--fs-sm);
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -243,4 +272,195 @@ button.gap {
 .featuring {
   color: var(--text-muted);
   font-style: italic;
+}
+
+/* Feature 091 — the cards, one per dance, at every width. On a phone the button naming the dance is
+   stretched over the whole card, so a tap anywhere opens the dance and nothing on the card is pressed by
+   mistake. From 48rem the card is live (`.wideCard`, below). */
+.cards {
+  display: grid;
+  gap: var(--space-3);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.card {
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  position: relative;
+}
+
+.cancelledCard {
+  background: #fde6d2;
+}
+
+.cardHead {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.cardOpen {
+  align-items: center;
+  background: none;
+  border: 0;
+  color: var(--link);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  font-weight: 700;
+  min-block-size: var(--tap-min);
+  min-inline-size: var(--tap-min);
+  padding: 0;
+  text-align: start;
+}
+
+.cardOpen::after {
+  border-radius: 8px;
+  content: "";
+  inset: 0;
+  position: absolute;
+}
+
+.card .cancelledWord {
+  margin: 0;
+}
+
+/* Caller, Music, Sound: the label beside what is booked, or the mark for what is missing. */
+/* A description list (Rich, 2026-10-01): each term top-aligned with the FIRST line of its details, so
+   when musicians wrap onto several lines "Music" still sits beside the first of them — centred, it read
+   as if the first musicians were callers. A term is as tall as a line of names with their letter chips
+   (1.75em), so its word lines up with theirs. */
+.cardSlots {
+  align-items: start;
+  column-gap: var(--space-3);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  margin: 0;
+  row-gap: var(--space-1);
+}
+
+.cardSlots dt {
+  color: var(--text-muted);
+  line-height: 1.75em;
+}
+
+.cardSlots dd {
+  margin: 0;
+}
+
+/* On a phone each term and its names join the one list above; a group has no box of its own. */
+.slot {
+  display: contents;
+}
+
+/* From 48rem (Rich, 2026-10-01): the card the table was — live, with the time, the venue and the notes,
+   and Caller, Music and Sound spread across it side by side, each still a term beside its names. Names
+   and letters are tap-minimum controls here, so a term is as tall as a line of them. */
+.wideCard .cardHead {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  font-weight: 700;
+  gap: 0 var(--space-1);
+}
+
+/* The columns (Rich, 2026-10-01). The list is ONE grid of six columns — term, names, term, names, term,
+   names — and every card takes them as a subgrid, so the columns are sized from all the cards together
+   and still line up from card to card. A term's column is its word, never wrapped ("Sound", not
+   "Soun / d"). The names' columns each get the room their widest unbreakable piece needs (a last name
+   with its letter and its +, kept together), then share what is left 1 : 2 : 1 — Caller, Music, Sound.
+   Sound's columns are left empty on a card whose series has none. */
+.wideCards {
+  column-gap: var(--space-1);
+  grid-template-columns:
+    max-content minmax(min-content, 1fr)
+    max-content minmax(min-content, 2fr)
+    max-content minmax(min-content, 1fr);
+}
+
+.wideCards > .card {
+  align-items: start;
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  padding-inline: var(--space-2);
+}
+
+.wideCards .cardHead,
+.wideCards .cardNotes {
+  grid-column: 1 / -1;
+}
+
+.wideCards .cardSlots {
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+}
+
+.wideCards .cardSlots dt {
+  line-height: var(--tap-min);
+  white-space: nowrap;
+}
+
+/* A + is already a 44px tap area around a smaller chip — room enough on each side — so no gap is added
+   before it; a name keeps a small one before its letter (a confirmed letter is not a control, has no
+   tap area, and would touch the name). Keeps the columns' minimums small enough to fit at 768px
+   without shrinking a tap target. */
+.wideCards .person {
+  gap: var(--space-1);
+}
+
+.wideCards .keep {
+  gap: 0;
+}
+
+/* A performer's name on a card ("C. Riedlinger") never breaks between initial and surname — so a
+   names column is never squeezed narrower than its widest name. A band's name may be long, and wraps. */
+.cardSlots .person > .link {
+  white-space: nowrap;
+}
+
+.cardSlots .band > .link {
+  white-space: normal;
+}
+
+/* A last name, its letter and its + wrap as one: the + never sits alone on a line. */
+.keep {
+  align-items: center;
+  display: inline-flex;
+  gap: var(--space-1);
+}
+
+.cardNotes {
+  color: var(--text-muted);
+  margin: var(--space-1) 0 0;
+  white-space: pre-wrap;
+}
+
+/* The opened dance (091 US1): its parts under headings, the editors a tap away. */
+.danceView {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.danceWhen {
+  margin: 0;
+}
+
+.danceWhen .cancelledWord {
+  margin-inline-start: var(--space-2);
+}
+
+.danceSection h3 {
+  font-size: 1rem;
+  margin: 0 0 var(--space-1);
+}
+
+.danceForm {
+  font: inherit;
+  justify-self: start;
+  min-block-size: var(--tap-min);
+  min-inline-size: var(--tap-min);
+  padding: 0 var(--space-4);
 }

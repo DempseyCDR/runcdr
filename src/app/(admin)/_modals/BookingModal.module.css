@@ -1,0 +1,19 @@
+/* Feature 091 (Rich's phone check, 2026-10-01): the booking editor's performer search, as Booking
+   Central's (`.search` in `bookings/hub.module.css`). Safari's engine — which Chrome on the iPhone uses —
+   draws a search box with rounded ends and a blue ring; this one takes the cursor when the editor opens,
+   and sat flush against the dialog's heading. A plain box, with room above for its focus ring. */
+
+.find {
+  margin-block-start: var(--space-2);
+}
+
+.find input[type="search"] {
+  -webkit-appearance: none;
+  appearance: none;
+  border: 1px solid var(--text-muted);
+  border-radius: 4px;
+  box-sizing: border-box;
+  font: inherit;
+  inline-size: min(18rem, 100%);
+  padding: var(--space-2);
+}

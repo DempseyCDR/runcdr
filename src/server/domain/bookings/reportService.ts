@@ -1,9 +1,9 @@
-import { and, desc, eq, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import type { Db } from "@/server/db/client";
 import { bands, events, series, venues } from "@/server/db/schema";
 import type { BookingStatus, PerformerType } from "@/server/db/schema";
-import { venueShortNameDefault } from "@/server/domain/venues/venueService";
+import { errors } from "@/server/lib/apiError";
 import { getBookingsForEvent } from "./bookingService";
 
 /**
@@ -12,14 +12,20 @@ import { getBookingsForEvent } from "./bookingService";
  * to "who is booked for this dance". Read-only. Cancelled events are INCLUDED, flagged. All booking
  * statuses are shown (this is the staff view; the public site is confirmed-only).
  *
- * Feature 087 (FR-001b): the caller, band and musician filters and the ascending sort are RETIRED. The
- * hub has one control, the horizon; "where has this performer played" is a performer's own history.
+ * Feature 087 (FR-001b): the caller, band and musician filters and the ascending sort are RETIRED; "where
+ * has this performer played" is a performer's own history.
+ *
+ * Feature 091 (research R1): the hub opens on the next dance and scrolls BOTH ways, so the read pages from
+ * a split date in either direction. 087's horizon (an upper date bound) is retired.
  */
 export type BookingsReportFilters = {
-  series?: string; // series key
-  /** The upper bound, YYYY-MM-DD inclusive. No lower bound: the Booker scrolls back without limit. */
-  horizon?: string;
-  /** Opaque — the `nextCursor` of the page before. */
+  /** Series keys — the dances of any of them (feature 091: a Booker of two series sees both). */
+  series?: string[];
+  /** `older` reads the dances before it; `newer` those on or after it. YYYY-MM-DD. */
+  split?: string;
+  /** `older` (the default): newest first. `newer`: nearest first — the older order exactly reversed. */
+  direction?: "older" | "newer";
+  /** Opaque — the `nextCursor` of the page before, in the same direction. */
   cursor?: string;
   /** Page size. Absent means every row, in one answer. */
   limit?: number;
@@ -50,7 +56,11 @@ export type BookingsReportRow = {
   series: string;
   /** Feature 087: so the venue's short code can open the venue itself. */
   venueId: string | null;
-  venueShortName: string | null; // feature 020 US1 (FR-002); derived initials when short_name is null
+  /**
+   * Feature 091 (Rich, 2026-10-01): the venue's full name. 020's short code (FR-002) fit the table's narrow
+   * Venue column; the table is retired, and a card has room for the name.
+   */
+  venueName: string | null;
   hasSoundTech: boolean; // feature 020 US1 (FR-004); false → no sound-tech slot (the community dance, cdob)
   caller: string | null;
   /** Feature 087 (FR-003a): shares the caller's cell on the hub. Never makes a gap (FR-004a). */
@@ -78,8 +88,29 @@ const NOT_A_BOOKING: ReadonlySet<PerformerType> = new Set(["open_band_musician"]
 type Cursor = { date: string; time: string | null; id: string };
 
 const encodeCursor = (c: Cursor) => Buffer.from(JSON.stringify(c)).toString("base64url");
-const decodeCursor = (s: string): Cursor =>
-  JSON.parse(Buffer.from(s, "base64url").toString("utf8"));
+
+/** A cursor the client made up, or mangled, is a bad request — never a server error (091 R8). */
+function decodeCursor(s: string): Cursor {
+  try {
+    const c: unknown = JSON.parse(Buffer.from(s, "base64url").toString("utf8"));
+    if (
+      c &&
+      typeof c === "object" &&
+      "date" in c &&
+      typeof c.date === "string" &&
+      /^\d{4}-\d{2}-\d{2}$/.test(c.date) &&
+      "time" in c &&
+      (c.time === null || typeof c.time === "string") &&
+      "id" in c &&
+      typeof c.id === "string"
+    ) {
+      return { date: c.date, time: c.time, id: c.id };
+    }
+  } catch {
+    // fall through: not base64url JSON at all
+  }
+  throw errors.validation("cursor is not valid");
+}
 
 /**
  * Rows that come AFTER the cursor in `event_date desc, start_time desc nulls last, id desc` order.
@@ -99,14 +130,37 @@ function afterCursor(c: Cursor): SQL {
     OR (${events.eventDate} = ${c.date} AND ${events.startTime} = ${c.time} AND ${events.id} < ${c.id}))`;
 }
 
+/**
+ * Feature 091 (research R1): rows that come AFTER the cursor in the REVERSED order — `event_date asc,
+ * start_time asc nulls first, id asc` — the `newer` direction. The exact mirror of `afterCursor`, written
+ * beside it so the two cannot drift: going forward, an untimed dance comes FIRST on its day.
+ */
+function beforeCursor(c: Cursor): SQL {
+  if (c.time === null) {
+    return sql`(${events.eventDate} > ${c.date}
+      OR (${events.eventDate} = ${c.date} AND ${events.startTime} IS NOT NULL)
+      OR (${events.eventDate} = ${c.date} AND ${events.startTime} IS NULL AND ${events.id} > ${c.id}))`;
+  }
+  return sql`(${events.eventDate} > ${c.date}
+    OR (${events.eventDate} = ${c.date} AND ${events.startTime} > ${c.time})
+    OR (${events.eventDate} = ${c.date} AND ${events.startTime} = ${c.time} AND ${events.id} > ${c.id}))`;
+}
+
 export async function assembleBookingsReport(
   db: Db,
   filters: BookingsReportFilters = {},
 ): Promise<{ rows: BookingsReportRow[]; nextCursor: string | null }> {
+  const newer = filters.direction === "newer";
   const conds: SQL[] = [];
-  if (filters.series) conds.push(eq(series.key, filters.series));
-  if (filters.horizon) conds.push(lte(events.eventDate, filters.horizon));
-  if (filters.cursor) conds.push(afterCursor(decodeCursor(filters.cursor)));
+  if (filters.series?.length) conds.push(inArray(series.key, filters.series));
+  // The two directions partition the dances at the split: before it, or on and after it (091 A3).
+  if (filters.split) {
+    conds.push(newer ? gte(events.eventDate, filters.split) : lt(events.eventDate, filters.split));
+  }
+  if (filters.cursor) {
+    const c = decodeCursor(filters.cursor);
+    conds.push(newer ? beforeCursor(c) : afterCursor(c));
+  }
 
   const eventRows = await db
     .select({
@@ -120,14 +174,18 @@ export async function assembleBookingsReport(
       hasSoundTech: series.hasSoundTech,
       status: events.status,
       venueName: venues.name,
-      venueShort: venues.shortName,
     })
     .from(events)
     .innerJoin(series, eq(series.id, events.seriesId))
     .leftJoin(venues, eq(venues.id, events.venueId))
     .where(conds.length ? and(...conds) : undefined)
-    // The same order `listEvents` uses, so no two screens disagree about which dance comes first.
-    .orderBy(desc(events.eventDate), sql`${events.startTime} desc nulls last`, desc(events.id))
+    // The same order `listEvents` uses, so no two screens disagree about which dance comes first; `newer`
+    // reads it exactly reversed, nearest first.
+    .orderBy(
+      ...(newer
+        ? [asc(events.eventDate), sql`${events.startTime} asc nulls first`, asc(events.id)]
+        : [desc(events.eventDate), sql`${events.startTime} desc nulls last`, desc(events.id)]),
+    )
     // One extra row tells us whether another page exists, without a second count query.
     .limit(filters.limit === undefined ? Number.MAX_SAFE_INTEGER : filters.limit + 1);
 
@@ -154,10 +212,6 @@ export async function assembleBookingsReport(
       band = bandRow?.name ?? null;
     }
 
-    const venueShortName = ev.venueName
-      ? (ev.venueShort ?? (venueShortNameDefault(ev.venueName) || null))
-      : null;
-
     rows.push({
       eventId: ev.id,
       date: ev.date,
@@ -165,7 +219,7 @@ export async function assembleBookingsReport(
       label: ev.label,
       series: ev.seriesName,
       venueId: ev.venueId,
-      venueShortName,
+      venueName: ev.venueName ?? null,
       hasSoundTech: ev.hasSoundTech,
       caller,
       instructor,

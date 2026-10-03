@@ -44,9 +44,9 @@ describe("Booking Central — a booking's note (087 T028)", () => {
       },
     });
     render(<BookingCentralPage />);
-    await waitFor(() => expect(screen.getAllByRole("row").length).toBeGreaterThan(1));
+    await waitFor(() => expect(screen.getAllByRole("listitem").length).toBeGreaterThan(0));
 
-    await userEvent.click(screen.getByRole("button", { name: "Pat Caller" }));
+    await userEvent.click(screen.getByRole("button", { name: "P. Caller" }));
 
     const dialog = await screen.findByRole("dialog", { name: /^(booking —|book an? )/i });
     expect(within(dialog).getByLabelText("Notes")).toHaveValue("prefers the long set");

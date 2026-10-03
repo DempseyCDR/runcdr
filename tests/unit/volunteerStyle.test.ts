@@ -27,6 +27,8 @@ const CONVERTED = [
   "(door)/gate/gate.module.css",
   "(admin)/payments/payments.module.css",
   "(admin)/treasurer/treasurer.module.css",
+  // Feature 091: Booking Central, the first page converted after the frame.
+  "(admin)/bookings/hub.module.css",
 ];
 
 /** Every `property: value` declaration in a stylesheet, comments removed. */

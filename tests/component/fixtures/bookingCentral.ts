@@ -1,4 +1,5 @@
-import { vi } from "vitest";
+import { expect, vi } from "vitest";
+import { screen, waitFor, within } from "@testing-library/react";
 
 /**
  * Feature 087 — shared fixtures for Booking Central's component tests (US2 onwards).
@@ -24,7 +25,7 @@ export type Row = {
   label: string | null;
   series: string;
   venueId: string | null;
-  venueShortName: string | null;
+  venueName: string | null;
   hasSoundTech: boolean;
   caller: string | null;
   instructor: string | null;
@@ -51,7 +52,7 @@ export const row = (over: Partial<Row> & Pick<Row, "eventId" | "date">): Row => 
   label: null,
   series: "Thursday Night Contra",
   venueId: "v1",
-  venueShortName: "GH",
+  venueName: "German House",
   hasSoundTech: true,
   caller: null,
   instructor: null,
@@ -64,6 +65,130 @@ export const row = (over: Partial<Row> & Pick<Row, "eventId" | "date">): Row => 
   bookings: [],
   ...over,
 });
+
+/** Newest first: `date desc, start time desc nulls last, id desc` — the hub's order (087). */
+const newestFirst = (a: Row, b: Row): number =>
+  b.date.localeCompare(a.date) ||
+  (a.startTime === b.startTime
+    ? 0
+    : a.startTime === null
+      ? 1
+      : b.startTime === null
+        ? -1
+        : b.startTime.localeCompare(a.startTime)) ||
+  b.eventId.localeCompare(a.eventId);
+
+/**
+ * Feature 091 (contracts/report-api.md): answer `/api/bookings/report` as the server does. `older` is the
+ * dances before `split`, newest first; `newer` is those on or after it, nearest first. The cursor is the
+ * offset already served in that direction. With neither `split` nor `direction`, every row, as before.
+ */
+export function answerReport(rows: Row[], url: string): { rows: Row[]; nextCursor: string | null } {
+  const p = new URL(url, "http://x").searchParams;
+  const split = p.get("split");
+  const direction = p.get("direction");
+  if (!split && !direction) return { rows, nextCursor: null };
+  const sorted = [...rows].sort(newestFirst);
+  const side =
+    direction === "newer"
+      ? sorted.filter((r) => !split || r.date >= split).reverse()
+      : sorted.filter((r) => !split || r.date < split);
+  const from = Number(p.get("cursor") ?? 0);
+  const limit = Number(p.get("limit") ?? side.length);
+  const page = side.slice(from, from + limit);
+  return { rows: page, nextCursor: from + limit < side.length ? String(from + limit) : null };
+}
+
+/**
+ * Feature 091: the screen's width, as `matchMedia("(min-width: 48rem)")` reports it. Without this the page
+ * treats the screen as wide (the table), so tests written before 091 are unchanged. Returns a function that
+ * changes the width and tells the page, as a real resize would.
+ */
+export function setWidth(
+  width: "narrow" | "wide",
+  /** Under 450px tall — a phone on its side (Rich, 2026-10-01). */
+  short = false,
+): (to: "narrow" | "wide") => void {
+  let matches = width === "wide";
+  const listeners = new Set<() => void>();
+  vi.stubGlobal(
+    "matchMedia",
+    vi.fn((query: string) => ({
+      get matches() {
+        if (query.includes("max-height")) return short;
+        return query.includes("48rem") ? matches : false;
+      },
+      media: query,
+      addEventListener: (_: string, fn: () => void) => listeners.add(fn),
+      removeEventListener: (_: string, fn: () => void) => listeners.delete(fn),
+    })),
+  );
+  return (to) => {
+    matches = to === "wide";
+    listeners.forEach((fn) => fn());
+  };
+}
+
+/**
+ * Feature 091 (Rich, 2026-10-01): the list loads more only by being scrolled to an end — there are no
+ * buttons. jsdom has no IntersectionObserver; this stands in, and `reach("later")` / `reach("earlier")`
+ * tells the page the Booker has scrolled to the top or the foot of the list.
+ */
+export function stubScrolling(): (end: "later" | "earlier") => void {
+  const observers = new Set<{ callback: IntersectionObserverCallback; targets: Set<Element> }>();
+  vi.stubGlobal(
+    "IntersectionObserver",
+    class {
+      private entry: { callback: IntersectionObserverCallback; targets: Set<Element> };
+      constructor(callback: IntersectionObserverCallback) {
+        this.entry = { callback, targets: new Set() };
+        observers.add(this.entry);
+      }
+      observe(el: Element) {
+        this.entry.targets.add(el);
+      }
+      disconnect() {
+        observers.delete(this.entry);
+      }
+    },
+  );
+  return (end) => {
+    const el = document.querySelector(`[data-end="${end}"]`);
+    if (!el) throw new Error(`no ${end} end in the page`);
+    for (const o of [...observers]) {
+      if (o.targets.has(el)) {
+        o.callback(
+          [{ isIntersecting: true, target: el } as IntersectionObserverEntry],
+          {} as IntersectionObserver,
+        );
+      }
+    }
+  };
+}
+
+/**
+ * Feature 091 (Rich, 2026-10-01): one card per dance at every width — the table is retired. These find
+ * the list of dances and a dance's card, in place of 087's table and its rows.
+ */
+export const dancesList = () => screen.getByRole("list", { name: "Dances" });
+/** Wait for the DATA, not the list: the list renders empty at once, before the dances arrive. */
+export const dancesLoaded = (atLeast = 1) =>
+  waitFor(() =>
+    expect(within(dancesList()).getAllByRole("listitem").length).toBeGreaterThanOrEqual(atLeast),
+  );
+/** A dance's card, by any text on it. */
+export const danceCard = (text: string) =>
+  within(dancesList())
+    .getAllByRole("listitem")
+    .find((li) => li.textContent?.includes(text)) as HTMLElement;
+/** One kind of performer on a card — Caller, Music or Sound — its names and marks. */
+export const slotOf = (card: HTMLElement, term: "Caller" | "Music" | "Sound") => {
+  const dt = within(card)
+    .getAllByRole("term")
+    .find((t) => t.textContent === term);
+  if (!dt?.nextElementSibling) throw new Error(`no ${term} on the card`);
+  return dt.nextElementSibling as HTMLElement;
+};
 
 export type Call = { url: string; method: string; body: unknown };
 
@@ -88,6 +213,8 @@ export type HubStub = {
   needingContact?: { count: number; items: unknown[] };
   /** US3: a band's full record, as `GET /api/bands/{id}` answers it. */
   band?: Record<string, unknown>;
+  /** Feature 091: the series the viewer's roles name; one is the Booker's own (the default, TNC). */
+  mySeriesIds?: string[];
 };
 
 /** A performer's full record, as `GET /api/performers/{id}` answers it. */
@@ -118,7 +245,7 @@ export function stubHub(opts: HubStub): Call[] {
       const json = async (): Promise<unknown> => {
         if (url.includes("/api/me/capabilities")) {
           return {
-            mySeriesIds: ["s1"],
+            mySeriesIds: opts.mySeriesIds ?? ["s1"],
             bookingWrite: opts.bookingWrite ?? true,
             eventWrite: opts.eventWrite ?? true,
             venueWrite: opts.venueWrite ?? true,
@@ -126,9 +253,15 @@ export function stubHub(opts: HubStub): Call[] {
           };
         }
         if (url.includes("/api/series")) {
-          return { items: [{ id: "s1", key: "tnc", name: "Thursday Night Contra" }] };
+          return {
+            items: [
+              { id: "s1", key: "tnc", name: "Thursday Night Contra" },
+              { id: "s2", key: "ecd", name: "Sunday English Country Dance" },
+              { id: "s3", key: "cdob", name: "Community Dance" },
+            ],
+          };
         }
-        if (url.includes("/api/bookings/report")) return { rows: opts.rows, nextCursor: null };
+        if (url.includes("/api/bookings/report")) return answerReport(opts.rows, url);
 
         // A status change answers with the booking as saved.
         const patchBooking = /\/api\/bookings\/([^/?]+)$/.exec(url);
