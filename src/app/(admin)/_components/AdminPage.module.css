@@ -33,3 +33,36 @@
 .wide {
   max-width: 1200px;
 }
+
+/* Feature 091 (Rich, 2026-10-01): a header pinned under the volunteer bar — Booking Central opens
+   scrolled down the page, which left its title and controls out of sight. Opaque, so the list scrolls
+   beneath it; its title smaller, so the pinned block stays short on a phone. */
+.pinnedHead {
+  /* Volunteer pages set no background — the browser's own shows — so the header matches it. */
+  background: Canvas;
+  margin-inline: calc(-1 * var(--space-4));
+  padding: var(--space-2) var(--space-4) var(--space-1);
+  position: sticky;
+  top: var(--volunteer-bar-height, 0px);
+  z-index: 15;
+}
+
+/* The controls on the title's own line, at its far end — one line in all (a phone on its side). */
+.headBeside {
+  align-items: center;
+  display: flex;
+  gap: var(--space-3);
+  justify-content: space-between;
+}
+
+.headBeside > h1 {
+  margin: 0;
+}
+
+.pinnedTitle {
+  color: var(--text);
+  font-family: var(--font-heading);
+  font-size: var(--fs-h3);
+  line-height: var(--lh-heading);
+  margin: 0 0 var(--space-2);
+}

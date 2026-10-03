@@ -30,7 +30,8 @@ type Props = {
   readOnly?: boolean;
   /** A name typed into the search that matched nobody — carried in rather than retyped (FR-008). */
   initialName?: string;
-  onSaved: () => void;
+  /** With the performer just CREATED (feature 091: a band's roster adds them as a member). */
+  onSaved: (created?: { id: string; displayName: string }) => void;
   onClose: () => void;
 };
 
@@ -227,7 +228,16 @@ export default function PerformerForm({
       const data = await res.json().catch(() => null);
       return setError(data?.error?.message ?? `The server refused it (${res.status}).`);
     }
-    onSaved();
+    if (performer) return onSaved();
+    const created = (await res.json().catch(() => null)) as {
+      id?: string;
+      displayName?: string;
+    } | null;
+    onSaved(
+      created?.id && created.displayName
+        ? { id: created.id, displayName: created.displayName }
+        : undefined,
+    );
   }
 
   if (unsettled) {

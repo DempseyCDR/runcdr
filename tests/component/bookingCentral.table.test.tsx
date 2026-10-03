@@ -1,8 +1,15 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import BookingCentralPage from "@/app/(admin)/bookings/page";
+import {
+  answerReport,
+  danceCard,
+  dancesList,
+  dancesLoaded,
+  slotOf,
+  stubScrolling,
+} from "./fixtures/bookingCentral";
 
 /**
  * Feature 087 US1 — the season on one page.
@@ -27,7 +34,7 @@ type Row = {
   label: string | null;
   series: string;
   venueId: string | null;
-  venueShortName: string | null;
+  venueName: string | null;
   hasSoundTech: boolean;
   caller: string | null;
   instructor: string | null;
@@ -54,7 +61,7 @@ const row = (over: Partial<Row> & Pick<Row, "eventId" | "date">): Row => ({
   label: null,
   series: "Thursday Night Contra",
   venueId: "v1",
-  venueShortName: "GH",
+  venueName: "German House",
   hasSoundTech: true,
   caller: null,
   instructor: null,
@@ -109,7 +116,11 @@ function stub(opts: Opts = {}) {
           };
         }
         if (url.includes("/api/bookings/report")) {
-          return { rows: opts.rows ?? [FULL, EMPTY], nextCursor: opts.nextCursor ?? null };
+          // Feature 091: answered by direction, as the server does; `nextCursor` stands for more older
+          // dances behind the first page.
+          const page = answerReport(opts.rows ?? [FULL, EMPTY], url);
+          const firstOlder = !url.includes("direction=newer") && !url.includes("cursor=");
+          return firstOlder && opts.nextCursor ? { ...page, nextCursor: opts.nextCursor } : page;
         }
         return { items: [] };
       };
@@ -119,15 +130,10 @@ function stub(opts: Opts = {}) {
   return calls;
 }
 
-const table = () => screen.getByRole("table", { name: /dances/i });
-
-/** Wait for the DATA, not the table: the table renders empty at once, before the rows arrive. */
-const loaded = () =>
-  waitFor(() => expect(within(table()).getAllByRole("row").length).toBeGreaterThan(1));
-const rowFor = (label: string) =>
-  within(table())
-    .getAllByRole("row")
-    .find((r) => r.textContent?.includes(label)) as HTMLElement;
+// Feature 091: one card per dance at every width — 087's table and its rows are retired.
+const table = dancesList;
+const loaded = () => dancesLoaded();
+const rowFor = danceCard;
 
 afterEach(() => {
   cleanup();
@@ -142,21 +148,26 @@ describe("Booking Central — the season on one page (087 US1)", () => {
 
     const text = table().textContent ?? "";
     expect(text.indexOf("2026-10-01")).toBeLessThan(text.indexOf("2026-09-24")); // newest first
-    const full = within(rowFor("Waltz night"));
-    expect(full.getByText("2026-10-01")).toBeInTheDocument();
-    expect(full.getByText("19:30")).toBeInTheDocument();
-    expect(full.getByText("GH")).toBeInTheDocument();
+    // Feature 091: a wide card's heading line — date · time · label · venue.
+    const full = rowFor("Waltz night");
+    expect(full).toHaveTextContent("2026-10-01 · 19:30");
+    expect(within(full).getByText("German House")).toBeInTheDocument();
   });
 
-  it("names the series at the head of the table (T013, FR-006)", async () => {
+  // Feature 091 (FR-011): the series is named in the page's one-line title, not a second heading.
+  it("names the series in the page's title (T013, FR-006, 091 FR-011)", async () => {
     stub();
     render(<BookingCentralPage />);
     expect(
-      await screen.findByRole("heading", { name: /Thursday Night Contra/ }),
+      await screen.findByRole("heading", {
+        level: 1,
+        name: "Booking Central — Thursday Night Contra",
+      }),
     ).toBeInTheDocument();
   });
 
-  it("asks for the Booker's own series, up to four months ahead (FR-001, FR-001a)", async () => {
+  // Feature 091 (FR-010) retired the four-months horizon (087 FR-001a); the series rule (FR-001) stands.
+  it("asks for the Booker's own series (FR-001)", async () => {
     const calls = stub();
     render(<BookingCentralPage />);
     await waitFor(() =>
@@ -165,10 +176,6 @@ describe("Booking Central — the season on one page (087 US1)", () => {
 
     const report = calls.find((c) => c.url.includes("/api/bookings/report"))!.url;
     expect(report).toContain("series=tnc");
-    const horizon = new URL(report, "http://x").searchParams.get("horizon")!;
-    const months = (new Date(horizon).getTime() - Date.now()) / (1000 * 60 * 60 * 24 * 30.4);
-    expect(months).toBeGreaterThan(3.8);
-    expect(months).toBeLessThan(4.2);
   });
 
   it("carries no retired filter above the table (FR-001b, FR-001c)", async () => {
@@ -241,7 +248,8 @@ describe("Booking Central — the gaps (087 US1, FR-004, FR-004a)", () => {
 });
 
 describe("Booking Central — what a row says (087 US1)", () => {
-  it("names a band by its name and loose musicians by their last names (FR-003)", async () => {
+  // Feature 091 (FR-002b): on a card, loose musicians are first initial and last name.
+  it("names a band by its name and loose musicians by first initial and last name (FR-003, 091 FR-002b)", async () => {
     stub({
       rows: [
         FULL,
@@ -262,8 +270,8 @@ describe("Booking Central — what a row says (087 US1)", () => {
 
     expect(within(rowFor("Waltz night")).getByText("The Trio")).toBeInTheDocument();
     const loose = within(rowFor("Loose"));
-    expect(loose.getByText("Scanlon")).toBeInTheDocument();
-    expect(loose.getByText("Fortier")).toBeInTheDocument();
+    expect(loose.getByText("J. Scanlon")).toBeInTheDocument();
+    expect(loose.getByText("J. Fortier")).toBeInTheDocument();
   });
 
   it("shows each booking's state as its letter (FR-002)", async () => {
@@ -315,20 +323,21 @@ describe("Booking Central — what a row says (087 US1)", () => {
     render(<BookingCentralPage />);
     await loaded();
 
-    const cell = within(rowFor("Both")).getByRole("cell", { name: /Pat Caller/ });
-    const text = cell.textContent ?? "";
-    expect(text).toContain("Ina Instructor");
-    expect(text.indexOf("Pat Caller")).toBeLessThan(text.indexOf("Ina Instructor"));
+    const text = slotOf(rowFor("Both"), "Caller").textContent ?? "";
+    expect(text).toContain("I. Instructor");
+    expect(text.indexOf("P. Caller")).toBeLessThan(text.indexOf("I. Instructor"));
   });
 });
 
 describe("Booking Central — reaching further (087 US1)", () => {
+  // Feature 091 (Rich, 2026-10-01): reaching the foot loads older dances; there is no button.
   it("loads older dances when the Booker reaches the foot (T020)", async () => {
+    const reach = stubScrolling();
     const calls = stub({ rows: [FULL], nextCursor: "cur1" });
     render(<BookingCentralPage />);
     await loaded();
 
-    await userEvent.click(screen.getByRole("button", { name: /older dances/i }));
+    await waitFor(() => reach("earlier"));
     await waitFor(() =>
       expect(
         calls.some((c) => c.url.includes("/api/bookings/report") && c.url.includes("cursor=cur1")),
@@ -336,23 +345,19 @@ describe("Booking Central — reaching further (087 US1)", () => {
     );
   });
 
-  it("offers no 'older' control when the history is exhausted", async () => {
+  it("says so when the history is exhausted", async () => {
     stub({ rows: [FULL], nextCursor: null });
     render(<BookingCentralPage />);
     await loaded();
 
-    expect(screen.queryByRole("button", { name: /older dances/i })).toBeNull();
+    expect(await screen.findByText("No earlier dances")).toBeInTheDocument();
   });
 
-  it("lets the Booker push the horizon further out (T019, FR-001a)", async () => {
-    const calls = stub();
+  // Feature 091 (FR-010): the horizon control — "Showing dances from" (087 T019) — is retired.
+  it("has no Showing dances from control", async () => {
+    stub();
     render(<BookingCentralPage />);
     await loaded();
-
-    // A direct change event: typing into a date input is unreliable in jsdom.
-    fireEvent.change(screen.getByLabelText(/showing dances from/i), {
-      target: { value: "2027-09-01" },
-    });
-    await waitFor(() => expect(calls.some((c) => c.url.includes("horizon=2027-09-01"))).toBe(true));
+    expect(screen.queryByLabelText(/showing dances from/i)).toBeNull();
   });
 });

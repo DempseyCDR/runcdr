@@ -35,11 +35,11 @@ function hub(over: Partial<HubStub> = {}) {
 }
 
 const rowFor = async (text: string) => {
-  const table = await screen.findByRole("table", { name: /dances/i });
-  await waitFor(() => expect(within(table).getAllByRole("row").length).toBeGreaterThan(2));
+  const table = await screen.findByRole("list", { name: "Dances" });
+  await waitFor(() => expect(within(table).getAllByRole("listitem").length).toBeGreaterThan(1));
   return within(
     within(table)
-      .getAllByRole("row")
+      .getAllByRole("listitem")
       .find((r) => r.textContent?.includes(text)) as HTMLElement,
   );
 };

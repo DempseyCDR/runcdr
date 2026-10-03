@@ -49,19 +49,26 @@ describe("cross-event bookings report", () => {
     ).toBe(true);
   });
 
-  // Feature 087: the series narrowing survives; the date range becomes the HORIZON — the table's upper
-  // bound, with no lower one, because the Booker scrolls back through history without limit.
-  it("narrows to a series and stops at the horizon", async () => {
-    const { a } = await seed();
-    const { rows } = await assembleBookingsReport(db, { series: "tnc", horizon: "2026-06-30" });
-    expect(rows.map((r) => r.eventId)).toEqual([a.id]);
-    expect(rows[0]?.caller).toBe("Cal Caller");
-    expect(rows[0]?.musicians).toContain("Bob Fabinski");
+  // Feature 087: the series narrowing survives. Feature 091: the horizon is retired; a SPLIT date divides
+  // the dances — older reads those before it, newer those on or after it (contracts/report-api.md A5).
+  it("narrows to a series, on either side of the split", async () => {
+    const { a, c } = await seed();
+    const older = await assembleBookingsReport(db, { series: ["tnc"], split: "2026-07-01" });
+    expect(older.rows.map((r) => r.eventId)).toEqual([a.id]);
+    expect(older.rows[0]?.caller).toBe("Cal Caller");
+    expect(older.rows[0]?.musicians).toContain("Bob Fabinski");
+
+    const newer = await assembleBookingsReport(db, {
+      series: ["tnc"],
+      split: "2026-07-01",
+      direction: "newer",
+    });
+    expect(newer.rows.map((r) => r.eventId)).toEqual([c.id]); // the ECD dance on 07-05 is not TNC's
   });
 
   it("includes cancelled events, flagged", async () => {
     const { c } = await seed();
-    const { rows } = await assembleBookingsReport(db, { series: "tnc" });
+    const { rows } = await assembleBookingsReport(db, { series: ["tnc"] });
     const cancelledRow = rows.find((r) => r.eventId === c.id);
     expect(cancelledRow?.cancelled).toBe(true);
   });
@@ -196,7 +203,7 @@ describe("cross-event bookings report", () => {
     });
     await substitutePerformer(db, b.id, sub.id);
 
-    const { rows } = await assembleBookingsReport(db, { series: "tnc", horizon: "2026-12-31" });
+    const { rows } = await assembleBookingsReport(db, { series: ["tnc"] });
     const lines = rows.find((r) => r.eventId === ev.id)!.bookings;
     expect(lines.map((l) => l.performer)).toEqual(["Dee Fiddle"]);
   });
@@ -219,7 +226,7 @@ describe("cross-event bookings report", () => {
     });
     await substitutePerformer(db, b.id, sub.id);
 
-    const { rows } = await assembleBookingsReport(db, { series: "tnc", horizon: "2026-12-31" });
+    const { rows } = await assembleBookingsReport(db, { series: ["tnc"] });
     const lines = rows.find((r) => r.eventId === ev.id)!.bookings;
     // The one who played is booked; the one who did not is kept — the check was written — but declined,
     // which the hub never counts as filling the slot.
@@ -232,9 +239,147 @@ describe("cross-event bookings report", () => {
     const ecd = await makeEvent({ seriesKey: "ecd", eventDate: "2026-10-04" });
     const tnc = await makeEvent({ seriesKey: "tnc", eventDate: "2026-10-01" });
 
-    const { rows } = await assembleBookingsReport(db, { horizon: "2026-12-31" });
+    const { rows } = await assembleBookingsReport(db, {});
     expect(rows.find((r) => r.eventId === ecd.id)?.hasSoundTech).toBe(false);
     expect(rows.find((r) => r.eventId === tnc.id)?.hasSoundTech).toBe(true);
+  });
+
+  /**
+   * Feature 091 (contracts/report-api.md A1–A4): the hub opens on the next dance and scrolls both ways, so
+   * its read pages FORWARDS from a split as well as back. Forwards is the exact reverse of the older order
+   * — or a dance would be dropped or repeated where the pages meet.
+   */
+  describe("both ways from a split (091)", () => {
+    async function season() {
+      const hall = await createVenue(db, { name: "Alpha Hall", address: "1 A" });
+      const other = await createVenue(db, { name: "Beta Hall", address: "2 B" });
+      const mk = async (date: string, time: string | null, venueId: string | null) => {
+        const e = await makeEvent({ seriesKey: "tnc", eventDate: date });
+        await db.update(events).set({ startTime: time, venueId }).where(eq(events.id, e.id));
+        return e.id;
+      };
+      return [
+        await mk("2026-07-09", "19:30:00", hall.id),
+        await mk("2026-07-02", "19:30:00", hall.id),
+        await mk("2026-07-02", null, null),
+        await mk("2026-06-18", "19:30:00", hall.id),
+        await mk("2026-06-18", "19:30:00", other.id), // same date AND time, another hall
+        await mk("2026-06-18", "13:00:00", hall.id),
+        await mk("2026-06-18", null, null),
+        await mk("2026-06-04", "19:30:00", hall.id),
+      ];
+    }
+
+    async function pageAll(direction: "older" | "newer", split: string): Promise<string[]> {
+      const seen: string[] = [];
+      let cursor: string | null = null;
+      do {
+        const page: Awaited<ReturnType<typeof assembleBookingsReport>> =
+          await assembleBookingsReport(db, {
+            split,
+            direction,
+            limit: 2,
+            ...(cursor ? { cursor } : {}),
+          });
+        seen.push(...page.rows.map((r) => r.eventId));
+        cursor = page.nextCursor;
+      } while (cursor);
+      return seen;
+    }
+
+    it("pages newer from the split, nearest first, each dance once — the older order reversed (A2)", async () => {
+      await season();
+      const all = (await assembleBookingsReport(db, {})).rows; // newest first, every dance
+      const ahead = all.filter((r) => r.date >= "2026-06-18").map((r) => r.eventId);
+
+      const first = await assembleBookingsReport(db, {
+        split: "2026-06-18",
+        direction: "newer",
+        limit: 2,
+      });
+      expect(first.rows).toHaveLength(2);
+      expect(first.nextCursor).not.toBeNull();
+
+      expect(await pageAll("newer", "2026-06-18")).toEqual([...ahead].reverse());
+    });
+
+    it("pages older from the split, newest first, each dance once (A1)", async () => {
+      await season();
+      const all = (await assembleBookingsReport(db, {})).rows;
+      const behind = all.filter((r) => r.date < "2026-07-02").map((r) => r.eventId);
+      expect(await pageAll("older", "2026-07-02")).toEqual(behind);
+    });
+
+    it("lists every dance exactly once across the two directions (A3)", async () => {
+      const ids = await season();
+      for (const split of ["2026-06-04", "2026-06-18", "2026-07-02", "2026-07-10"]) {
+        const seen = [...(await pageAll("older", split)), ...(await pageAll("newer", split))];
+        expect(new Set(seen).size, split).toBe(seen.length);
+        expect([...seen].sort(), split).toEqual([...ids].sort());
+      }
+    });
+
+    it("starts newer on the first dance dated on or after the split, else older on the most recent (A4)", async () => {
+      const [, , untimedJul2] = await season();
+      const next = await assembleBookingsReport(db, {
+        split: "2026-06-19",
+        direction: "newer",
+        limit: 1,
+      });
+      // On 07-02 the untimed dance comes first going forward (it is last going back): research R1.
+      expect(next.rows[0]?.eventId).toBe(untimedJul2);
+
+      const none = await assembleBookingsReport(db, {
+        split: "2027-01-01",
+        direction: "newer",
+        limit: 1,
+      });
+      expect(none.rows).toEqual([]);
+      expect(none.nextCursor).toBeNull();
+      const latest = await assembleBookingsReport(db, { split: "2027-01-01", limit: 1 });
+      expect(latest.rows[0]?.date).toBe("2026-07-09");
+    });
+
+    it("ignores a horizon, and refuses a bad split, direction, limit or cursor with 422 (A6)", async () => {
+      await season();
+      const { token } = await makeActor({ email: "split.reader@cdrochester.org" });
+      const get = (q: string) =>
+        REPORT(jsonReqAs(token, "GET", `/api/bookings/report?${q}`), ctx());
+
+      const all = await (await get("horizon=2026-06-10")).json();
+      expect(all.rows).toHaveLength(8);
+
+      for (const q of [
+        "split=tomorrow",
+        "direction=sideways",
+        "limit=0",
+        "limit=201",
+        "cursor=not-a-cursor",
+      ]) {
+        expect((await get(q)).status, q).toBe(422);
+      }
+    });
+  });
+
+  // Feature 091 (Rich, 2026-10-02): Sean books contra and the community dance — he sees those two
+  // series and not ECD. The read takes several series.
+  it("narrows to several series at once, through the service and the route", async () => {
+    const tnc = await makeEvent({ seriesKey: "tnc", eventDate: "2026-07-02" });
+    const cdob = await makeEvent({ seriesKey: "cdob", eventDate: "2026-07-03" });
+    const ecd = await makeEvent({ seriesKey: "ecd", eventDate: "2026-07-05" });
+
+    const { rows } = await assembleBookingsReport(db, { series: ["tnc", "cdob"] });
+    expect(rows.map((r) => r.eventId).sort()).toEqual([tnc.id, cdob.id].sort());
+
+    const { token } = await makeActor({ email: "two.series@cdrochester.org" });
+    const res = await REPORT(
+      jsonReqAs(token, "GET", "/api/bookings/report?series=tnc,cdob"),
+      ctx(),
+    );
+    const ids = ((await res.json()).rows as { eventId: string }[]).map((r) => r.eventId);
+    expect(ids).toContain(tnc.id);
+    expect(ids).toContain(cdob.id);
+    expect(ids).not.toContain(ecd.id);
   });
 
   it("is readable by a base (non-Booker) staff actor", async () => {

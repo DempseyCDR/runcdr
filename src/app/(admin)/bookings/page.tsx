@@ -1,7 +1,15 @@
 "use client";
 import { apiFetch } from "@/app/apiFetch";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { localToday } from "@/app/localToday";
 import AdminPage from "../_components/AdminPage";
 import Dialog from "@/app/_components/Dialog";
@@ -12,11 +20,14 @@ import type {
   BookingsReportBookingLine,
   BookingsReportRow,
 } from "@/server/domain/bookings/reportService";
-import { HubRow, NEXT, type RowActions } from "./HubRow";
+import { HubCard } from "./HubCard";
+import DanceView from "./DanceView";
+import { NEXT, type RowActions } from "./danceParts";
 import HubSearch from "./HubSearch";
 import BandRoster from "./BandRoster";
 import PerformerCard from "./PerformerCard";
 import Lineup from "./Lineup";
+import NeedingContactList from "./NeedingContactList";
 import type { Performer } from "../_performers/PerformerForm";
 import type { PerformerNeedingContact } from "@/server/domain/performers/needContact";
 import styles from "./hub.module.css";
@@ -91,28 +102,66 @@ type EventModalState = {
 };
 type Lineup = { row: BookingsReportRow; bookings: FullBooking[] };
 
-/** Rows per page. Small enough to paint quickly; the table loads more as the Booker scrolls. */
-const PAGE = 40;
+/**
+ * Rows per page (feature 091, research R3): about ten dances ahead on opening (FR-007), a page behind,
+ * and more each time the Booker reaches an end. Small enough to paint quickly.
+ */
+const FIRST_AHEAD = 10;
+const MORE_AHEAD = 20;
+const PAGE_BEHIND = 40;
 /** The API's ceiling on one page — the most a refresh can re-read in one go. */
 const MAX_PAGE = 200;
 
-/** Today plus four months, `YYYY-MM-DD` — the default horizon (FR-001). */
-function fourMonthsAhead(): string {
-  const [y, m, d] = localToday().split("-").map(Number) as [number, number, number];
-  return localToday(new Date(y, m - 1 + 4, d));
-}
-
-/** How each reason reads in the list — the words the Booker would use. */
-const NEED_REASON = { none: "no contact", archived: "contact archived", merged: "contact merged" };
+type Direction = "older" | "newer";
+/**
+ * The dances held, on each side of the split (feature 091, data-model.md): `newer` nearest first, as the
+ * read answers it; `older` newest first. Shown newest first throughout — `newer` reversed, then `older`.
+ */
+type Sides = {
+  newer: BookingsReportRow[];
+  newerCursor: string | null;
+  older: BookingsReportRow[];
+  olderCursor: string | null;
+};
+const NO_SIDES: Sides = { newer: [], newerCursor: null, older: [], olderCursor: null };
 
 /** The bookings that make up a dance's music. Open-band musicians are not booked, so never listed (FR-007). */
 const MUSIC = new Set(["lead_musician", "musician"]);
 
-const COLUMNS = ["Date", "Time", "Dance", "Venue", "Caller", "Music", "Sound"];
+/**
+ * Feature 091 (research R6): the table from the second named width, cards below it — one tree at a time,
+ * so no control is in the page twice. With no `matchMedia` (the server, and any browser without it) the
+ * page is the table, as it was before 091.
+ */
+function media(query: string, withoutMatchMedia: boolean) {
+  return {
+    subscribe: (onChange: () => void) => {
+      if (typeof window.matchMedia !== "function") return () => {};
+      const list = window.matchMedia(query);
+      list.addEventListener("change", onChange);
+      return () => list.removeEventListener("change", onChange);
+    },
+    read: () =>
+      typeof window.matchMedia !== "function"
+        ? withoutMatchMedia
+        : window.matchMedia(query).matches,
+  };
+}
+const WIDE = media("(min-width: 48rem)", true);
+/**
+ * Rich, 2026-10-01: a phone on its side is wide but short. Under 450px tall the pinned header would take
+ * too much of the window, so the search and the needs-a-contact prompt collapse into the one Performers
+ * button, at the end of the title's line — the header is one line.
+ */
+const SHORT = media("(max-height: 450px)", false);
 
 export default function BookingCentralPage() {
+  const wide = useSyncExternalStore(WIDE.subscribe, WIDE.read, () => true);
+  const short = useSyncExternalStore(SHORT.subscribe, SHORT.read, () => false);
+  /** The search and the prompt behind one Performers button: on a phone, or in any short window. */
+  const compact = !wide || short;
   const [series, setSeries] = useState<Series[]>([]);
-  const [showing, setShowing] = useState<Series | null | "all">(null);
+  const [showing, setShowing] = useState<Series[] | null | "all">(null);
   const [caps, setCaps] = useState<Caps>({
     bookingWrite: false,
     eventWrite: false,
@@ -122,13 +171,34 @@ export default function BookingCentralPage() {
   const [venues, setVenues] = useState<{ id: string; name: string; shortName: string | null }[]>(
     [],
   );
-  const [horizon, setHorizon] = useState(fourMonthsAhead);
-  const [rows, setRows] = useState<BookingsReportRow[]>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  // Feature 091 (research R1–R3): today on this device, fixed when the page opens — the split the list
+  // is read from, both ways.
+  const [split] = useState(() => localToday());
+  const [sides, setSides] = useState<Sides>(NO_SIDES);
+  const [loaded, setLoaded] = useState(false);
+  const [positioned, setPositioned] = useState(false);
+  const [loading, setLoading] = useState<Direction | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const sentinel = useRef<HTMLDivElement>(null);
+  const top = useRef<HTMLDivElement>(null);
+  const foot = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLElement>(null);
+  /**
+   * The dance at the top of the view, and where it stood, before later dances were added above — so the
+   * view can be held still (R3). Not the page's height: new rows can change the table's column widths,
+   * and rows below re-wrap, so the page grows by less than what was added above the Booker's place.
+   */
+  const anchor = useRef<{ id: string; top: number } | null>(null);
+  /** The dance last in view, kept as the Booker scrolls, so a change of width can return to it (R6). */
+  const lastInView = useRef<string | null>(null);
 
+  const rows = useMemo(() => [...sides.newer].reverse().concat(sides.older), [sides]);
+  /** The first dance dated today or later, else the most recent (FR-007, research R2). */
+  const defaultDance = sides.newer[0]?.eventId ?? sides.older[0]?.eventId ?? null;
+  const setRows = (change: (r: BookingsReportRow) => BookingsReportRow) =>
+    setSides((s) => ({ ...s, newer: s.newer.map(change), older: s.older.map(change) }));
+
+  // Feature 091 US1: the dance opened from its card — held by id, so a re-read shows its new state.
+  const [openDance, setOpenDance] = useState<string | null>(null);
   const [bookingModal, setBookingModal] = useState<BookingModalState | null>(null);
   const [eventModal, setEventModal] = useState<EventModalState | null>(null);
   const [venueOpen, setVenueOpen] = useState<Venue | null>(null);
@@ -156,6 +226,8 @@ export default function BookingCentralPage() {
   // US5 (FR-026): the performers the Booker cannot reach — counted above the table, listed on asking.
   const [needing, setNeeding] = useState<PerformerNeedingContact[]>([]);
   const [needingOpen, setNeedingOpen] = useState(false);
+  // Feature 091 US3: the phone's Performers dialog — the search and the needing list in one place.
+  const [performersOpen, setPerformersOpen] = useState(false);
 
   const loadNeeding = useCallback(async () => {
     const res = await apiFetch("/api/performers/needing-contact");
@@ -165,8 +237,9 @@ export default function BookingCentralPage() {
     void loadNeeding();
   }, [loadNeeding]);
 
-  // Whose series is this? The viewer's own, when their roles name exactly one (the rule feature 086 set
-  // for the evening lists). Otherwise every series — and the heading says so, never mixing silently.
+  // Whose series is this? The viewer's own — every series their roles name (Rich, 2026-10-02: a Booker of
+  // contra and the community dance sees those two, not ECD). A club-wide role names none: every series,
+  // and the heading says so, never mixing silently.
   useEffect(() => {
     void (async () => {
       const [capsRes, seriesRes, venuesRes] = await Promise.all([
@@ -185,66 +258,184 @@ export default function BookingCentralPage() {
         performerWrite: !!c.performerWrite,
       });
       const mine: string[] = c.mySeriesIds ?? [];
-      const only = mine.length === 1 ? all.find((s) => s.id === mine[0]) : undefined;
-      setShowing(only ?? "all");
+      const own = all.filter((s) => mine.includes(s.id));
+      setShowing(own.length > 0 ? own : "all");
     })();
   }, []);
 
   const fetchPage = useCallback(
-    async (cursor: string | null, limit: number) => {
+    async (direction: Direction, cursor: string | null, limit: number) => {
       if (showing === null) return null;
-      const q = new URLSearchParams({ horizon, limit: String(limit) });
-      if (showing !== "all") q.set("series", showing.key);
+      const q = new URLSearchParams({ split, direction, limit: String(limit) });
+      if (showing !== "all") q.set("series", showing.map((s) => s.key).join(","));
       if (cursor) q.set("cursor", cursor);
       const res = await apiFetch(`/api/bookings/report?${q.toString()}`);
       if (!res.ok) return null;
       return (await res.json()) as { rows: BookingsReportRow[]; nextCursor: string | null };
     },
-    [showing, horizon],
+    [showing, split],
   );
 
-  const load = useCallback(
-    async (cursor: string | null) => {
-      setLoading(true);
+  // Opening, and a new series: the dances from today on and those before today, together (R1, R2).
+  useEffect(() => {
+    if (showing === null) return;
+    let cancelled = false;
+    void (async () => {
       setError(null);
-      const page = await fetchPage(cursor, PAGE);
-      setLoading(false);
-      if (!page) {
-        if (showing !== null) setError("The dances could not be loaded.");
+      const [ahead, behind] = await Promise.all([
+        fetchPage("newer", null, FIRST_AHEAD),
+        fetchPage("older", null, PAGE_BEHIND),
+      ]);
+      if (cancelled) return;
+      if (!ahead || !behind) {
+        setError("The dances could not be loaded.");
         return;
       }
-      setRows((prev) => (cursor ? [...prev, ...page.rows] : page.rows));
-      setNextCursor(page.nextCursor);
-    },
-    [fetchPage, showing],
+      setSides({
+        newer: ahead.rows,
+        newerCursor: ahead.nextCursor,
+        older: behind.rows,
+        olderCursor: behind.nextCursor,
+      });
+      setPositioned(false);
+      setLoaded(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [showing, fetchPage]);
+
+  /** The dance whose element is lowest while still starting inside the window (R6). */
+  const findLastInView = useCallback(() => {
+    let last: string | null = null;
+    for (const el of list.current?.querySelectorAll<HTMLElement>("[data-dance]") ?? []) {
+      const box = el.getBoundingClientRect();
+      if (box.bottom > 0 && box.top < window.innerHeight) last = el.dataset.dance ?? last;
+    }
+    return last;
+  }, []);
+
+  /** Bring a dance's last line to the bottom of the window. Event ids are UUIDs: safe in a selector. */
+  const scrollToDance = useCallback(
+    (id: string) =>
+      list.current?.querySelector(`[data-dance="${id}"]`)?.scrollIntoView({ block: "end" }),
+    [],
   );
 
-  // After an edit, re-read as many rows as are showing, so the Booker keeps his place in the history
-  // rather than being thrown back to the top.
+  // Once both first pages are in the page, put the default dance at the bottom of the window (FR-007).
+  useLayoutEffect(() => {
+    if (!loaded || positioned) return;
+    if (defaultDance) scrollToDance(defaultDance);
+    lastInView.current = findLastInView();
+    setPositioned(true);
+  }, [loaded, positioned, defaultDance, findLastInView, scrollToDance]);
+
+  // Feature 091 (FR-017): the page's header is pinned just under the volunteer bar, whose height varies
+  // (one line on a phone, one or two on a computer) — so the bar's height is kept in a variable.
+  useEffect(() => {
+    const bar = document.querySelector<HTMLElement>("[data-volunteer-bar]");
+    const root = document.documentElement;
+    if (!bar || typeof ResizeObserver === "undefined") return;
+    const set = () => root.style.setProperty("--volunteer-bar-height", `${bar.offsetHeight}px`);
+    const observer = new ResizeObserver(set);
+    observer.observe(bar);
+    set();
+    return () => {
+      observer.disconnect();
+      root.style.removeProperty("--volunteer-bar-height");
+    };
+  }, []);
+
+  // Keep note of the dance last in view as the Booker scrolls, so a change of width can return to it.
+  useEffect(() => {
+    const note = () => {
+      lastInView.current = findLastInView();
+    };
+    window.addEventListener("scroll", note, { passive: true });
+    return () => window.removeEventListener("scroll", note);
+  }, [findLastInView]);
+
+  // Crossing 48rem swaps cards and table; bring back the dance that was last in view (X1).
+  const firstWidth = useRef(true);
+  useLayoutEffect(() => {
+    if (firstWidth.current) {
+      firstWidth.current = false;
+      return;
+    }
+    if (lastInView.current) scrollToDance(lastInView.current);
+  }, [wide, scrollToDance]);
+
+  const loadMore = useCallback(
+    async (direction: Direction) => {
+      const cursor = direction === "newer" ? sides.newerCursor : sides.olderCursor;
+      if (!cursor || loading) return;
+      setLoading(direction);
+      const page = await fetchPage(
+        direction,
+        cursor,
+        direction === "newer" ? MORE_AHEAD : PAGE_BEHIND,
+      );
+      setLoading(null);
+      if (!page) return setError("The dances could not be loaded.");
+      // Later dances go in ABOVE what the Booker is reading: note where the top dance in view stands,
+      // and hold it there (R3).
+      if (direction === "newer") {
+        const dances = [...(list.current?.querySelectorAll<HTMLElement>("[data-dance]") ?? [])];
+        const top = dances.find((el) => el.getBoundingClientRect().bottom > 0) ?? dances[0];
+        anchor.current = top?.dataset.dance
+          ? { id: top.dataset.dance, top: top.getBoundingClientRect().top }
+          : null;
+      }
+      setSides((s) =>
+        direction === "newer"
+          ? { ...s, newer: [...s.newer, ...page.rows], newerCursor: page.nextCursor }
+          : { ...s, older: [...s.older, ...page.rows], olderCursor: page.nextCursor },
+      );
+    },
+    [sides.newerCursor, sides.olderCursor, loading, fetchPage],
+  );
+
+  // After later dances are added above, scroll by however far the noted dance moved, so it is where it was.
+  useLayoutEffect(() => {
+    const held = anchor.current;
+    if (!held) return;
+    anchor.current = null;
+    const el = list.current?.querySelector(`[data-dance="${held.id}"]`);
+    if (el) window.scrollBy(0, el.getBoundingClientRect().top - held.top);
+  }, [sides.newer]);
+
+  // After an edit, re-read the same span on each side, so the Booker keeps his place (R9).
   const refresh = useCallback(async () => {
-    const page = await fetchPage(null, Math.min(Math.max(rows.length, PAGE), MAX_PAGE));
-    if (!page) return;
-    setRows(page.rows);
-    setNextCursor(page.nextCursor);
-  }, [fetchPage, rows.length]);
-
-  // A new series or horizon starts the table again from the top.
-  useEffect(() => {
-    void load(null);
-  }, [load]);
-
-  // Scrolling to the foot loads older dances without a page break (US1 scenario 6). The button below
-  // does the same thing, and stays, because an endless scroll is a trap for keyboard and screen-reader
-  // users unless there is also something to press.
-  useEffect(() => {
-    const el = sentinel.current;
-    if (!el || !nextCursor || typeof IntersectionObserver === "undefined") return;
-    const observer = new IntersectionObserver((entries) => {
-      if (entries.some((e) => e.isIntersecting) && !loading) void load(nextCursor);
+    const span = (n: number) => Math.min(Math.max(n, 1), MAX_PAGE);
+    const [ahead, behind] = await Promise.all([
+      fetchPage("newer", null, span(sides.newer.length)),
+      fetchPage("older", null, span(sides.older.length)),
+    ]);
+    if (!ahead || !behind) return;
+    setSides({
+      newer: ahead.rows,
+      newerCursor: ahead.nextCursor,
+      older: behind.rows,
+      olderCursor: behind.nextCursor,
     });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [nextCursor, loading, load]);
+  }, [fetchPage, sides.newer.length, sides.older.length]);
+
+  // Reaching either end loads more that way, once the page has opened on its dance — by scrolling, or
+  // with the arrow keys. No buttons (Rich, 2026-10-01: they are not needed); 087's "load older" button
+  // is retired with them.
+  useEffect(() => {
+    if (!positioned || typeof IntersectionObserver === "undefined") return;
+    const watch = (el: HTMLElement | null, direction: Direction) => {
+      if (!el) return null;
+      const observer = new IntersectionObserver((entries) => {
+        if (entries.some((e) => e.isIntersecting)) void loadMore(direction);
+      });
+      observer.observe(el);
+      return observer;
+    };
+    const observers = [watch(top.current, "newer"), watch(foot.current, "older")];
+    return () => observers.forEach((o) => o?.disconnect());
+  }, [positioned, loadMore]);
 
   const eventBookings = async (eventId: string): Promise<FullBooking[]> => {
     const res = await apiFetch(`/api/events/${eventId}/bookings`);
@@ -328,17 +519,15 @@ export default function BookingCentralPage() {
         setError("That booking could not be updated.");
         return;
       }
-      setRows((prev) =>
-        prev.map((r) =>
-          r.eventId !== row.eventId
-            ? r
-            : {
-                ...r,
-                bookings: r.bookings.map((b) =>
-                  b.bookingId === line.bookingId ? { ...b, status: next } : b,
-                ),
-              },
-        ),
+      setRows((r) =>
+        r.eventId !== row.eventId
+          ? r
+          : {
+              ...r,
+              bookings: r.bookings.map((b) =>
+                b.bookingId === line.bookingId ? { ...b, status: next } : b,
+              ),
+            },
       );
     },
 
@@ -404,41 +593,33 @@ export default function BookingCentralPage() {
     setPerformerCard({ performer: (await res.json()) as Performer });
   };
 
-  const heading = showing === "all" ? "All series" : (showing?.name ?? "");
+  const heading = showing === "all" ? "All series" : (showing ?? []).map((s) => s.name).join(" & ");
+  const openRow = openDance ? rows.find((r) => r.eventId === openDance) : undefined;
+  // The performer-and-band search: above the table on a computer, in the Performers dialog on a phone.
+  const search = (
+    <HubSearch
+      onPerformer={(p) => void openPerformer(p.id)}
+      onBand={(b) => setBandCard(b)}
+      onNewPerformer={caps.performerWrite ? (name) => setPerformerCard({ name }) : undefined}
+      onNewBand={caps.performerWrite ? (name) => setBandCard({ name }) : undefined}
+      q={searchQ}
+      onQ={setSearchQ}
+    />
+  );
   // A save anywhere may settle a performer's link, so the count is re-read with the table.
   const saved = () => {
     void refresh();
     void loadNeeding();
   };
 
-  return (
-    <AdminPage title="Booking Central" wide>
-      <div className={styles.head}>
-        <h2 className={styles.series}>{heading}</h2>
-        <label className={styles.horizon}>
-          Showing dances from{" "}
-          <input
-            type="date"
-            aria-label="Showing dances from"
-            value={horizon}
-            onChange={(e) => e.target.value && setHorizon(e.target.value)}
-          />
-        </label>
-      </div>
+  const head = !compact ? (
+    <>
+      {search}
 
-      <HubSearch
-        onPerformer={(p) => void openPerformer(p.id)}
-        onBand={(b) => setBandCard(b)}
-        onNewPerformer={caps.performerWrite ? (name) => setPerformerCard({ name }) : undefined}
-        onNewBand={caps.performerWrite ? (name) => setBandCard({ name }) : undefined}
-        q={searchQ}
-        onQ={setSearchQ}
-      />
-
-      {/* FR-001c: the fourth and last thing above the table. Absent when there is no such work — a
-          notice that never goes away teaches the Booker to stop reading it. */}
+      {/* FR-001c: the last thing above the table. Absent when there is no such work — a notice that
+          never goes away teaches the Booker to stop reading it. */}
       {needing.length > 0 && (
-        <p className={styles.horizon}>
+        <p className={styles.prompt}>
           <button type="button" className={styles.link} onClick={() => setNeedingOpen(true)}>
             {needing.length === 1
               ? "1 performer needs a contact"
@@ -446,35 +627,80 @@ export default function BookingCentralPage() {
           </button>
         </p>
       )}
+    </>
+  ) : (
+    // Feature 091 (FR-012, FR-018): on a phone, or in a window under 450px tall (a phone on its side),
+    // one button holds the search and the performers who need a contact.
+    <button type="button" className={styles.performers} onClick={() => setPerformersOpen(true)}>
+      Performers
+    </button>
+  );
 
+  return (
+    // Feature 091 (FR-011, FR-017): one line at every width — the series is named in the title — pinned
+    // with the controls beside it under the volunteer bar, since the page opens scrolled down.
+    <AdminPage
+      title={heading ? `Booking Central — ${heading}` : "Booking Central"}
+      wide
+      head={head}
+      pinned
+      headBeside={short}
+    >
       {error && <p role="alert">{error}</p>}
 
-      <table className={styles.table} aria-label="Dances">
-        <thead>
-          <tr>
-            {COLUMNS.map((c) => (
-              <th key={c} scope="col">
-                {c}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <HubRow key={r.eventId} row={r} columns={COLUMNS.length} actions={actions} />
-          ))}
-        </tbody>
-      </table>
-
-      {!loading && rows.length === 0 && !error && <p>No dances from {horizon} back.</p>}
-
-      <div ref={sentinel} className={styles.more}>
-        {nextCursor && (
-          <button type="button" onClick={() => void load(nextCursor)} disabled={loading}>
-            {loading ? "Loading…" : "Load older dances"}
-          </button>
-        )}
+      {/* Feature 091 (FR-008, FR-009): reaching the top loads later dances, the foot older ones; each end
+          says "Loading…" while it does, and says so when there are no more. */}
+      <div ref={top} className={styles.end} data-end="later">
+        {loading === "newer" && <p>Loading…</p>}
+        {!sides.newerCursor && loaded && rows.length > 0 && <p>No later dances</p>}
       </div>
+
+      {/* One card per dance at every width (Rich, 2026-10-01): a phone's opens the dance; from 48rem the
+          card is live and spreads across the page. The table is retired. */}
+      <ul
+        ref={(el) => {
+          list.current = el;
+        }}
+        className={wide ? `${styles.cards} ${styles.wideCards}` : styles.cards}
+        aria-label="Dances"
+      >
+        {rows.map((r) => (
+          <HubCard
+            key={r.eventId}
+            row={r}
+            wide={wide}
+            actions={actions}
+            onOpen={() => setOpenDance(r.eventId)}
+          />
+        ))}
+      </ul>
+
+      {loaded && rows.length === 0 && !error && <p>No dances.</p>}
+
+      <div ref={foot} className={styles.end} data-end="earlier">
+        {loading === "older" && <p>Loading…</p>}
+        {!sides.olderCursor && loaded && rows.length > 0 && <p>No earlier dances</p>}
+      </div>
+
+      {/* Before every editor it opens, so they stack on top of it (feature 089's dialog order). */}
+      {/* Feature 091 (FR-012): the phone's Performers — before the dialogs it opens, so they stack on top. */}
+      {performersOpen && compact && (
+        <Dialog heading="Performers" onClose={() => setPerformersOpen(false)}>
+          {search}
+          {needing.length > 0 && (
+            <NeedingContactList needing={needing} onOpen={(id) => void openPerformer(id)} />
+          )}
+        </Dialog>
+      )}
+
+      {openRow && (
+        <DanceView
+          row={openRow}
+          actions={actions}
+          canEditDance={caps.eventWrite}
+          onClose={() => setOpenDance(null)}
+        />
+      )}
 
       {bookingModal && (
         <BookingModal
@@ -558,25 +784,13 @@ export default function BookingCentralPage() {
 
       {needingOpen && (
         <Dialog heading="Performers needing a contact" onClose={() => setNeedingOpen(false)}>
-          <p>Open one to settle it: link a contact, create one, or archive the performer.</p>
-          <ul aria-label="Performers who need a contact" className={styles.results}>
-            {needing.map((n) => (
-              <li key={n.id}>
-                <button
-                  type="button"
-                  className={styles.link}
-                  onClick={() => {
-                    setNeedingOpen(false);
-                    void openPerformer(n.id);
-                  }}
-                >
-                  {n.displayName}
-                </button>{" "}
-                <span className={styles.kind}>{NEED_REASON[n.reason]}</span>
-              </li>
-            ))}
-          </ul>
-          {needing.length === 0 && <p>None — every performer can be reached.</p>}
+          <NeedingContactList
+            needing={needing}
+            onOpen={(id) => {
+              setNeedingOpen(false);
+              void openPerformer(id);
+            }}
+          />
         </Dialog>
       )}
 

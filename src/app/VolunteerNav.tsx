@@ -175,6 +175,8 @@ export default function VolunteerNav({
     <nav
       aria-label="Main"
       ref={nav}
+      // Feature 091: the hook a page uses to pin the bar (Booking Central opens scrolled down the page).
+      data-volunteer-bar=""
       className={styles.bar}
       onKeyDown={(e) => {
         // Escape closes the Menu — unless an open group already handled it.

@@ -21,10 +21,10 @@ afterEach(() => {
 const writes = (calls: Call[]) => calls.filter((c) => c.method !== "GET");
 
 async function rowsFor(text: string) {
-  const table = await screen.findByRole("table", { name: /dances/i });
-  await waitFor(() => expect(within(table).getAllByRole("row").length).toBeGreaterThan(1));
+  const table = await screen.findByRole("list", { name: "Dances" });
+  await waitFor(() => expect(within(table).getAllByRole("listitem").length).toBeGreaterThan(0));
   return within(table)
-    .getAllByRole("row")
+    .getAllByRole("listitem")
     .filter((r) => r.textContent?.includes(text));
 }
 

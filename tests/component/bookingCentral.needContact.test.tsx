@@ -48,7 +48,7 @@ describe("the performers needing a contact (087 US5)", () => {
 
   it("says nothing when there are none — an invitation, not a permanent notice", async () => {
     hub({ needingContact: { count: 0, items: [] } });
-    await screen.findByRole("table", { name: /dances/i });
+    await screen.findByRole("list", { name: "Dances" });
     await waitFor(() =>
       expect(screen.queryByRole("button", { name: /need a contact/i })).toBeNull(),
     );
@@ -70,10 +70,11 @@ describe("the performers needing a contact (087 US5)", () => {
     expect(await screen.findByRole("dialog", { name: "Catherine Sloboda" })).toBeInTheDocument();
   });
 
-  it("puts exactly four things above the table, and nothing else (FR-001c)", async () => {
+  // Feature 091 (FR-010) retired "Showing dances from", the first of 087's four.
+  it("puts exactly three things above the table, and nothing else (FR-001c, 091 FR-010)", async () => {
     hub();
     await countButton();
-    const table = screen.getByRole("table", { name: /dances/i });
+    const table = screen.getByRole("list", { name: "Dances" });
     const before = Array.from(
       document.querySelectorAll<HTMLElement>("main input, main button, main select, main a"),
     ).filter((el) => el.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING);
@@ -84,7 +85,6 @@ describe("the performers needing a contact (087 US5)", () => {
       el.closest("label")?.textContent?.trim() ??
       el.textContent?.trim();
     expect(before.map(name)).toEqual([
-      "Showing dances from",
       "Find a performer or band",
       "Include archived",
       "3 performers need a contact",

@@ -51,7 +51,14 @@ function stub(members: Member[], emails: Record<string, string | null> = {}) {
         const mailto = url.match(/\/api\/performers\/([^/]+)\/mailto/);
         if (mailto) return { email: emails[mailto[1]!] ?? null };
         if (url.includes("/api/performers?")) {
+          // Feature 091: "Newt" is nobody yet — the search finds no one.
+          if (url.includes("Newt")) return { items: [], truncated: false };
           return { items: [{ id: "p4", displayName: "Dee Bass" }], truncated: false };
+        }
+        // Feature 091: creating a performer — no existing contact to link, and the new record back.
+        if (url.includes("/api/contacts?")) return { items: [] };
+        if (url.endsWith("/api/performers") && method === "POST") {
+          return { id: "p9", displayName: "Newt Player" };
         }
         if (url.includes("/api/bands/band1") && method === "GET") {
           return {
@@ -131,6 +138,54 @@ describe("BandRoster — members, not the whole directory (087 US3, FR-021)", ()
     expect(saved(calls)!.members).toContainEqual(
       expect.objectContaining({ performerId: "p4", isLead: false }),
     );
+  });
+
+  /**
+   * Feature 091 (Rich, 2026-10-02): Sean adds a member who is not a performer yet. The search finds
+   * nobody, so it offers a new performer — the same form that creates one from the hub — and, once made,
+   * the new performer joins the band, ready for a lead and an instrument.
+   */
+  it("makes a new performer when the search finds nobody, and adds them to the band", async () => {
+    const calls = await open([ANN, BO]);
+    await userEvent.type(screen.getByRole("searchbox", { name: /add a member/i }), "Newt Player");
+    await userEvent.click(
+      await screen.findByRole("button", { name: "New performer “Newt Player”" }),
+    );
+
+    const form = await screen.findByRole("dialog", { name: "New performer" });
+    expect(within(form).getByLabelText(/first name/i)).toHaveValue("Newt");
+    expect(within(form).getByLabelText(/last name/i)).toHaveValue("Player");
+    await userEvent.click(within(form).getByRole("button", { name: "Create" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "New performer" })).toBeNull());
+    expect(calls.some((c) => c.url.endsWith("/api/performers") && c.method === "POST")).toBe(true);
+    expect(within(members()).getByRole("checkbox", { name: "Newt Player" })).toBeChecked();
+
+    // A member like any other: lead, instrument, saved with the band.
+    await userEvent.click(within(members()).getByRole("radio", { name: /lead: newt player/i }));
+    await userEvent.type(
+      within(members()).getByRole("textbox", { name: "Newt Player instrument" }),
+      "banjo",
+    );
+    await userEvent.click(screen.getByRole("button", { name: /save/i }));
+    await waitFor(() => expect(saved(calls)).toBeDefined());
+    expect(saved(calls)!.members).toContainEqual(
+      expect.objectContaining({ performerId: "p9", isLead: true, instrument: "banjo" }),
+    );
+  });
+
+  it("offers a new performer even when the search finds someone — the right one may not exist", async () => {
+    await open([ANN, BO]);
+    await userEvent.type(screen.getByRole("searchbox", { name: /add a member/i }), "Dee");
+    expect(await screen.findByRole("button", { name: "New performer “Dee”" })).toBeInTheDocument();
+  });
+
+  it("offers no new performer to a volunteer who may only read the band", async () => {
+    stub([ANN, BO]);
+    render(<BandRoster bandId="band1" readOnly onSaved={() => {}} onClose={() => {}} />);
+    await screen.findByRole("checkbox", { name: "Ann Lead" });
+    expect(screen.queryByRole("searchbox", { name: /add a member/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /new performer/i })).toBeNull();
   });
 
   it("moves the lead when another member's radio is chosen (T042, FR-022)", async () => {

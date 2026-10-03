@@ -32,7 +32,7 @@ export default function PerformerCard({
   performer?: Performer;
   initialName?: string;
   readOnly: boolean;
-  onSaved: () => void;
+  onSaved: (created?: { id: string; displayName: string }) => void;
   onClose: () => void;
   onOpenBand: (band: { id: string; name: string }) => void;
 }) {

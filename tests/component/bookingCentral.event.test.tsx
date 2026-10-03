@@ -31,7 +31,7 @@ describe("Booking Central — a dance's note (087 T029)", () => {
   it("shows the note in the hub's dance editor, and saving sends it", async () => {
     const calls = stubHub({ rows: [DANCE] });
     render(<BookingCentralPage />);
-    await waitFor(() => expect(screen.getAllByRole("row").length).toBeGreaterThan(1));
+    await waitFor(() => expect(screen.getAllByRole("listitem").length).toBeGreaterThan(0));
 
     await userEvent.click(screen.getByRole("button", { name: "Waltz night" }));
     const dialog = await screen.findByRole("dialog", { name: /event/i });

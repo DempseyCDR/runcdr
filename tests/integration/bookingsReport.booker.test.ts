@@ -25,20 +25,25 @@ describe("bookings report — booker view", () => {
     expect(rows.map((r) => r.date)).toEqual(["2026-06-18", "2026-06-04"]);
   });
 
-  it("shows the venue short name, falling back to derived initials when null", async () => {
+  // Feature 091 (Rich, 2026-10-01): the short name (020 US1) was for the table's narrow Venue column.
+  // The table is retired and a card has room, so the hub names the venue in full — short name or not.
+  it("names the venue in full, with or without a short name, and nothing for no venue", async () => {
     const withShort = await createVenue(db, { name: "German House", address: "1 Main" });
     const noShort = await createVenue(db, { name: "The Rose Room", address: "2 Elm" });
-    await db.update(venues).set({ shortName: null }).where(eq(venues.id, noShort.id)); // force fallback
+    await db.update(venues).set({ shortName: null }).where(eq(venues.id, noShort.id));
 
     const e1 = await makeEvent({ seriesKey: "tnc", eventDate: "2026-06-04" });
     const e2 = await makeEvent({ seriesKey: "tnc", eventDate: "2026-06-18" });
+    const e3 = await makeEvent({ seriesKey: "tnc", eventDate: "2026-06-25" });
     await db.update(events).set({ venueId: withShort.id }).where(eq(events.id, e1.id));
     await db.update(events).set({ venueId: noShort.id }).where(eq(events.id, e2.id));
+    await db.update(events).set({ venueId: null }).where(eq(events.id, e3.id));
 
     const { rows } = await assembleBookingsReport(db, {});
     const byId = new Map(rows.map((r) => [r.eventId, r]));
-    expect(byId.get(e1.id)?.venueShortName).toBe("GH"); // stored
-    expect(byId.get(e2.id)?.venueShortName).toBe("TRR"); // derived fallback
+    expect(byId.get(e1.id)?.venueName).toBe("German House");
+    expect(byId.get(e2.id)?.venueName).toBe("The Rose Room");
+    expect(byId.get(e3.id)?.venueName).toBeNull();
   });
 
   it("reports hasSoundTech per the event's series (false for the community dance)", async () => {

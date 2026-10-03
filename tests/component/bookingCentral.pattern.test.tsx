@@ -4,11 +4,11 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import userEvent from "@testing-library/user-event";
 import BookingCentralPage from "@/app/(admin)/bookings/page";
 import { BookingModal } from "@/app/(admin)/_modals/BookingModal";
-import { line, row, stubHub } from "./fixtures/bookingCentral";
+import { danceCard, dancesLoaded, line, row, slotOf, stubHub } from "./fixtures/bookingCentral";
 
 /**
  * Feature 087 walk-through (2026-09-24, Rich), second round:
- *  - a band with a musician added beside it reads "<band> featuring <musician>";
+ *  - a band with a musician added beside it reads "<band> feat. <musician>" (091: on a card);
  *  - a band just saved is searched for on the hub, so the Booker sees it;
  *  - the booking editor is titled "Book a <type> for <date>";
  *  - finding a performer to book, or a band, works as the hub's own search does — type, pick a result,
@@ -20,14 +20,11 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-async function rowFor(text: string) {
-  const table = await screen.findByRole("table", { name: /dances/i });
-  await waitFor(() => expect(within(table).getAllByRole("row").length).toBeGreaterThan(1));
-  return within(
-    within(table)
-      .getAllByRole("row")
-      .find((r) => r.textContent?.includes(text)) as HTMLElement,
-  );
+/** Feature 091: a dance's Music, on its card (the table is retired). */
+async function musicOf(text: string) {
+  await screen.findByRole("list", { name: "Dances" });
+  await dancesLoaded();
+  return slotOf(danceCard(text), "Music");
 }
 
 describe("a band with a musician beside it", () => {
@@ -44,11 +41,12 @@ describe("a band with a musician beside it", () => {
       ],
     });
 
-  it("reads '<band> featuring <musician>'", async () => {
+  // Feature 091 (FR-002b): on a card, "feat." and first initial and last name.
+  it("reads '<band> feat. <musician>'", async () => {
     stubHub({ rows: [withBand([line({ performer: "Cy Horn", type: "musician" })])] });
     render(<BookingCentralPage />);
-    const music = (await rowFor("Waltz night")).getByLabelText("Music");
-    expect(music.textContent).toMatch(/The Trio.*featuring.*Horn/);
+    const music = await musicOf("Waltz night");
+    expect(music.textContent).toMatch(/The Trio.*feat\..*C\. Horn/);
   });
 
   it("names two added musicians together", async () => {
@@ -61,11 +59,11 @@ describe("a band with a musician beside it", () => {
       ],
     });
     render(<BookingCentralPage />);
-    const music = (await rowFor("Waltz night")).getByLabelText("Music");
-    expect(music.textContent).toMatch(/The Trio.*featuring.*Horn.*and.*Bass/);
+    const music = await musicOf("Waltz night");
+    expect(music.textContent).toMatch(/The Trio.*feat\..*C\. Horn.*and.*D\. Bass/);
   });
 
-  it("says no 'featuring' for musicians booked without a band", async () => {
+  it("says no 'feat.' for musicians booked without a band", async () => {
     stubHub({
       rows: [
         row({
@@ -77,8 +75,8 @@ describe("a band with a musician beside it", () => {
       ],
     });
     render(<BookingCentralPage />);
-    const music = (await rowFor("Waltz night")).getByLabelText("Music");
-    expect(music.textContent).not.toMatch(/featuring/);
+    const music = await musicOf("Waltz night");
+    expect(music.textContent).not.toMatch(/feat\./);
   });
 });
 

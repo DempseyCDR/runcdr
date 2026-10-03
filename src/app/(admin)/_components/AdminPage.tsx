@@ -13,15 +13,39 @@ export default function AdminPage({
   title,
   children,
   wide = false,
+  head,
+  pinned = false,
+  headBeside = false,
 }: {
   title: string;
   children: ReactNode;
   wide?: boolean;
+  /** Feature 091: controls that belong with the title — shown in one header with it. */
+  head?: ReactNode;
+  /**
+   * Feature 091 (Booking Central, which opens scrolled down the page): the header — title and `head` —
+   * stays pinned under the volunteer bar, its title smaller so the pinned block stays short. The page
+   * sets `--volunteer-bar-height` to the bar's height.
+   */
+  pinned?: boolean;
+  /** Feature 091: `head` on the title's own line, at its far end — for a header that must stay short. */
+  headBeside?: boolean;
 }) {
   const className = [styles.page, wide && styles.wide].filter(Boolean).join(" ");
+  const headerClass = [pinned && styles.pinnedHead, headBeside && styles.headBeside]
+    .filter(Boolean)
+    .join(" ");
+  const titleHeading = <h1 className={pinned ? styles.pinnedTitle : styles.title}>{title}</h1>;
   return (
     <main className={className}>
-      <h1 className={styles.title}>{title}</h1>
+      {head || pinned ? (
+        <header className={headerClass || undefined}>
+          {titleHeading}
+          {head}
+        </header>
+      ) : (
+        titleHeading
+      )}
       {children}
     </main>
   );
